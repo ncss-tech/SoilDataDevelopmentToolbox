@@ -1,0 +1,86 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report Version="2.0" Name="SDV_Data" Layer="False" TOCField="" DatasetMode="0" StartingPageNumber="1">
+	<DataSource Name="SDV_Data" BrowseName="SDV_Data" Type="10" FullName="">
+		<Workspace WorkspaceType="1" PathName="E:\Geodata\2016\gSSURGO_FY2016\gSSURGO_KS1.gdb">
+			<Property Name="DATABASE" Value="E:\Geodata\2016\gSSURGO_FY2016\gSSURGO_KS1.gdb" />
+		</Workspace>
+	</DataSource>
+	<SourceFields>
+		<Field Name="OBJECTID" SafeName="OBJECTID" Type="6" SortAsc="True" />
+		<Field Name="AREASYMBOL" SafeName="AREASYMBOL" Type="4" SortAsc="True" />
+		<Field Name="MUKEY" SafeName="MUKEY" Type="4" SortAsc="True" />
+		<Field Name="MUSYM" SafeName="MUSYM" Type="4" SortAsc="True" />
+		<Field Name="MUNAME" SafeName="MUNAME" Type="4" SortAsc="True" />
+		<Field Name="FARMLNDCL" SafeName="FARMLNDCL" Type="4" SortAsc="True" />
+		<Field Name="RATING" SafeName="RATING" Type="4" SortAsc="True" />
+	</SourceFields>
+	<ReportFields>
+		<Field Name="AREASYMBOL" />
+		<Field Name="MUKEY" />
+		<Field Name="MUNAME" />
+		<Field Name="RATING" />
+		<Field Name="MUSYM" />
+	</ReportFields>
+	<GroupFields>
+		<Field Name="AREASYMBOL" />
+	</GroupFields>
+	<ReportStyle Name="Helsinki1" UserStyle="True">
+		<SectionStyle Type="0" BackColor="AliceBlue">
+			<Font Size="20" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="1" BackColor="White">
+			<Font Size="9" Style="Regular" Color="Black">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="2">
+			<Font Size="9" Style="Bold" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<DetailSectionStyle Type="3" BackColor="Gainsboro" AlternateColor="AliceBlue">
+			<Font Size="9" Style="Regular" Color="#000000">Segoe UI</Font>
+		</DetailSectionStyle>
+		<SectionStyle Type="4" Lines="2" LinesColor="Olive">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="5">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="6">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+	</ReportStyle>
+	<ActiveReportsLayout Version="3.1" PrintWidth="9360" DocumentName="ARNet Document" ScriptLang="C#" MasterReport="0">
+		<StyleSheet>
+			<Style Name="Normal" Value="font-family: Arial; font-style: normal; text-decoration: none; font-weight: normal; font-size: 10pt; color: Black; " />
+			<Style Name="Heading1" Value="font-size: 16pt; font-weight: bold; " />
+			<Style Name="Heading2" Value="font-family: Times New Roman; font-size: 14pt; font-weight: bold; font-style: italic; " />
+			<Style Name="Heading3" Value="font-size: 13pt; font-weight: bold; " />
+		</StyleSheet>
+		<Sections>
+			<Section Type="PageHeader" Name="pageHeader" Height="299" BackColor="16777215">
+				<Control Type="AR.Label" Name="lblAREASYMBOL" Left="0" Top="0" Width="720" Height="288" Caption="SSA" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblMUSYM" Left="720" Top="0" Width="720" Height="288" Caption="MUSYM" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblMUKEY" Left="1584" Top="0" Width="1296" Height="288" Caption="MUKEY" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="Label1" Left="7200" Top="0" Width="2160" Height="273.6" Caption="RATING" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblMUNAME" Left="2880" Top="0" Width="4320" Height="288" Caption="MUNAME" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+			</Section>
+			<Section Type="GroupHeader" Name="ghAREASYMBOL" Height="360" DataField="AREASYMBOL" BackStyle="1" BackColor="2237106">
+				<Control Type="AR.Field" Name="txtAREASYMBOL" DataField="AREASYMBOL" Left="0" Top="0" Width="720" Height="360" Text="AREASYMBOL" Style="color: White; ddo-char-set: 0; text-align: left; font-weight: bold; font-size: 9.75pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="Detail" Name="detail" Height="288" BackStyle="1" BackColor="14474460">
+				<Control Type="AR.Field" Name="txtMUKEY" DataField="MUKEY" Left="1584" Top="0" Width="1296" Height="288" Text="MUKEY" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtMUNAME" DataField="MUNAME" Left="2880" Top="0" Width="4320" Height="288" Text="MUNAME" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="TextBox1" DataField="RATING" Left="7200" Top="0" Width="2160" Height="288" Text="RATING" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="TextBox2" DataField="AREASYMBOL" Left="0" Top="0" Width="720" Height="288" Text="AREASYMBOL" Style="color: White; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="TextBox3" DataField="MUSYM" Left="720" Top="0" Width="720" Height="288" Text="MUSYM" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="GroupFooter" Name="gfAREASYMBOL" Height="56" BackColor="16777215">
+				<Control Type="AR.Line" Name="styleLine2" X1="0" Y1="42" X2="9330" Y2="42" LineColor="32896" />
+			</Section>
+			<Section Type="PageFooter" Name="pageFooter" Height="299" BackColor="16777215">
+				<Control Type="AR.ReportInfo" Name="rptInfoPgNo" Left="1980" Top="0" Width="5400" Height="288" FormatString="Page {PageNumber} of {PageCount}" Style="color: #000000; text-align: center; font-size: 8pt; font-family: Segoe UI; " />
+			</Section>
+		</Sections>
+		<ReportComponentTray />
+		<PageSettings RightMargin="14400" TopMargin="720" Orientation="1" />
+		<Parameters />
+	</ActiveReportsLayout>
+</Report>

@@ -1,0 +1,104 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report Version="2.0" Name="SDV_Data" Layer="False" TOCField="" DatasetMode="0" StartingPageNumber="1">
+	<DataSource Name="SDV_Data" BrowseName="SDV_Data" Type="10" FullName="">
+		<Workspace WorkspaceType="1" PathName="E:\Geodata\2016\gSSURGO_FY2016\gSSURGO_KS1.gdb">
+			<Property Name="DATABASE" Value="E:\Geodata\2016\gSSURGO_FY2016\gSSURGO_KS1.gdb" />
+		</Workspace>
+	</DataSource>
+	<SourceFields>
+		<Field Name="OBJECTID" SafeName="OBJECTID" Type="6" SortAsc="True" />
+		<Field Name="AREASYMBOL" SafeName="AREASYMBOL" Type="4" SortAsc="True" />
+		<Field Name="MUKEY" SafeName="MUKEY" Type="4" SortAsc="True" />
+		<Field Name="MUSYM" SafeName="MUSYM" Type="4" SortAsc="True" />
+		<Field Name="MUNAME" SafeName="MUNAME" Type="4" SortAsc="True" />
+		<Field Name="COKEY" SafeName="COKEY" Type="4" SortAsc="True" />
+		<Field Name="COMPNAME" SafeName="COMPNAME" Type="4" SortAsc="True" />
+		<Field Name="COMPPCT_R" SafeName="COMPPCT_R" Type="0" SortAsc="True" />
+		<Field Name="TFACT" SafeName="TFACT" Type="0" SortAsc="True" />
+		<Field Name="RATING" SafeName="RATING" Type="0" SortAsc="True" />
+	</SourceFields>
+	<ReportFields>
+		<Field Name="AREASYMBOL" />
+		<Field Name="MUSYM" />
+		<Field Name="MUKEY" />
+		<Field Name="MUNAME" />
+		<Field Name="COMPNAME" />
+		<Field Name="COMPPCT_R" />
+		<Field Name="RATING" />
+	</ReportFields>
+	<GroupFields>
+		<Field Name="AREASYMBOL" />
+		<Field Name="MUSYM" />
+	</GroupFields>
+	<ReportStyle Name="Helsinki1" UserStyle="True">
+		<SectionStyle Type="0" BackColor="AliceBlue">
+			<Font Size="20" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="1" BackColor="White">
+			<Font Size="9" Style="Regular" Color="Black">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="2">
+			<Font Size="9" Style="Bold" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<DetailSectionStyle Type="3" BackColor="Gainsboro" AlternateColor="AliceBlue">
+			<Font Size="9" Style="Regular" Color="#000000">Segoe UI</Font>
+		</DetailSectionStyle>
+		<SectionStyle Type="4" Lines="2" LinesColor="Olive">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="5">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="6">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+	</ReportStyle>
+	<ActiveReportsLayout Version="3.1" PrintWidth="10803.6" DocumentName="ARNet Document" ScriptLang="C#" MasterReport="0">
+		<StyleSheet>
+			<Style Name="Normal" Value="font-family: Arial; font-style: normal; text-decoration: none; font-weight: normal; font-size: 10pt; color: Black; " />
+			<Style Name="Heading1" Value="font-size: 16pt; font-weight: bold; " />
+			<Style Name="Heading2" Value="font-family: Times New Roman; font-size: 14pt; font-weight: bold; font-style: italic; " />
+			<Style Name="Heading3" Value="font-size: 13pt; font-weight: bold; " />
+		</StyleSheet>
+		<Sections>
+			<Section Type="PageHeader" Name="pageHeader" Height="374" BackColor="16777215">
+				<Control Type="AR.Label" Name="lblAREASYMBOL" Left="0" Top="0" Width="720" Height="288" Caption="SSA" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblMUSYM" Left="720" Top="0" Width="720" Height="288" Caption="MUSYM" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblMUKEY" Left="1584" Top="0" Width="1296" Height="288" Caption="MUKEY" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblMUNAME" Left="2880" Top="0" Width="4320" Height="288" Caption="MUNAME" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblCOMPNAME" Left="7200" Top="0" Width="1440" Height="288" Caption="COMPNAME" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblCOMPPCT_R" Left="8640" Top="0" Width="720" Height="288" Caption="PCT" Style="color: Black; ddo-char-set: 0; text-align: right; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="Label1" Left="9360" Top="0" Width="1440" Height="288" Caption="RATING" Style="color: Black; ddo-char-set: 0; text-align: right; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+			</Section>
+			<Section Type="GroupHeader" Name="ghAREASYMBOL" Height="360" DataField="AREASYMBOL" BackStyle="1" BackColor="2237106">
+				<Control Type="AR.Field" Name="txtAREASYMBOL" DataField="AREASYMBOL" Left="0" Top="0" Width="720" Height="288" Text="AREASYMBOL" Style="color: White; ddo-char-set: 1; text-align: left; font-weight: bold; font-size: 9pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="GroupHeader" Name="ghMUSYM" Height="299" DataField="MUSYM" BackColor="16777215">
+				<Control Type="AR.Field" Name="txtMUSYM" DataField="MUSYM" Left="720" Top="0" Width="720" Height="288" Text="MUSYM" Style="color: #000000; text-align: left; font-weight: bold; font-size: 9pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="Detail" Name="detail" Height="288" BackStyle="1" BackColor="14474460">
+				<Control Type="AR.Field" Name="txtMUKEY" DataField="MUKEY" Left="1584" Top="0" Width="1296" Height="288" Text="MUKEY" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtMUNAME" DataField="MUNAME" Left="3024" Top="0" Width="3960" Height="288" Text="MUNAME" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtCOMPNAME" DataField="COMPNAME" Left="7200" Top="0" Width="1440" Height="288" Text="COMPNAME" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtCOMPPCT_R" DataField="COMPPCT_R" Left="8640" Top="0" Width="720" Height="288" Text="COMPPCT_R" Style="color: #000000; text-align: right; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="TextBox1" DataField="RATING" Left="9360" Top="0" Width="1440" Height="288" Text="RATING" Style="color: #000000; text-align: right; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="TextBox2" DataField="AREASYMBOL" Left="0" Top="0" Width="1440" Height="288" Text="AREASYMBOL" Style="color: White; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="GroupFooter" Name="gfMUSYM" Height="42" BackColor="16777215">
+				<Control Type="AR.Line" Name="styleLine1" X1="0" Y1="28.4" X2="10803.6" Y2="28.4" LineColor="32896" />
+			</Section>
+			<Section Type="GroupFooter" Name="gfAREASYMBOL" Height="28" BackColor="16777215">
+				<Control Type="AR.Line" Name="styleLine2" X1="0" Y1="14.4" X2="10803.6" Y2="14.4" LineColor="32896" />
+			</Section>
+			<Section Type="PageFooter" Name="pageFooter" Height="285" BackColor="16777215">
+				<Control Type="AR.ReportInfo" Name="rptInfoPgNo" Left="1980" Top="0" Width="5400" Height="288" FormatString="Page {PageNumber} of {PageCount}" Style="color: #000000; text-align: center; font-size: 8pt; font-family: Segoe UI; " />
+			</Section>
+		</Sections>
+		<ReportComponentTray />
+		<CalculatedFields>
+			<Field Name="Field1" FieldType="String" />
+		</CalculatedFields>
+		<PageSettings TopMargin="720" Orientation="1" />
+		<Parameters />
+	</ActiveReportsLayout>
+</Report>

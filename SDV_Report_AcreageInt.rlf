@@ -1,0 +1,67 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report Version="2.0" Name="xGraphTable" Layer="False" TOCField="" DatasetMode="0" StartingPageNumber="1">
+	<DataSource Name="SummaryTable" BrowseName="SummaryTable" Type="10" FullName="">
+		<Workspace WorkspaceType="1" PathName="C:\Geodata\Temp\scratch.gdb">
+			<Property Name="DATABASE" Value="C:\Geodata\Temp\scratch.gdb" />
+		</Workspace>
+	</DataSource>
+	<SourceFields>
+		<Field Name="OBJECTID" SafeName="OBJECTID" Type="6" SortAsc="True" />
+		<Field Name="ACRES" SafeName="ACRES" Type="3" SortAsc="True" />
+		<Field Name="RATING" SafeName="RATING" Type="0" SortAsc="True" />
+	</SourceFields>
+	<ReportFields>
+		<Field Name="OBJECTID" />
+		<Field Name="ACRES" />
+		<Field Name="RATING" />
+	</ReportFields>
+	<ReportStyle Name="Helsinki1" UserStyle="True">
+		<SectionStyle Type="0" BackColor="AliceBlue">
+			<Font Size="20" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="1" BackColor="White">
+			<Font Size="9" Style="Regular" Color="Black">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="2">
+			<Font Size="9" Style="Bold" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<DetailSectionStyle Type="3" BackColor="Gainsboro" AlternateColor="AliceBlue">
+			<Font Size="9" Style="Regular" Color="#000000">Segoe UI</Font>
+		</DetailSectionStyle>
+		<SectionStyle Type="4" Lines="2" LinesColor="Olive">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="5">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="6">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+	</ReportStyle>
+	<ActiveReportsLayout Version="3.1" PrintWidth="9360" DocumentName="ARNet Document" ScriptLang="C#" MasterReport="0">
+		<StyleSheet>
+			<Style Name="Normal" Value="font-family: Arial; font-style: normal; text-decoration: none; font-weight: normal; font-size: 10pt; color: Black; " />
+			<Style Name="Heading1" Value="font-size: 16pt; font-weight: bold; " />
+			<Style Name="Heading2" Value="font-family: Times New Roman; font-size: 14pt; font-weight: bold; font-style: italic; " />
+			<Style Name="Heading3" Value="font-size: 13pt; font-weight: bold; " />
+		</StyleSheet>
+		<Sections>
+			<Section Type="PageHeader" Name="pageHeader" Height="432" BackColor="16777215">
+				<Control Type="AR.Label" Name="lblOBJECTID" Left="0" Top="0" Width="1440" Height="360" Caption="ROW" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9.75pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblACRES" Left="7200" Top="0" Width="2160" Height="360" Caption="ACRES" Style="color: Black; ddo-char-set: 0; text-align: right; font-weight: bold; background-color: White; font-size: 9.75pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="Label1" Left="1800" Top="0" Width="1440" Height="360" Caption="RATING" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9.75pt; font-family: Segoe UI; white-space: nowrap; " />
+			</Section>
+			<Section Type="Detail" Name="detail" Height="360" BackStyle="1" BackColor="14474460">
+				<Control Type="AR.Field" Name="txtOBJECTID" DataField="OBJECTID" Left="0" Top="0" Width="1440" Height="302.4" Text="OBJECTID" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtACRES" DataField="ACRES" Left="7200" Top="0" Width="2160" Height="302.4" Text="ACRES" OutputFormat="#,##0" Style="color: #000000; text-align: right; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="TextBox1" DataField="RATING" Left="1800" Top="0" Width="1440" Height="302.4" Text="RATING" Style="background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="PageFooter" Name="pageFooter" Height="299" BackColor="16777215">
+				<Control Type="AR.ReportInfo" Name="rptInfoPgNo" Left="1980" Top="0" Width="5400" Height="288" FormatString="Page {PageNumber} of {PageCount}" Style="color: #000000; text-align: center; font-size: 8pt; font-family: Segoe UI; " />
+			</Section>
+		</Sections>
+		<ReportComponentTray />
+		<PageSettings TopMargin="720" Orientation="1" />
+		<Parameters />
+	</ActiveReportsLayout>
+</Report>

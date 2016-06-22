@@ -1,0 +1,116 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report Version="2.0" Name="InterpQuery" Layer="False" TOCField="" DatasetMode="0" StartingPageNumber="1">
+	<DataSource Name="Changed table view name" BrowseName="InterpQuery" Type="10" FullName="">
+		<Workspace WorkspaceType="1" PathName="E:\Geodata\2016\gSSURGO_FY2016\gSSURGO_KS1.gdb">
+			<Property Name="DATABASE" Value="gSSURGO_KS1.gdb" />
+		</Workspace>
+	</DataSource>
+	<SourceFields>
+		<Field Name="OBJECTID" SafeName="OBJECTID" Type="6" SortAsc="True" />
+		<Field Name="LEGEND_AREASYMBOL" SafeName="LEGEND_AREASYMBOL" Type="4" SortAsc="True" />
+		<Field Name="MAPUNIT_MUSYM" SafeName="MAPUNIT_MUSYM" Type="4" SortAsc="True" />
+		<Field Name="MAPUNIT_MUNAME" SafeName="MAPUNIT_MUNAME" Type="4" SortAsc="True" />
+		<Field Name="COMPONENT_MUKEY" SafeName="COMPONENT_MUKEY" Type="4" SortAsc="True" />
+		<Field Name="COMPONENT_COKEY" SafeName="COMPONENT_COKEY" Type="4" SortAsc="True" />
+		<Field Name="COMPONENT_COMPPCT_R" SafeName="COMPONENT_COMPPCT_R" Type="0" SortAsc="False" />
+		<Field Name="COMPONENT_COMPNAME" SafeName="COMPONENT_COMPNAME" Type="4" SortAsc="True" />
+		<Field Name="COMPONENT_LOCALPHASE" SafeName="COMPONENT_LOCALPHASE" Type="4" SortAsc="True" />
+		<Field Name="COINTERP_SEQNUM" SafeName="COINTERP_SEQNUM" Type="0" SortAsc="True" />
+		<Field Name="COINTERP_RULENAME" SafeName="COINTERP_RULENAME" Type="4" SortAsc="True" />
+		<Field Name="COINTERP_RULEDEPTH" SafeName="COINTERP_RULEDEPTH" Type="0" SortAsc="True" />
+		<Field Name="COINTERP_INTERPHR" SafeName="COINTERP_INTERPHR" Type="3" SortAsc="True" />
+		<Field Name="COINTERP_INTERPHRC" SafeName="COINTERP_INTERPHRC" Type="4" SortAsc="True" />
+	</SourceFields>
+	<ReportFields>
+		<Field Name="LEGEND_AREASYMBOL" />
+		<Field Name="COMPONENT_MUKEY" />
+		<Field Name="MAPUNIT_MUSYM" />
+		<Field Name="MAPUNIT_MUNAME" />
+		<Field Name="COMPONENT_COMPPCT_R" />
+		<Field Name="COMPONENT_COMPNAME" />
+		<Field Name="COMPONENT_LOCALPHASE" />
+		<Field Name="COINTERP_RULENAME" />
+		<Field Name="COINTERP_INTERPHR" />
+	</ReportFields>
+	<GroupFields>
+		<Field Name="LEGEND_AREASYMBOL" />
+		<Field Name="COMPONENT_MUKEY" />
+	</GroupFields>
+	<SortFields>
+		<Field Name="MAPUNIT_MUSYM" />
+		<Field Name="COMPONENT_COMPPCT_R" />
+	</SortFields>
+	<ReportStyle Name="Helsinki1" UserStyle="True">
+		<SectionStyle Type="0" BackColor="AliceBlue">
+			<Font Size="20" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="1" BackColor="White">
+			<Font Size="9" Style="Regular" Color="Black">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="2">
+			<Font Size="9" Style="Bold" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<DetailSectionStyle Type="3" BackColor="Gainsboro" AlternateColor="AliceBlue">
+			<Font Size="9" Style="Regular" Color="#000000">Segoe UI</Font>
+		</DetailSectionStyle>
+		<SectionStyle Type="4" Lines="2" LinesColor="Olive">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="5">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+		<SectionStyle Type="6">
+			<Font Size="8" Style="Regular" Color="#000000">Segoe UI</Font>
+		</SectionStyle>
+	</ReportStyle>
+	<ActiveReportsLayout Version="3.1" PrintWidth="14370" DocumentName="ARNet Document" ScriptLang="C#" MasterReport="0">
+		<StyleSheet>
+			<Style Name="Normal" Value="font-family: Arial; font-style: normal; text-decoration: none; font-weight: normal; font-size: 10pt; color: Black; " />
+			<Style Name="Heading1" Value="font-size: 16pt; font-weight: bold; " />
+			<Style Name="Heading2" Value="font-family: Times New Roman; font-size: 14pt; font-weight: bold; font-style: italic; " />
+			<Style Name="Heading3" Value="font-size: 13pt; font-weight: bold; " />
+		</StyleSheet>
+		<Sections>
+			<Section Type="PageHeader" Name="pageHeader" Height="301" BackColor="16777215">
+				<Control Type="AR.Label" Name="lblLEGEND_AREASYMBOL" Left="0" Top="0" Width="720" Height="302.4" Caption="SSA" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblCOMPONENT_MUKEY" Left="720" Top="0" Width="864.0001" Height="302.4" Caption="MUKEY" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblMAPUNIT_MUSYM" Left="1584" Top="0" Width="720" Height="302.4" Caption="MUSYM" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblMAPUNIT_MUNAME" Left="2304" Top="0" Width="2736" Height="302.4" Caption="MUNAME" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblCOMPONENT_COMPPCT_R" Left="7920" Top="0" Width="1008" Height="302.4" Caption="PCT" Style="color: Black; ddo-char-set: 0; text-align: center; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblCOMPONENT_COMPNAME" Left="5040" Top="0" Width="1440" Height="302.4" Caption="COMPNAME" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblCOMPONENT_LOCALPHASE" Left="6480" Top="0" Width="1440" Height="302.4" Caption="LOCALPHASE" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblCOINTERP_RULENAME" Left="8928" Top="0" Width="4608" Height="302.4" Caption="RULENAME" Style="color: Black; ddo-char-set: 0; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+				<Control Type="AR.Label" Name="lblCOINTERP_INTERPHR" Left="13536" Top="0" Width="864.0001" Height="302.4" Caption="RATING" Style="color: Black; ddo-char-set: 0; text-align: right; font-weight: bold; background-color: White; font-size: 9pt; font-family: Segoe UI; white-space: nowrap; " />
+			</Section>
+			<Section Type="GroupHeader" Name="ghLEGEND_AREASYMBOL" Height="285" DataField="LEGEND_AREASYMBOL" BackStyle="1" BackColor="2237106">
+				<Control Type="AR.Field" Name="txtLEGEND_AREASYMBOL" DataField="LEGEND_AREASYMBOL" Left="0" Top="0" Width="720" Height="302.4" Text="LEGEND_AREASYMBOL" Style="color: White; text-align: left; font-weight: bold; font-size: 9pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="GroupHeader" Name="ghCOMPONENT_MUKEY" Height="299" DataField="COMPONENT_MUKEY" BackColor="16777215">
+				<Control Type="AR.Field" Name="txtCOMPONENT_MUKEY" DataField="COMPONENT_MUKEY" Left="720" Top="0" Width="864.0001" Height="302.4" Text="COMPONENT_MUKEY" Style="color: #000000; text-align: left; font-weight: bold; font-size: 9pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="Detail" Name="detail" Height="389" BackStyle="1" BackColor="14474460">
+				<Control Type="AR.Field" Name="txtMAPUNIT_MUSYM" DataField="MAPUNIT_MUSYM" Left="1584" Top="0" Width="720" Height="302.4" Text="MAPUNIT_MUSYM" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtMAPUNIT_MUNAME" DataField="MAPUNIT_MUNAME" Left="2304" Top="0" Width="2736" Height="302.4" Text="MAPUNIT_MUNAME" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtCOMPONENT_COMPPCT_R" DataField="COMPONENT_COMPPCT_R" Left="7920" Top="0" Width="720" Height="302.4" Text="COMPONENT_COMPPCT_R" Style="color: #000000; text-align: right; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtCOMPONENT_COMPNAME" DataField="COMPONENT_COMPNAME" Left="5040" Top="0" Width="1440" Height="302.4" Text="COMPONENT_COMPNAME" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtCOMPONENT_LOCALPHASE" DataField="COMPONENT_LOCALPHASE" Left="6480" Top="0" Width="1440" Height="302.4" Text="COMPONENT_LOCALPHASE" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtCOINTERP_RULENAME" DataField="COINTERP_RULENAME" Left="8928" Top="0" Width="4608" Height="302.4" Text="COINTERP_RULENAME" Style="color: #000000; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="txtCOINTERP_INTERPHR" DataField="COINTERP_INTERPHR" Left="13536" Top="0" Width="864.0001" Height="302.4" Text="COINTERP_INTERPHR" Style="color: #000000; text-align: right; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="TextBox1" DataField="LEGEND_AREASYMBOL" Left="0" Top="0" Width="720" Height="302.4" Text="LEGEND_AREASYMBOL" Style="color: White; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+				<Control Type="AR.Field" Name="TextBox2" DataField="COMPONENT_MUKEY" Left="720" Top="0" Width="864.0001" Height="302.4" Text="COMPONENT_MUKEY" Style="color: White; background-color: Gainsboro; font-size: 9pt; font-family: Segoe UI; " />
+			</Section>
+			<Section Type="GroupFooter" Name="gfCOMPONENT_MUKEY" Height="14" BackColor="16777215">
+				<Control Type="AR.Line" Name="styleLine1" X1="0" Y1="14.4" X2="12960" Y2="14.4" LineColor="32896" />
+			</Section>
+			<Section Type="GroupFooter" Name="gfLEGEND_AREASYMBOL" Height="14" BackColor="16777215">
+				<Control Type="AR.Line" Name="styleLine2" X1="0" Y1="14.4" X2="12960" Y2="14.4" LineColor="32896" />
+			</Section>
+			<Section Type="PageFooter" Name="pageFooter" Height="299" BackColor="16777215">
+				<Control Type="AR.ReportInfo" Name="rptInfoPgNo" Left="1980" Top="0" Width="5400" Height="288" FormatString="Page {PageNumber} of {PageCount}" Style="color: #000000; text-align: center; font-size: 8pt; font-family: Segoe UI; " />
+			</Section>
+		</Sections>
+		<ReportComponentTray />
+		<PageSettings LeftMargin="720" RightMargin="720" TopMargin="720" Orientation="2" />
+		<Parameters />
+	</ActiveReportsLayout>
+</Report>
