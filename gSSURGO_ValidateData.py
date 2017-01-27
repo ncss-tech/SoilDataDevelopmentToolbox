@@ -80,7 +80,6 @@ def GetLastDate(inputDB):
 
         return lastDate
 
-
     except MyError, e:
         # Example: raise MyError("this is an error message")
         PrintMsg(str(e) + " \n", 2)
@@ -349,11 +348,10 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
         # Later on in the actual calculations for RZAWS, only the major-earthy components will be used. But
         # all components are in this table!
 
-        whereClause = "mapunit.mukey = component.mukey and \
-        component.cokey = chorizon.cokey and mapunit.objectid = 1"
+        whereClause = "mapunit.mukey = component.mukey and component.cokey = chorizon.cokey and mapunit.objectid = 1"
 
         outputTable = os.path.join(outputDB, "QueryTable_HZ")
-        PrintMsg(" \nCreating table " + outputTable, 0)
+        #PrintMsg(" \nCreating table " + outputTable + " with fields: " + str(fldAll), 0)
         arcpy.MakeQueryTable_management(['mapunit', 'component', 'chorizon'], queryTemp, "USE_KEY_FIELDS", "#", fldAll, whereClause)
 
         if arcpy.Exists(outputTable):

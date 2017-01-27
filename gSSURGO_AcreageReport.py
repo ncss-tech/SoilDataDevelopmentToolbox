@@ -458,7 +458,7 @@ try:
         convAcres = 0.00002295679522500955             # International Feet
 
     else:
-        raise MyError, "Unable to handle raster unit conversion (" + units + ")"
+        raise MyError, "Unable to handle unit conversion for area (" + units + ")"
 
     dAcres = CalculateAcres(sdvLayer)
 
@@ -480,7 +480,7 @@ try:
         valWidth += len(str(acres))
         #PrintMsg("\t" + str(rating) + ": " + Number_Format(acres, 0, True) + " acres", 1)
 
-    totalAcres = int(round(convAcres * totalArea, 0))
+    #totalAcres = int(round(convAcres * totalArea, 0))
 
     valWidth += (len(dAcres) * 2)  # add a little extra width for space
 

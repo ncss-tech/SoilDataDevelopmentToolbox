@@ -257,27 +257,10 @@ def GetFieldList(tbi_1):
 
 ## ===================================================================================
 def GetAreasymbols(attName, theTile):
-    # Get list of areasymbol values from Soil Data Access laoverlap and legend tables
-    #
-    # NEW QUERY COMBINES StateName and Spatial Status. This needs to be used and then the check can be dropped.
-    #
-    # SELECT legend.areasymbol
-    # FROM (legend INNER JOIN laoverlap ON legend.lkey = laoverlap.lkey) INNER JOIN sastatusmap ON legend.areasymbol = sastatusmap.areasymbol
-    # WHERE (((laoverlap.areatypename)='State or Territory') AND ((laoverlap.areaname) Like 'Delaware%') AND ((legend.areatypename)='Non-MLRA Soil Survey Area') AND ((sastatusmap.sapubstatuscode) = 2) );
-
-    import time, datetime, httplib, urllib2
-    import xml.etree.cElementTree as ET
+    # Pass a query (from GetSDMCount function) to Soil Data Access designed to get the count of the selected records
+    import httplib, urllib2, json, socket
 
     try:
-
-        # Create empty value list to contain the filtered list of areasymbol values
-        valList = list()
-
-        # Old query returned just survey areas with spatial data
-        sQuery = "SELECT legend.areasymbol FROM (legend INNER JOIN laoverlap ON legend.lkey = laoverlap.lkey) " + \
-        "INNER JOIN sastatusmap ON legend.areasymbol = sastatusmap.areasymbol " + \
-        "WHERE (((laoverlap.areatypename)='State or Territory') AND ((laoverlap.areaname) Like '" + theTile + "%') AND " + \
-        "((legend.areatypename)='Non-MLRA Soil Survey Area') AND ((sastatusmap.sapubstatuscode) = 2) );"
 
         # Now using this query to retrieve All surve areas including NOTCOM-only
         sQuery = "SELECT legend.areasymbol FROM (legend INNER JOIN laoverlap ON legend.lkey = laoverlap.lkey) " + \
@@ -285,56 +268,71 @@ def GetAreasymbols(attName, theTile):
         "WHERE (((laoverlap.areatypename)='State or Territory') AND ((laoverlap.areaname) Like '" + theTile + "%') AND " + \
         "((legend.areatypename)='Non-MLRA Soil Survey Area')) ;"
 
-        #PrintMsg(" \n" + sQuery, 0)
+        # Create empty value list to contain the count
+        # Normally the list should only contain one item
+        valList = list()
 
-        # Send XML query to SDM Access service
-        #
-        sXML = """<?xml version="1.0" encoding="utf-8"?>
-    <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-      <soap12:Body>
-        <RunQuery xmlns="http://SDMDataAccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx">
-          <Query>""" + sQuery + """</Query>
-        </RunQuery>
-      </soap12:Body>
-    </soap12:Envelope>"""
+        #PrintMsg("\t" + sQuery + " \n", 0)
 
-        dHeaders = dict()
-        dHeaders["Host"] = "sdmdataaccess.nrcs.usda.gov"
-        dHeaders["Content-Type"] = "text/xml; charset=utf-8"
-        dHeaders["SOAPAction"] = "http://SDMDataAccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx/RunQuery"
-        dHeaders["Content-Length"] = len(sXML)
-        sURL = "SDMDataAccess.nrcs.usda.gov"
+	    # NEW POST REST REQUEST BEGINS HERE
+	    #
+        # Uses new HTTPS URL
+        # Post Rest returns
+        theURL = "https://sdmdataaccess.nrcs.usda.gov"
+        url = theURL + "/Tabular/SDMTabularService/post.rest"
 
-        # Create SDM connection to service using HTTP
-        conn = httplib.HTTPConnection(sURL, 80)
+        # Create request using JSON, return data as JSON
+        dRequest = dict()
+        dRequest["FORMAT"] = "JSON"
+        dRequest["QUERY"] = sQuery
+        jData = json.dumps(dRequest)
 
-        # Send request in XML-Soap
-        conn.request("POST", "/Tabular/SDMTabularService.asmx", sXML, dHeaders)
+        # Send request to SDA Tabular service using urllib2 library
+        req = urllib2.Request(url, jData)
+        resp = urllib2.urlopen(req)
+        jsonString = resp.read()
 
-        # Get back XML response
-        response = conn.getresponse()
-        xmlString = response.read()
+        # Convert the returned JSON string into a Python dictionary.
+        data = json.loads(jsonString)
+        del jsonString, resp, req
 
-        # Close connection to SDM
-        conn.close()
+        # Find data section (key='Table')
+        valList = list()
 
-        # Convert XML to tree format
-        tree = ET.fromstring(xmlString)
+        if "Table" in data:
+          dataList = data["Table"]  # Data as a list of lists. All values come back as string.
 
-        # Iterate through XML tree, finding required elements...
-        for rec in tree.iter():
+          # Iterate through dataList and reformat the data to create the menu choicelist
 
-            if rec.tag == attName:
-                # get the target attribute value
-                val = str(rec.text)
-                #PrintMsg("\tFound " + val, 0)
-                valList.append(val)
+          for rec in dataList:
+            val = rec[0]
+            valList.append(val)
+
+        else:
+          # No data returned for this query
+          raise MyError, "SDA query failed to return requested information: " + sQuery
+
+        if len(valList) == 0:
+            raise MyError, "SDA query failed: " + sQuery
 
         return valList
 
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return 0
+
+    except httplib.HTTPException, e:
+        PrintMsg("HTTP Error: " + str(e), 2)
+
+    except socket.error, e:
+        raise MyError, "Soil Data Access problem: " + str(e)
+        return -1
+
     except:
+        #PrintMsg(" \nSDA query failed: " + sQuery, 1)
         errorMsg()
-        return []
+        return -1
 
 ## ===================================================================================
 def GetFolders(inputFolder, valList, bRequired, theTile):

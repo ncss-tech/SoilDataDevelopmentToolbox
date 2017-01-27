@@ -247,7 +247,7 @@ def UpdateMetadata(outputWS, target, surveyInfo):
             if iab.find("xxFYxx") >= 0:
                 #PrintMsg("\t\tip", 1)
                 idAbstract.text = iab.replace("xxFYxx", fy)
-                PrintMsg("\tAbstract", 0)
+                #PrintMsg("\tAbstract", 0)
 
         # Use contraints
         #idConstr = root.find('idinfo/useconst')
@@ -314,7 +314,7 @@ def CopyData(inputDB, inValuTbl, bOverwrite):
             else:
                 raise MyError, "A " + os.path.basename(inValuTbl) + " table already exists for " + inputDB
 
-            PrintMsg(" \nCreating VALU1 table for " + inputDB, 0)
+            PrintMsg(" \nCreating " + os.path.basename(inValuTbl) + " table for " + inputDB, 0)
 
         # Get list of survey areas from inputDB
         #
@@ -405,6 +405,9 @@ try:
 
         if CopyData(inputDB, inValuTbl, bOverwrite) == False:
             problemList.append(gdbName)
+
+        #else:
+        #    PrintMsg("\t" + gdbName, 0)
 
     if len(problemList) > 0:
         PrintMsg("The following geodatabases encountered problems: " + ", ".join(problemList) + " \n ", 2)

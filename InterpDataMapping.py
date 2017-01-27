@@ -403,8 +403,10 @@ def MapRatingReasons(theDB, theMapunitLayer, theCompTable, cFlds, outputField, d
         # Create relate between Component level rating table and MUPOLYGON featureclass
         #
         PrintMsg(" \nCreating relationshipclass using " + theFC + " and " + theCompTable, 0)
+        env.workspace = theDB
         #time.sleep(1)
-        arcpy.CreateRelationshipClass_management(theFC, theCompTable, "x" + theCompTable.title() + "_" + theFC, "SIMPLE", "> " + sdvAtt, "< " + theCompTable, "NONE", "ONE_TO_MANY", "NONE", "mukey", "MUKEY", "","")
+        rcName = "x" + theCompTable.title() + "_" + theFC
+        arcpy.CreateRelationshipClass_management(theFC, theCompTable, rcName, "SIMPLE", "> " + sdvAtt + " (" + suffix + ")", "< " + theCompTable, "NONE", "ONE_TO_MANY", "NONE", "mukey", "MUKEY", "","")
 
         with arcpy.da.SearchCursor(theCompTable, cFlds) as cCursor:
             # Use cursor to load component-level interp data into a dictionary

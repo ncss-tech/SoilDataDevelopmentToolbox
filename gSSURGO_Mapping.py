@@ -3,7 +3,7 @@
 # Creates Soil Data Viewer-type maps using gSSURGO and the sdv* attribute tables
 # Uses mdstatrship* tables and sdvattribute table to populate menu
 #
-# 2016-01-03
+# 2016-12-09
 
 #
 # THINGS TO DO:
@@ -69,7 +69,7 @@
 # Aggregate2_NCCPI amd CreateNumericLayer functions. Have this working, but needs more testing.
 #
 # 2015-12-23  Need to look more closely at my Tiebreak implementation for Interps. 'Dwellings with
-# Basements (DCD, Higher) appears to be switched. Look at Delware 'PsA' mapunit with Pepperbox-Rosedale components
+# Basements (DCD, Higher) appears to be switched. Look at Delaware 'PsA' mapunit with Pepperbox-Rosedale components
 # at 45% each.
 #
 # 2016-03-23 Fixed bad bug, skipping last mapunit in NCCPI and one other function
@@ -81,6 +81,9 @@
 # interphr is the High fuzzy value, interphrc is the High rating class
 # interplr is the Low fuzzy value, interplrc is the Low rating class
 # Very Limited = 1.0; Somewhat limited = 0.22
+#
+# NCCPI maps fuzzy values by default. It appears that 1.0 would be high productivity and
+# 0.01 very low productivity. Null would be Not rated.
 
 
 
@@ -165,6 +168,7 @@ def SortData(muVals):
     # Sort a list of tuples containing comppct_r and rating value or index and return a single tuple.
 
     try:
+
         if tieBreaker == dSDV["tiebreakhighlabel"]:
             # return higher value
             muVal = sorted(sorted(muVals, key = lambda x : x[1], reverse=True), key = lambda x : x[0], reverse=True)[0]
@@ -172,11 +176,107 @@ def SortData(muVals):
         elif tieBreaker == dSDV["tiebreaklowlabel"]:
             muVal = sorted(sorted(muVals, key = lambda x : x[1], reverse=False), key = lambda x : x[0], reverse=True)[0]
 
+        else:
+            muVal = (None, None)
+
         return muVal
 
     except:
         errorMsg()
         return (None, None)
+
+## ===================================================================================
+def ColorRamp(count, items, upperColor, lowerColor):
+    # For Progressive color ramps, there are no colors defined for each legend item.
+    # Create a dictionary of colors based upon the upper and lower colors. Key value is
+    # 'part' which is the number of colors used to define the color ramp.
+    # count is always equal to three and part is always zero-based
+
+    try:
+        PrintMsg(" \nCreating color ramp based upon " + str(count) + " item ramp", 1)
+        dColors = dict()
+
+        dRGB = dict()
+            # RGB colors:
+        # 255, 0, 0 = red
+        # 255, 255, 0 = yellow
+        # 0, 255, 0 = green
+        # 0, 255, 255 = cyan
+        # 0, 0, 255 = blue
+
+        # pH example: Creating color ramp based upon 4 colors red -> yellow -> cyan -> blue
+        #
+        # red    -> yellow  (255, 0, 0)   -> (255, 255, 0)
+        #
+        # yellow -> cyan    (255, 255, 0) -> (0, 255, 255)
+        #
+        # cyan   -> blue    (0, 255, 255) -> (0, 0, 255)
+
+        dRGB[(255,0,0)] = "red"
+        dRGB[(255,255,0)] = "yellow"
+        dRGB[(0,255,0)] ="green"
+        dRGB[(0,255,255)] = "cyan"
+        dRGB[(0,0,255)] = "blue"
+
+        #PrintMsg(" \nlowerColor: " + str(lowerColor), 1)
+        #PrintMsg(" \nupperColor: " + str(upperColor), 1)
+        PrintMsg(dRGB[upperColor[0]] + "->" + dRGB[lowerColor[0]], 1)
+        PrintMsg(dRGB[upperColor[1]] + "->" + dRGB[lowerColor[1]], 1)
+        PrintMsg(dRGB[upperColor[2]] + "->" + dRGB[lowerColor[2]], 1)
+
+        PrintMsg(" \n" + str(upperColor[0]) + "->" + str(lowerColor[0]), 1)
+        PrintMsg(str(upperColor[1]) + "->" + str(lowerColor[1]), 1)
+        PrintMsg(str(upperColor[2]) + "->" + str(lowerColor[2]), 1)
+
+        # create lists of colors for each legend item
+        redList = list()
+        greenList = list()
+        blueList = list()
+        interVal = int(items / (count - 1))
+
+        #for i in range(count - 1):
+        if 1 == 2:  # skip this for now
+            # My understanding is that 3 points define the color ramp. Beginning color, middle color and ending color
+            # Handle each pair of points (0-1, 1-2) and append the color lists for each to make the complete set
+            #for i in range(count):
+            # for each color (r=0, g=1, b= 2)
+            if lowerColor[i][0] != upperColor[i][0]:
+                tmpList = range(lowerColor[i][0], upperColor[i][0], int((upperColor[i][0] - lowerColor[i][0]) / interVal) )
+
+            else:
+                tmpList = [lowerColor[i][0]] * interVal
+
+            redList.extend(tmpList)
+
+            if lowerColor[i][1] != upperColor[i][1]:
+                tmpList = range(lowerColor[i][1], upperColor[i][1], int((upperColor[i][1] - lowerColor[i][1]) / interVal) )
+                PrintMsg(" \ntmpList: " + str(lowerColor[i][1]) + "; " + str(upperColor[i][1]) , 1)
+
+            else:
+                tmpList = [lowerColor[i][1]] * interVal
+
+            greenList.extend(tmpList)
+
+            if lowerColor[i][2] != upperColor[i][2]:
+                tmpList = range(lowerColor[i][2], upperColor[i][2], int((upperColor[i][2] - lowerColor[i][2]) / interVal) )
+
+            else:
+                tmpList = [lowerColor[i][2]] * interVal
+
+            blueList.extend(tmpList)
+
+        #PrintMsg(" \nRedList " + str(i) + ": " + str(redList))
+        #PrintMsg(" \nGreenList " + str(i) + ": " + str(greenList))
+        #PrintMsg(" \nBlueList "  + str(i) + ": " + str(blueList))
+
+        #for i in range(len(redList)):
+        #    PrintMsg("\t" + str(i) + " (" + str(redList[1]) + ", " + str(greenList[i]) + ", " + str(blueList[i]) + ")", 1)
+
+        return dColors
+
+    except:
+        errorMsg()
+        return dColors
 
 ## ===================================================================================
 def GetMapLegend(dAtts):
@@ -225,6 +325,40 @@ def GetMapLegend(dAtts):
             if rec.tag == "ColorRampType":
                 dLegend["type"] = rec.attrib["type"]
                 dLegend["name"] = rec.attrib["name"]
+                if rec.attrib["name"] == "Progressive":
+                    dLegend["count"] = int(rec.attrib["count"])
+
+            if "name" in dLegend and dLegend["name"] == "Progressive":
+
+                if rec.tag == "LowerColor":
+                    # 'part' is zero-based and related to count
+                    part = int(rec.attrib["part"])
+                    red = int(rec.attrib["red"])
+                    green = int(rec.attrib["green"])
+                    blue = int(rec.attrib["blue"])
+                    #PrintMsg("Lower Color part #" + str(part) + ": " + str(red) + ", " + str(green) + ", " + str(blue), 1)
+
+                    if rec.tag in dLegend:
+                        dLegend[rec.tag][part] = (red, green, blue)
+
+                    else:
+                        dLegend[rec.tag] = dict()
+                        dLegend[rec.tag][part] = (red, green, blue)
+
+                if rec.tag == "UpperColor":
+                    part = int(rec.attrib["part"])
+                    red = int(rec.attrib["red"])
+                    green = int(rec.attrib["green"])
+                    blue = int(rec.attrib["blue"])
+                    #PrintMsg("Upper Color part #" + str(part) + ": " + str(red) + ", " + str(green) + ", " + str(blue), 1)
+
+                    if rec.tag in dLegend:
+                        dLegend[rec.tag][part] = (red, green, blue)
+
+                    else:
+                        dLegend[rec.tag] = dict()
+                        dLegend[rec.tag][part] = (red, green, blue)
+
 
             if rec.tag == "Labels":
                 order = int(rec.attrib["order"])
@@ -308,12 +442,18 @@ def GetMapLegend(dAtts):
                 except:
                     pass
 
+        #if dLegend["name"] == "Progressive":
+        #    dColors = ColorRamp(dLegend["count"], len(dLabels), dLegend["LowerColor"], dLegend["UpperColor"])
+
+        if bVerbose:
+            PrintMsg(" \ndLegend: " + str(dLegend), 1)
+
         return dLegend
 
     except MyError, e:
         # Example: raise MyError, "This is an error message"
         PrintMsg(str(e), 2)
-        return dic()
+        return dict()
 
     except:
         errorMsg()
@@ -395,9 +535,6 @@ def CreateNumericLayer(sdvLyrFile, dLegend, outputValues, classBV, classBL):
 
             except:
                 dLabels = dict()
-
-            #if bVerbose:
-            #    PrintMsg(" \noutputValues are " + str(outputValues), 1)
 
             if len(outputValues) == 2:
                 # Use this one if outputValues are integer with a unique values renderer
@@ -930,6 +1067,413 @@ def GetNumericLegend(dLegend, outputValues):
         errorMsg()
         return [], []
 
+
+## ===================================================================================
+def CreateJSONLegend(dLegend):
+    #
+    try:
+        # Input dictionary 'dLegend' contains two other dictionaries:
+        #   dLabels[order]
+        #    dump sorted dictionary contents into output table
+        #    read appropriate json file into layerDefinition dictionary
+        #    update layerDefinition dictionary using other dictionaries
+
+        if bVerbose:
+            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
+            #PrintMsg(str(dSDV), 1)
+        #
+        # 2. Legend
+        # original dLegend contains key:hexcode and value: legend label
+        #
+        # original colorlist is ordered list of hexcodes
+        #
+        #dLegend, colorList = ReadLegend(legendFile, dataType)
+
+        if dLegend is None or len(dLegend) == 0:
+            raise MyError, ""
+        #
+
+        if len(dLegend["colors"]) == 0 or dLegend["name"] == "Progressive":
+            PrintMsg(" \nNo legend colors defined in " + dLegend["name"] + " dLegend", 1)
+
+        else:
+            PrintMsg(" \ncolors: " + str(dLegend["colors"]), 1)
+
+            # 4. Assemble all required legend information into a single, ordered list
+            legendList = list()
+            #PrintMsg(" \ndRatings: " + str(dRatings), 1)
+            colorList = list()
+
+            for clr in colorList:
+                try:
+                    #PrintMsg("\tGetting legend info for " + clr, 1)
+                    rating = dRatings[clr]
+                    legendLabel = dLegend[clr]
+                    legendList.append([rating, legendLabel, clr])
+                    #PrintMsg(" \n" + str(rating) + ": " + str(legendLabel) + "; " + clr, 1)
+
+                except:
+                    pass
+                    #errorMsg()
+
+        #PrintMsg(" \nlegendList: " + str(legendList), 1)
+
+        # 5. Create layer definition using JSON string
+
+        if dSDV["effectivelogicaldatatype"].lower() in ['choice', 'string', 'vtext']:
+            #PrintMsg(" \nGetting unique values legend", 1)
+            #dLayerDefinition = UniqueValuesJSON(legendList)
+            pass
+
+        elif dSDV["effectivelogicaldatatype"].lower() in ['float','integer']:
+            #PrintMsg(" \nGetting class breaks legend", 1)
+            #dLayerDefinition = ClassBreaksJSON(legendList)
+            pass
+
+    except MyError, e:
+        PrintMsg(str(e), 2)
+        return [], []
+
+    except:
+        errorMsg()
+        return [], []
+
+## ===================================================================================
+def ClassBreaksJSON(legendList):
+    # returns JSON string for classified break values template. Use this for numeric data.
+    # need to set:
+    # d.minValue as a number
+    # d.classBreakInfos which is a list containing at least two slightly different dictionaries.
+    # The last one contains an additional classMinValue item
+    #
+    # d.classBreakInfos[0]:
+    #    classMaxValue: 1000
+    #    symbol: {u'color': [236, 252, 204, 255], u'style': u'esriSFSSolid', u'type': u'esriSFS', u'outline': {u'color': [110, 110, 110, 255], u'width': 0.4, u'style': u'esriSLSSolid', u'type': u'esriSLS'}}
+    #    description: 10 to 1000
+    #    label: 10.0 - 1000.000000
+
+    # d.classBreakInfos[n - 1]:  # where n = number of breaks
+    #    classMaxValue: 10000
+    #    classMinValue: 8000
+    #    symbol: {u'color': [255, 255, 0, 255], u'style': u'esriSFSSolid', u'type': u'esriSFS', u'outline': {u'color': [110, 110, 110, 255], u'width': 0.4, u'style': u'esriSLSSolid', u'type': u'esriSLS'}}
+    #    description: 1000 to 5000
+    #    label: 8000.000001 - 10000.000000
+    #
+    # defaultSymbol is used to draw any polygon whose value is not within one of the defined ranges
+
+    # RGB colors:
+    # 255, 0, 0 = red
+    # 255, 255, 0 = yellow
+    # 0, 255, 0 = green
+    # 0, 255, 255 = cyan
+    # 0, 0, 255 = blue
+
+    try:
+        if bVerbose:
+            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
+
+        drawOutlines = False
+
+        # Set outline symbology
+        if drawOutlines == False:
+            outLineColor = [0, 0, 0, 0]
+
+        else:
+            outLineColor = [110, 110, 110, 255]
+
+
+
+        jsonString = """
+{"type" : "classBreaks",
+  "field" : "",
+  "classificationMethod" : "esriClassifyManual",
+  "defaultLabel": "Not rated or not available",
+  "defaultSymbol": {
+    "type": "esriSFS",
+    "style": "esriSFSSolid",
+    "color": [110,110,110,255],
+    "outline": {
+      "type": "esriSLS",
+      "style": "esriSLSSolid",
+      "color": [110,110,110,255],
+      "width": 0.5
+    }
+  },
+  "minValue" : 0.0,
+  "classBreakInfos" : [
+  ]
+}"""
+
+        d = json.loads(jsonString)
+        # hexVal = "#FFFF00"drawingInfo" : {"renderer" :
+        # h = hexVal.lstrip('#')
+        # rgb = tuple(int(h[i:i+2], 16) for i in (0, 2 ,4))
+
+        #PrintMsg(" \nTesting JSON string values in dictionary: " + str(d["currentVersion"]), 1)
+
+        d["field"]  = dSDV["resultcolumnname"]
+        d["drawingInfo"] = dict() # new
+        d["defaultSymbol"]["outline"]["color"] = outLineColor
+
+        # Find minimum value by reading dRatings
+        #
+        # This creates a problem for Hydric, because the legend is in descending order (100% -> 0%). Most others are ascending.
+        minValue = 999999999
+        maxValue = -999999999
+
+        for rating in dValues.values():
+            try:
+                ratingValue = float(rating)
+                #PrintMsg("\tRating (float): " + str(ratingValue), 1)
+
+                if rating is not None:
+                    if ratingValue < minValue:
+                        minValue = float(rating)
+
+                    if ratingValue > minValue:
+                        maxValue = float(rating)
+
+            except:
+                pass
+
+        # Add new rating field to list of layer fields
+        d["field"] = dSDV["ResultColumnName"]
+        d["minValue"] = minValue
+
+        cnt = 0
+        cntLegend = (len(legendList))
+        classBreakInfos = list()
+
+        #PrintMsg(" \n\t\tLegend minimum value: " + str(minValue), 1)
+        #PrintMsg(" \n\t\tLegend maximum value: " + str(maxValue), 1)
+        lastMax = minValue
+
+        # Somehow I need to read through the legendList and determine whether it is ascending or descending order
+        if cntLegend > 1:
+
+            #for legendInfo in legendList:
+            firstRating = legendList[0][0]
+            lastRating = legendList[(cntLegend - 1)][0]
+
+        if firstRating > lastRating:
+            legendList.reverse()
+
+        # Create standard numeric legend in Ascending Order
+        #
+        if cntLegend > 1:
+
+            #for legendInfo in legendList:
+            for cnt in range(0, (cntLegend)):
+
+                rating, label, hexCode = legendList[cnt]
+                if not rating is None:
+
+                    ratingValue = float(rating)
+                    #PrintMsg(" \n\t\tAdding legend values: " + str(lastMax) + "-> " + str(rating) + ", " + str(label), 1)
+
+                    # calculate rgb colors
+                    rgb = list(int(hexCode.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+                    rgb.append(255)  # set transparency ?
+                    dLegend = dict()
+                    dSymbol = dict()
+                    dLegend["classMinValue"] = lastMax
+                    dLegend["classMaxValue"] = ratingValue
+                    dLegend["label"] = label
+                    dLegend["description"] = ""
+                    dOutline = dict()
+                    dOutline["type"] = "esriSLS"
+                    dOutline["style"] = "esriSLSSolid"
+                    dOutline["color"] = outLineColor
+                    dOutline["width"] = 0.4
+                    dSymbol = {"type" : "esriSFS", "style" : "esriSFSSolid", "color" : rgb, "outline" : dOutline}
+                    dLegend["symbol"] = dSymbol
+                    dLegend["outline"] = dOutline
+                    classBreakInfos.append(dLegend)
+
+                    lastMax = ratingValue
+
+                    cnt += 1
+
+        d["classBreakInfos"] = classBreakInfos
+
+        dLayerDefinition = dict()
+        dRenderer = dict()
+        dRenderer["renderer"] = d
+        dLayerDefinition["drawingInfo"] = dRenderer
+
+        #PrintMsg(" \n1. dLayerDefinition: " + '"' + str(dLayerDefinition) + '"', 0)
+
+        return dLayerDefinition
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return d
+
+    except:
+        errorMsg()
+        return d
+
+## ===================================================================================
+def UniqueValuesJSON(legendList):
+    # returns JSON string for unique values template. Use this for text, choice, vtext.
+    #
+    try:
+        if bVerbose:
+            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
+
+        drawOutlines = False
+
+        if drawOutlines == False:
+            outLineColor = [0, 0, 0, 0]
+
+        else:
+            outLineColor = [110, 110, 110, 255]
+
+        jsonString = """
+{
+  "currentVersion" : 10.01,
+  "id" : 0,
+  "name" : "Soil Map",
+  "type" : "Feature Layer",
+  "description" : "",
+  "definitionExpression" : "",
+  "geometryType" : "esriGeometryPolygon",
+  "parentLayer" : null,
+  "subLayers" : [],
+  "minScale" : 0,
+  "maxScale" : 0,
+  "defaultVisibility" : true,
+  "hasAttachments" : false,
+  "htmlPopupType" : "esriServerHTMLPopupTypeNone",
+  "drawingInfo" : {"renderer" :
+    {
+      "type" : "uniqueValue",
+      "field1" : null,
+      "field2" : null,
+      "field3" : null,
+      "fieldDelimiter" : ", ",
+      "defaultSymbol" : null,
+      "defaultLabel" : "All other values",
+      "uniqueValueInfos" : []
+    },
+    "transparency" : 0,
+    "labelingInfo" : null},
+  "displayField" : null,
+  "fields" : [
+    {
+      "name" : "FID",
+      "type" : "esriFieldTypeOID",
+      "alias" : "FID"},
+    {
+      "name" : "Shape",
+      "type" : "esriFieldTypeGeometry",
+      "alias" : "Shape"},
+    {
+      "name" : "AREASYMBOL",
+      "type" : "esriFieldTypeString",
+      "alias" : "AREASYMBOL",
+      "length" : 20},
+    {
+      "name" : "SPATIALVER",
+      "type" : "esriFieldTypeInteger",
+      "alias" : "SPATIALVER"},
+    {
+      "name" : "MUSYM",
+      "type" : "esriFieldTypeString",
+      "alias" : "MUSYM",
+      "length" : 6},
+    {
+      "name" : "MUKEY",
+      "type" : "esriFieldTypeString",
+      "alias" : "MUKEY",
+      "length" : 30}
+  ],
+  "typeIdField" : null,
+  "types" : null,
+  "relationships" : [],
+  "capabilities" : "Map,Query,Data"
+}"""
+
+        d = json.loads(jsonString)
+
+        d["currentVersion"] = 10.01
+        d["id"] = 1
+        d["name"] = dSDV["attributename"]
+        d["description"] = "Web Soil Survey Thematic Map"
+        d["definitionExpression"] = ""
+        d["geometryType"] = "esriGeometryPolygon"
+        d["parentLayer"] = None
+        d["subLayers"] = []
+        d["defaultVisibility"] = True
+        d["hasAttachments"] = False
+        d["htmlPopupType"] = "esriServerHTMLPopupTypeNone"
+        d["drawingInfo"]["renderer"]["type"] = "uniqueValue"
+        d["drawingInfo"]["renderer"]["field1"] = dSDV["resultcolumnname"]
+        d["displayField"] = dSDV["resultcolumnname"]
+        #PrintMsg(" \n[drawingInfo][renderer][field1]: " + str(d["drawingInfo"]["renderer"]["field1"]) + " \n ",  1)
+
+        # Add new rating field to list of layer fields
+        dAtt = dict()
+        dAtt["name"] = dSDV["resultcolumnname"]
+        dAtt["alias"] = dSDV["resultcolumnname"]
+        dAtt["type"] = "esriFieldTypeString"
+        d["fields"].append(dAtt)
+
+        try:
+            length = dFieldTypes["resultdatatype"].upper()[1]
+
+        except:
+            length = 254
+
+        dAtt["length"] = length
+
+        # Add each legend item to the list that will go in the uniqueValueInfos item
+        cnt = 0
+        legendItems = list()
+        uniqueValueInfos = list()
+
+        for cnt in range(0, len(legendList)):
+            dSymbol = dict()
+            rating, label, hexCode = legendList[cnt]
+            #PrintMsg(" \tAdding to legend: " + label + "; " + rating + "; " + hexCode, 1)
+            # calculate rgb colors
+            rgb = list(int(hexCode.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+            rgb.append(255)  # transparency doesn't seem to work
+            #PrintMsg(" \nRGB: " + str(rgb), 1)
+            symbol = {"type" : "esriSFS", "style" : "esriSFSSolid", "color" : rgb, "outline" : {"color": outLineColor, "width": 0.4, "style": "esriSLSSolid", "type": "esriSLS"}}
+
+            #
+            legendItems = dict()
+            legendItems["value"] = rating
+
+            legendItems["description"] = ""  # This isn't really used unless I want to pull in a description of this individual rating
+
+            if not dSDV["unitsofmeasure"] is None and cnt == 1:
+                legendItems["label"] = label + " (" + dSDV["unitsofmeasure"] + ")"
+
+            else:
+                legendItems["label"] = label
+
+            legendItems["symbol"] = symbol
+            d["drawingInfo"]["renderer"] = {"type" : "uniqueValue", "field1" : dSDV["resultcolumnname"], "field2" : None, "field3" : None}
+            uniqueValueInfos.append(legendItems)
+
+        d["drawingInfo"]["renderer"]["uniqueValueInfos"] = uniqueValueInfos
+        #PrintMsg(" \n[drawingInfo][renderer][field1]: " + str(d["drawingInfo"]["renderer"]["field1"]) + " \n ",  1)
+        #PrintMsg(" \nuniqueValueInfos: " + str(d["drawingInfo"]["renderer"]["uniqueValueInfos"]), 1)
+
+        return d
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return d
+
+    except:
+        errorMsg()
+        return d
+
 ## ===================================================================================
 def CreateStringLayer(sdvLyrFile, dLegend, outputValues):
     # Create dummy shapefile that can be used to set up
@@ -1336,7 +1880,7 @@ def CreateMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, outputVa
                 #
                 # try calculating new class breakvalues
                 if bVerbose:
-                    PrintMsg(" \nRight before CreateNumericLayer: " + str(dSDV["maplegendkey"]) , 1)
+                    PrintMsg(" \nMapLegendKey right before CreateNumericLayer: " + str(dSDV["maplegendkey"]) , 1)
                     PrintMsg("ClassBreakValues: " + str(classBV), 1)
                     PrintMsg("ClassBreakLabels: " + str(classBL), 1)
 
@@ -1346,12 +1890,6 @@ def CreateMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, outputVa
                 if tmpSDVLayer is None:
                     #arcpy.RemoveJoin_management(inputLayer, os.path.basename(outputTbl))
                     raise MyError, ""
-
-                #if bVerbose:
-                #    PrintMsg(" \nAfter CreateNumericLayer: " + str(dSDV["maplegendkey"]) , 1)
-                #    PrintMsg("ClassBreakValues: " + str(tmpSDVLayer.symbology.classBreakValues), 1)
-                #    PrintMsg("ClassBreakLabels: " + str(classBL), 1)
-                #    PrintMsg(" \nTrying to update symbology using tmpSDVLayer", 1)
 
                 arcpy.mapping.UpdateLayer(df, finalMapLayer, tmpSDVLayer, True)
 
@@ -1775,7 +2313,7 @@ def CreateRasterMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, ou
 
             if finalMapLayer.symbologyType.upper() == "OTHER":
                 # Failed to get UNIQUE_VALUES renderer for raster. Print help message instead.
-                PrintMsg(" \nThe user must manually set 'Unique Values' symbology for this layer using the '" + symField + "' field", 1)
+                PrintMsg(" \nThe user must manually set 'Unique Values' symbology for this raster layer using the '" + symField + "' field", 1)
 
             else:
                 if bVerbose:
@@ -1960,7 +2498,7 @@ def ReadTable(tbl, flds, wc, level, sql):
     # to handle aggregation methods and tie-handling
     # ReadTable(dSDV["attributetablename"].upper(), flds, primSQL, level, sql)
     try:
-        arcpy.SetProgressorLabel("Reading input data")
+        arcpy.SetProgressorLabel("Reading input data (" + tbl.lower() +")")
         # wc = primSQL
         # Create dictionary to store data for this table
         dTbl = dict()
@@ -2027,7 +2565,8 @@ def GetAreasymbols(gdb):
 
 ## ===================================================================================
 def GetSDVAtts(gdb, sdvAtt):
-    # return list of months
+    # Create a dictionary containing SDV attributes for the selected attribute fields
+    #
     try:
         # Open sdvattribute table and query for [attributename] = sdvAtt
         dSDV = dict()  # dictionary that will store all sdvattribute data using column name as key
@@ -2853,7 +3392,7 @@ def CreateSoilMoistureTable(tblList, sdvTbl, dComponent, dHorizon, initialTbl, b
 ## ===================================================================================
 def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl):
     # Aggregate map unit level table
-    #
+    # Added Areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -2870,8 +3409,8 @@ def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl):
         outputTbl = os.path.join(gdb, tblName)
         #attribcolumn = dSDV["attributecolumnname"].upper()
         #resultcolumn = dSDV["resultcolumnname"].upper()
-        inFlds = ["MUKEY", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "AREASYMBOL", dSDV["attributecolumnname"].upper()]
+        outFlds = ["MUKEY", "AREASYMBOL", dSDV["resultcolumnname"].upper()]
         outputValues = list()
 
         if arcpy.Exists(outputTbl):
@@ -2882,6 +3421,8 @@ def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl):
         if outputTbl == "":
             return outputTbl, outputValues
 
+        fldPrecision = max(0, dSDV["attributeprecision"])
+
         if dSDV["effectivelogicaldatatype"].lower() in ["integer", "float"]:
             # populate sdv_initial table and create list of min-max values
             iMax = -999999999
@@ -2890,9 +3431,14 @@ def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl):
             with arcpy.da.SearchCursor(initialTbl, inFlds) as cur:
                 with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                     for rec in cur:
-                        mukey, val = rec
+                        mukey, areasym, val = rec
+
+                        if not val is None:
+                            val = round(val, fldPrecision)
+
                         iMax = max(val, iMax)
                         iMin = min(val, iMin)
+                        rec = [mukey, areasym, val]
                         ocur.insertRow(rec)
 
             # add max and min values to list
@@ -2907,7 +3453,7 @@ def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl):
             with arcpy.da.SearchCursor(initialTbl, inFlds) as cur:
                 with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                     for rec in cur:
-                        mukey, val = rec
+                        mukey, areasym, val = rec
                         if not val in outputValues:
                             outputValues.append(val)
 
@@ -2930,7 +3476,7 @@ def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl):
 ## ===================================================================================
 def AggregateCo_DCP(gdb, sdvAtt, sdvFld, initialTbl):
     # Aggregate mapunit-component data to the map unit level using dominant component
-    #
+    # Added areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -2942,8 +3488,8 @@ def AggregateCo_DCP(gdb, sdvAtt, sdvFld, initialTbl):
         outputTbl = os.path.join(gdb, tblName)
         outputValues = list()
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "AREASYMBOL", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
+        outFlds = ["MUKEY", "AREASYMBOL", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
 
         if tieBreaker == dSDV["tiebreaklowlabel"]:
             sqlClause =  (None, " ORDER BY MUKEY ASC, COMPPCT_R DESC, " + dSDV["attributecolumnname"].upper() + " ASC ")
@@ -2968,19 +3514,27 @@ def AggregateCo_DCP(gdb, sdvAtt, sdvFld, initialTbl):
             # populate sdv_initial table and create list of min-max values
             iMax = -999999999
             iMin = 999999999
+            fldPrecision = max(0, dSDV["attributeprecision"])
 
             with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause) as cur:
 
                 with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                     for rec in cur:
+                        mukey, areasym, cokey, comppct, rating = rec
 
-                        if rec[0] != lastMukey and lastMukey != "xxxx":
-                            newrec = [rec[0], rec[2], rec[3]]
-                            ocur.insertRow(newrec)
-                            iMax = max(rec[3], iMax)
-                            iMin = min(rec[3], iMin)
+                        if mukey != lastMukey and lastMukey != "xxxx":
 
-                        lastMukey = rec[0]
+                            if not rating is None:
+                                newrec = mukey, areasym, comppct, round(rating, fldPrecision)
+
+                            else:
+                                newrec = mukey, areasym, comppct, None
+
+                            ocur.insertRow(newrec) # Error here. sequence size.
+                            iMax = max(rating, iMax)
+                            iMin = min(rating, iMin)
+
+                        lastMukey = mukey
 
             # add max and min values to list
             outputValues = [iMin, iMax]
@@ -2999,41 +3553,46 @@ def AggregateCo_DCP(gdb, sdvAtt, sdvFld, initialTbl):
                     with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                         for rec in cur:
 
-                            if rec[0] != lastMukey:
+                            mukey, areasym, cokey, comppct, rating = rec
 
-                                if not rec[3] is None:
+                            if mukey != lastMukey:
+
+                                if not rating is None:
                                     try:
-                                        newrec = [rec[0], rec[2], dValues[rec[3].upper()][1]]
+                                        newrec = [mukey, areasym, comppct, dValues[rating.upper()][1]]
 
                                     except:
                                         # value not in dictionary
-                                        newrec = [rec[0], rec[2], rec[3]]
+                                        newrec = [mukey, areasym, comppct, rating]
 
                                 else:
-                                    newrec = [rec[0], rec[2], rec[3]]
+                                    newrec = [mukey, areasym, comppct, rating]
+
+                                #PrintMsg("Length of table: " + str(len(outFlds)) + " and " + str(len(newrec)) + " values", 1)
+                                #PrintMsg("Output cursor fields: " + str(ocur.fields), 1)
 
                                 ocur.insertRow(newrec)
 
-                                if not rec[3] in outputValues:
-                                    outputValues.append(rec[3])
+                                if not rating in outputValues:
+                                    outputValues.append(rating)
 
-                            lastMukey = rec[0]
+                            lastMukey = mukey
 
                 else:
                     # Text, without domain values
                     #
                     with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                         for rec in cur:
+                            mukey, areasym, cokey, comppct, rating = rec
 
-                            #if rec[0] != lastMukey and lastMukey != "xxxx":
-                            if rec[0] != lastMukey:
-                                if not rec[3] is None:
-                                    newVal = rec[3].strip()
+                            if mukey != lastMukey:
+                                if not rating is None:
+                                    newVal = rating.strip()
 
                                 else:
                                     newVal = None
 
-                                ocur.insertRow([rec[0], rec[2], newVal])
+                                ocur.insertRow([mukey, areasym, comppct, newVal])
                                 #PrintMsg("\tWriting " + str([rec[0], rec[2], newVal]), 0)
 
                                 if not newVal is None and not newVal in outputValues:
@@ -3042,7 +3601,7 @@ def AggregateCo_DCP(gdb, sdvAtt, sdvFld, initialTbl):
                             #else:
                             #    PrintMsg("\tSkipping " + str(rec), 1)
 
-                            lastMukey = rec[0]
+                            lastMukey = mukey
 
 
         if None in outputValues:
@@ -3075,6 +3634,7 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
     # Based upon AggregateCo_DCD function, but sorted on rating or domain value instead of comppct
     #
     # domain: soil_erodibility_factor (text)  range = .02 .. .64
+    # Added Areasymbol to output
 
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
@@ -3090,8 +3650,8 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
         # Create final output table with MUKEY, COMPPCT_R and sdvFld
         outputTbl = os.path.join(gdb, tblName)
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "AREASYMBOL", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
+        outFlds = ["MUKEY", "AREASYMBOL", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
 
         # ignore any null values
         whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " IS NOT NULL"
@@ -3118,6 +3678,7 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
         dComp = dict()
         dCompPct = dict()
         dMapunit = dict()
+        dAreasym = dict()
 
         if not dSDV["notratedphrase"] is None:
             # This should be for most interpretations
@@ -3138,19 +3699,21 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
 
                     for rec in cur:
                         #PrintMsg(str(rec), 1)
+                        mukey, areasym, cokey, comppct, rating = rec
+                        dAreasym[mukey] = areasym
 
                         # Save the associated domain index for this rating
-                        dComp[rec[1]] = dValues[str(rec[3]).upper()][0]
+                        dComp[cokey] = dValues[str(rating).upper()][0]
 
                         # save component percent for each component
-                        dCompPct[rec[1]] = rec[2]
+                        dCompPct[cokey] = comppct
 
                         # save list of components for each mapunit using mukey as key
                         try:
-                            dMapunit[rec[0]].append(rec[1])
+                            dMapunit[mukey].append(cokey)
 
                         except:
-                            dMapunit[rec[0]] = [rec[1]]
+                            dMapunit[mukey] = [cokey]
 
                         #PrintMsg("Component '" + rec[1] + "' at " + str(rec[2]) + "% has a rating of: " + str(rec[3]), 1)
 
@@ -3163,18 +3726,20 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
             with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
 
                 for rec in cur:
+                    mukey, areasym, cokey, comppct, rating = rec
+                    dAreasym[mukey] = areasym
                     # Assume that this is the first rating for the component
-                    dComp[rec[1]] = rec[3]
+                    dComp[cokey] = rating
 
                     # save component percent for each component
-                    dCompPct[rec[1]] = rec[2]
+                    dCompPct[cokey] = comppct
 
                     # save list of components for each mapunit
                     try:
-                        dMapunit[rec[0]].append(rec[1])
+                        dMapunit[mukey].append(cokey)
 
                     except:
-                        dMapunit[rec[0]] = [rec[1]]
+                        dMapunit[mukey] = [cokey]
 
 
 
@@ -3218,7 +3783,8 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
 
                         pct = dRating[maxIndx]
                         rating = domainValues[maxIndx]
-                        newrec = [mukey, pct, rating]
+                        areasym = dAreasym[mukey]
+                        newrec = [mukey, areasym, pct, rating]
                         ocur.insertRow(newrec)
                         #PrintMsg("\tMapunit rating: " + str(indexes) + "; " + str(maxIndx) + "; " + rating + " \n ", 1)
 
@@ -3226,7 +3792,8 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
                             outputValues.append(rating)
 
                 else:
-                    # Higher
+                    # Higher tiebreak, no domain values
+                    #
                     PrintMsg(" \n" + dSDV["tiebreakhighlabel"] + ", no domain values", 1)
 
                     for mukey, cokeys in dMapunit.items():
@@ -3248,15 +3815,9 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
                         for rating, compPct in dRating.items():
                             muVals.append([compPct, rating])
 
-                        #PrintMsg(" \nmuVals: " + str(muVals), 1)
-                        # example: b = sorted(sorted(a, key = lambda x : x[0]), key = lambda x : x[1], reverse = True)
-                        #newVals = sorted(muVals, key = lambda x : (-x[1], x[0]))[0]  # sort for highest rating value
-                        # sorted, reverse=True goes High-to-low
-                        # sorted, reverse=False goes Low-to-high
-                        #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=True)[0]
-                        muVal = SortData(muVals)
 
-                        newrec = [mukey, muVal[0], muVal[1]]  # get sum of comppct and highest rating value
+                        muVal = SortData(muVals)
+                        newrec = [mukey, dAreasym[mukey], muVal[0], muVal[1]]  # get sum of comppct and highest rating value
                         #PrintMsg("\t" + mukey + ": " + str(newVals[0]) + ",  " + str(newVals[1]), 1)
                         ocur.insertRow(newrec)
 
@@ -3300,7 +3861,7 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
                             # if the lowest index is for 'Not rated', try to get the next higher index
                             minIndx = indexes[1]
 
-                        newrec = [mukey, dRating[minIndx], domainValues[minIndx]]
+                        newrec = [mukey, dAreasym[mukey], dRating[minIndx], domainValues[minIndx]]
                         #PrintMsg("\t" + mukey + ": " + " - " + str(minIndx) + ",  " + domainValues[minIndx], 1)
                         ocur.insertRow(newrec)
 
@@ -3318,7 +3879,6 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
                         for cokey in cokeys:
                             compPct = dCompPct[cokey]  # component percent
                             ratingIndx = dComp[cokey]  # component rating
-                            indexes = list()
 
                             if ratingIndx != 0:
                                 if ratingIndx in dRating:
@@ -3327,24 +3887,13 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
                                 else:
                                     dRating[ratingIndx] = compPct
 
-                        indexes = sorted(set(indexes))
-                        minIndx = indexes[0]  # get the lowest index value
-
-                        if minIndx == notRatedIndex and len(indexes) > 1:
-                            # if the lowest index is for 'Not rated', try to get the next higher index
-                            minIndx = indexes[1]
-
-                        #PrintMsg("\tmukey: " + str(indexes) + "; " + str(minIndx), 1)
                         for rating, compPct in dRating.items():
                             muVals.append([compPct, rating])
 
-                        #PrintMsg("\tPrior to sorting: " + mukey + ": " + ",  " + str(muVals), 1)
                         if len(muVals) > 0:
-                            #newVals = sorted(muVals, key = lambda x : (x[1], x[0]))[0]  # lowest rating with associated sum of comppct
-                            #newVals = sorted(sorted(muVals, key = lambda x : x[1], reverse=True), key = lambda x : x[0], reverse=False)[0]
                             muVal = SortData(muVals)
 
-                            newrec = [mukey, muVal[0], muVal[1]]
+                            newrec = [mukey, dAreasym[mukey], muVal[0], muVal[1]]
                             ocur.insertRow(newrec)
                             #PrintMsg("\t" + mukey + ": " + ",  " + str(muVals), 1)
 
@@ -3352,9 +3901,6 @@ def AggregateCo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
                             outputValues.append(newrec[2])
 
                 # End of Lower
-
-
-
 
         outputValues.sort()
 
@@ -3376,7 +3922,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
     # Need to remove references to domain values for rating
     #
     # Need to figure out how to handle tiebreaker code for Random values (no index for ratings)
-    #
+    # Added areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -3387,8 +3933,8 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
         # Create final output table with MUKEY, COMPPCT_R and sdvFld
         outputTbl = os.path.join(gdb, tblName)
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
         # ignore any null values
         if not bNulls:
@@ -3418,6 +3964,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
         dComp = dict()
         dCompPct = dict()
         dMapunit = dict()
+        dAreasym = dict()
 
         # 1 Read initial table (ratings have domain values and can be ranked)
         #
@@ -3439,13 +3986,14 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
 
                 for rec in cur:
                     # read raw data from initial table
-                    mukey, cokey, comppct, ratingVal = rec
+                    mukey, cokey, comppct, rating, areasym = rec
                     dRating = dict()
 
                     # get index for this rating
-                    ratingIndx = dValues[str(ratingVal).upper()][0]
+                    ratingIndx = dValues[str(rating).upper()][0]
                     dComp[cokey] = ratingIndx
                     dCompPct[cokey] = comppct
+                    dAreasym[mukey] = areasym
 
                     # summarize the comppct for this rating and map unit combination
                     try:
@@ -3466,9 +4014,6 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
                         #dMapunit[mukey].append(ratingIndx)
                         dMapunit[mukey] = [cokey]
 
-
-
-
         else:
             # No domain values
             # 2 Read initial table (no domain values, must use alpha sort for tiebreaker)
@@ -3478,21 +4023,25 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
                 #
                 # numeric values
                 if dSDV["effectivelogicaldatatype"].lower() in ['integer', 'float']:
+                    fldPrecision = max(0, dSDV["attributeprecision"])
+
                     for rec in cur:
+                        mukey, cokey, comppct, rating, areasym = rec
                         # Assume that this is the rating for the component
                         # PrintMsg("\t" + str(rec[1]) + ": " + str(rec[3]), 1)
-                        dComp[rec[1]] = rec[3]
+                        dComp[cokey] = rating
+                        dAreasym[mukey] = areasym
 
                         # save component percent for each component
-                        dCompPct[rec[1]] = rec[2]
+                        dCompPct[cokey] = comppct
 
                         # save list of components for each mapunit
                         # key value is mukey; dictionary value is a list of cokeys
                         try:
-                            dMapunit[rec[0]].append(rec[1])
+                            dMapunit[mukey].append(cokey)
 
                         except:
-                            dMapunit[rec[0]] = [rec[1]]
+                            dMapunit[mukey] = [cokey]
 
                 else:
                     #
@@ -3500,18 +4049,20 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
                     for rec in cur:
                         # Assume that this is the rating for the component
                         # PrintMsg("\t" + str(rec[1]) + ": " + str(rec[3]), 1)
-                        dComp[rec[1]] = rec[3].strip()
+                        mukey, cokey, comppct, rating, areasym = rec
+                        dComp[cokey] = rating.strip()
 
                         # save component percent for each component
-                        dCompPct[rec[1]] = rec[2]
+                        dCompPct[cokey] = comppct
+                        dAreasym[mukey] = areasym
 
                         # save list of components for each mapunit
                         # key value is mukey; dictionary value is a list of cokeys
                         try:
-                            dMapunit[rec[0]].append(rec[1])
+                            dMapunit[mukey].append(cokey)
 
                         except:
-                            dMapunit[rec[0]] = [rec[1]]
+                            dMapunit[mukey] = [cokey]
 
         # Aggregate component-level data to the map unit
         #
@@ -3530,6 +4081,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
                 for mukey, cokeys in dMapunit.items():
                     dRating = dict()  # save sum of comppct for each rating within a mapunit
                     muVals = list()   # may not need this for DCD
+                    areasym = dAreasym[mukey]
 
                     for cokey in cokeys:
                         compPct = dCompPct[cokey]
@@ -3554,7 +4106,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
                     muVal = SortData(muVals)
 
 
-                    newrec = [mukey, muVal[0], muVal[1]]
+                    newrec = [mukey, muVal[0], muVal[1], areasym]
                     ocur.insertRow(newrec)
 
                     if not newrec[2] in outputValues:
@@ -3566,6 +4118,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
                 for mukey, cokeys in dMapunit.items():
                     dRating = dict()   # save sum of comppct for each rating within a mapunit
                     muVals = list()   # may not need this for DCD
+                    areasym = dAreasym[mukey]
 
                     for cokey in cokeys:
                         compPct = dCompPct[cokey]
@@ -3590,7 +4143,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
                     #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=True)[0]
                     muVal = SortData(muVals)
 
-                    newrec = [mukey, muVal[0], muVal[1]]
+                    newrec = [mukey, muVal[0], muVal[1]], areasym
                     ocur.insertRow(newrec)
 
                     if not newrec[2] in outputValues:
@@ -3603,7 +4156,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
 
         #PrintMsg(" \noutputValues: " + str(outputValues), 1)
 
-        if dSDV["effectivelogicaldatatype"].lower() == "integer":
+        if dSDV["effectivelogicaldatatype"].lower() in ["float", "integer"]:
             return outputTbl, outputValues
 
         else:
@@ -3628,7 +4181,7 @@ def AggregateCo_DCP_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
     #
     # PROBLEMS with picking the correct depth for each component. Use tiebreaker to pick
     # highest or lowest month and then aggregate to DCP?
-    #
+    # Added areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -3641,8 +4194,8 @@ def AggregateCo_DCP_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
         #attribcolumn = dSDV["attributecolumnname"].upper()
         #resultcolumn = dSDV["resultcolumnname"].upper()
 
-        inFlds = ["MUKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
         whereClause = "COMPPCT_R >=  " + str(cutOff)  # Leave in NULLs and try to substitute 200
         sqlClause =  (None, " ORDER BY MUKEY ASC, COMPPCT_R DESC")
 
@@ -3656,14 +4209,24 @@ def AggregateCo_DCP_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
             return outputTbl, outputValues
 
         dMapunit = dict()
+        dAreasym = dict()
+        dataCnt = int(arcpy.GetCount_management(initialTbl).getOutput(0))
 
         with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
+            #cnt = 0
+            #PrintMsg(" \nReading input table " + os.path.basename(initialTbl) + "...", 1)
+            arcpy.SetProgressor("step", "Reading input table " + os.path.basename(initialTbl) + "...", 0, dataCnt, 1 )
 
             # "MUKEY", "COMPPCT_R", attribcolumn
             for rec in cur:
-                mukey = rec[0]
-                compPct = rec[1]
-                rating = rec[2]
+                arcpy.SetProgressorPosition()
+
+                #arcpy.SetProgressorLabel("Reading input record (" + Number_Format(cnt, 0, True) + ")")
+                mukey, compPct, rating, areasym = rec
+                #mukey = rec[0]
+                #compPct = rec[1]
+                #rating = rec[2]
+                dAreasym[mukey] = areasym
 
                 if rating is None:
                     rating = nullRating
@@ -3674,9 +4237,16 @@ def AggregateCo_DCP_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
                 except:
                     dMapunit[mukey] = [[compPct, rating]]
 
+
+        del initialTbl  # Trying to save some memory 2016-06-23
+
+
         with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
+            #PrintMsg(" \nWriting to output table " + outputTbl + "...", 1)
+            arcpy.SetProgressor("step", "Writing to output table (" + os.path.basename(outputTbl) + ")", 0, len(dMapunit), 1 )
 
             for mukey, coVals in dMapunit.items():
+                arcpy.SetProgressorPosition()
                 # Grab the first pair of values (pct, depth) from the sorted list.
                 # This is the dominant component rating using tie breaker setting
                 dcpRating = SortData(coVals)
@@ -3689,7 +4259,7 @@ def AggregateCo_DCP_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
                 #    #dcpRating = sorted(coVals, key = lambda x : (-x[0], x[1]))[0]  # Highest CompPct, lowest value
                 #    dcpRating = sorted(sorted(coVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=False)[0]
 
-                rec =[mukey, dcpRating[0], dcpRating[1]]
+                rec =[mukey, dcpRating[0], dcpRating[1], dAreasym[mukey]]
                 ocur.insertRow(rec)
 
                 if not rec[2] in outputValues:
@@ -3712,7 +4282,7 @@ def AggregateCo_DCD_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
     # Aggregate mapunit-component data to the map unit level using dominant condition
     # and the tie breaker setting to select the lowest or highest monthly rating.
     # Use this for COMONTH table. domainValues
-    #
+    # Added areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -3725,8 +4295,8 @@ def AggregateCo_DCD_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
         #attribcolumn = dSDV["attributecolumnname"].upper()
         #resultcolumn = dSDV["resultcolumnname"].upper()
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
         whereClause = "COMPPCT_R >=  " + str(cutOff)  # Leave in NULLs and try to substitute 200
         sqlClause =  (None, " ORDER BY MUKEY ASC, COMPPCT_R DESC")
 
@@ -3742,18 +4312,18 @@ def AggregateCo_DCD_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
         dMapunit = dict()
         dComponent = dict()
         dCoRating = dict()
+        dAreasym = dict()
 
         with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
 
             # MUKEY,COKEY , COMPPCT_R, attribcolumn
             for rec in cur:
-                mukey = rec[0]
-                cokey = rec[1]
-                compPct = rec[2]
-                rating = rec[3]
+                mukey, cokey, compPct, rating, areasym = rec
 
                 if rating is None:
                     rating = nullRating
+
+                dAreasym[mukey] = areasym
 
                 # Save list of cokeys for each mukey
                 try:
@@ -3812,7 +4382,7 @@ def AggregateCo_DCD_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
         with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
             # Write final ratings to output table
             for mukey, vals in dFinalRatings.items():
-                rec = mukey, vals[0], vals[1]
+                rec = mukey, vals[0], vals[1], dAreasym[mukey]
                 ocur.insertRow(rec)
 
                 if not rec[2] in outputValues:
@@ -3838,6 +4408,7 @@ def AggregateCo_Mo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
     #
     # It appears that WSS includes 0 percent components in the MinMax. This function
     # is currently set to duplicate this behavior
+    # Added areasymbol to output
 
     try:
         #
@@ -3851,8 +4422,8 @@ def AggregateCo_Mo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
         #attribcolumn = dSDV["attributecolumnname"].upper()
         #resultcolumn = dSDV["resultcolumnname"].upper()
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
         whereClause = "COMPPCT_R >=  " + str(cutOff)  # Leave in NULLs and try to substitute dSDV["nullratingreplacementvalue"]
         #whereClause = "COMPPCT_R >=  " + str(cutOff) + " and not " + dSDV["attributecolumnname"].upper() + " is null"
         sqlClause =  (None, " ORDER BY MUKEY ASC, COMPPCT_R DESC")
@@ -3869,6 +4440,7 @@ def AggregateCo_Mo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
         dMapunit = dict()
         dComponent = dict()
         dCoRating = dict()
+        dAreasym = dict()
 
         #PrintMsg(" \nSQL: " + whereClause, 1)
         #PrintMsg("Fields: " + str(inFlds), 1)
@@ -3877,10 +4449,12 @@ def AggregateCo_Mo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
 
             # MUKEY,COKEY , COMPPCT_R, attribcolumn
             for rec in cur:
-                mukey = rec[0]
-                cokey = rec[1]
-                compPct = rec[2]
-                rating = rec[3]
+                #mukey = rec[0]
+                #cokey = rec[1]
+                #compPct = rec[2]
+                #rating = rec[3]
+                mukey, cokey, compPct, rating, areasym = rec
+                dAreasym[mukey] = areasym
 
                 # Save list of cokeys for each mapunit-mukey
                 try:
@@ -3965,8 +4539,6 @@ def AggregateCo_Mo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
                         lowRating = rating
                         dFinalRatings[mukey] = [compPct, rating]
 
-
-
             del dMuRatings
 
         with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
@@ -3987,214 +4559,7 @@ def AggregateCo_Mo_MaxMin(gdb, sdvAtt, sdvFld, initialTbl):
 
                     vals = [sumPct, nullRating]
 
-                rec = mukey, vals[0], vals[1]
-                ocur.insertRow(rec)
-
-                if not rec[2] in outputValues:
-                    outputValues.append(rec[2])
-
-        outputValues.sort()
-        return outputTbl, outputValues
-
-    except MyError, e:
-        PrintMsg(str(e), 2)
-        return outputTbl, outputValues
-
-    except:
-        errorMsg()
-        return outputTbl, outputValues
-
-## ===================================================================================
-def AggregateCo_Mo_MaxMinBad(gdb, sdvAtt, sdvFld, initialTbl):
-    #
-    # Aggregate mapunit-component data to the map unit level using Minimum or Maximum
-    # based upon the TieBreak rule.
-    # Use this for COMONTH table. Example Depth to Water Table.
-    #
-    # It appears that WSS includes 0 percent components in the MinMax. This function
-    # is currently set to duplicate this behavior
-
-    try:
-        #
-        arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
-
-        if bVerbose:
-            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
-
-        # Create final output table with MUKEY, COMPPCT_R and sdvFld
-        outputTbl = os.path.join(gdb, tblName)
-        #attribcolumn = dSDV["attributecolumnname"].upper()
-        #resultcolumn = dSDV["resultcolumnname"].upper()
-
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
-        whereClause = "COMPPCT_R >=  " + str(cutOff)  # Leave in NULLs and try to substitute dSDV["nullratingreplacementvalue"]
-        #whereClause = "COMPPCT_R >=  " + str(cutOff) + " and not " + dSDV["attributecolumnname"].upper() + " is null"
-        sqlClause =  (None, " ORDER BY MUKEY ASC, COMPPCT_R DESC")
-
-        if arcpy.Exists(outputTbl):
-            arcpy.Delete_management(outputTbl)
-
-        outputTbl = CreateOutputTable(initialTbl, outputTbl, dFieldInfo)
-        outputValues = list()
-
-        if outputTbl == "":
-            return outputTbl, outputValues
-
-        dMapunit = dict()
-        dComponent = dict()
-        dCoRating = dict()
-
-        with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
-
-            # MUKEY,COKEY , COMPPCT_R, attribcolumn
-            for rec in cur:
-                mukey, cokey, compPct, rating = rec
-
-                # Save list of cokeys for each mapunit-mukey
-                try:
-                    if not cokey in dMapunit[mukey]:
-                        dMapunit[mukey].append(cokey)
-
-                except:
-                    dMapunit[mukey] = [cokey]
-
-                if not rating is None:
-                    try:
-                        # Save list of rating values along with comppct for each component
-                        dComponent[cokey][1].append(rating)
-
-                    except:
-                        #  Save list of rating values along with comppct for each component
-                        dComponent[cokey] = [compPct, [rating]]
-
-
-        if dSDV["attributelogicaldatatype"].lower() in ("integer", "float"):
-            # this should be depth to water table
-
-            if tieBreaker == dSDV["tiebreakhighlabel"]:
-                # Identify highest value for each component
-                for cokey, coVals in dComponent.items():
-                    # Find high value for each component
-                    #PrintMsg("Higher values for " + cokey + ": " + str(coVals) + " = " + str(max(coVals[1])), 1)
-                    dCoRating[cokey] = max(coVals[1])
-
-            else:
-                # Identify lowest value for each component
-                for cokey, coVals in dComponent.items():
-                    # Find low rating value for each component
-                    #PrintMsg("Lower values for " + cokey + ": " + str(coVals) + " = " + str(min(coVals[1])), 1)
-                    dCoRating[cokey] = min(coVals[1])
-
-        else:
-            # this should be ponding or flooding frequency
-            if tieBreaker == dSDV["tiebreakhighlabel"]:
-                # Identify highest value for each component
-                for cokey, coVals in dComponent.items():
-                    #PrintMsg("Higher values for " + cokey + ": " + str(coVals) + " = " + str(min(coVals[1])), 1)
-                    dCoRating[cokey] = max(coVals[1])
-
-            else:
-                # Identify highest value for each component
-                for cokey, coVals in dComponent.items():
-                    # Find low value for each component
-                    #PrintMsg("Lower values for " + cokey + ": " + str(coVals) + " = " + str(max(coVals[1])), 1)
-                    dCoRating[cokey] = min(coVals[1])
-
-        dFinalRatings = dict()  # final dominant condition. mukey is key
-
-        for mukey, cokeys in dMapunit.items():
-            # accumulate ratings for each mapunit by sum of comppct
-            dMuRatings = dict()  # create a dictionary of values for just this map unit
-            domPct = 0
-
-            for cokey in cokeys:
-                # look at values for each component within the map unit
-                try:
-                    rating = dCoRating[cokey]
-                    compPct = dComponent[cokey][0]
-
-                    try:
-                        dMuRatings[rating] += compPct
-
-                    except:
-                        dMuRatings[rating] = compPct
-
-                except:
-                    pass
-
-            if dSDV["attributelogicaldatatype"].lower() in ("integer", "float"):
-
-                if tieBreaker == dSDV["tiebreakhighlabel"]:
-                    highRating = 0
-
-                    for rating, compPct in dMuRatings.items():
-                        # Find the highest
-                        if rating > highRating:
-                            highRating = rating
-                            dFinalRatings[mukey] = [compPct, rating]
-
-                else:
-                    lowRating = nullRating
-
-                    for rating, compPct in dMuRatings.items():
-                        # Find the lowest rating
-
-                        if rating < lowRating and rating is not None:
-                            lowRating = rating
-                            dFinalRatings[mukey] = [compPct, rating]
-
-
-            else:
-                if tieBreaker == dSDV["tiebreakhighlabel"]:
-                    lowRating = nullRating
-
-                    for rating, compPct in dMuRatings.items():
-                        # Find the lowest rating
-
-                        if rating < lowRating and rating is not None:
-                            lowRating = rating
-                            dFinalRatings[mukey] = [compPct, rating]
-
-                else:
-                    highRating = 0
-
-                    for rating, compPct in dMuRatings.items():
-                        # Find the highest
-                        if rating > highRating:
-                            highRating = rating
-                            dFinalRatings[mukey] = [compPct, rating]
-
-
-
-            del dMuRatings
-
-        # Write final ratings to output table
-        #
-        with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
-
-            for mukey in sorted(dMapunit):
-                #PrintMsg( "\nMukey: " + mukey, 0)
-
-                try:
-                    vals = dFinalRatings[mukey]
-
-                except:
-                    # no rating available for any component
-                    sumPct = 0
-
-                    for cokey in dMapunit[mukey]:
-                        try:
-                            sumPct += dComponent[cokey][0]
-                            #PrintMsg("\tsumPct: " + str(sumPct), 1)
-
-                        except:
-                            pass
-
-                    vals = [sumPct, nullRating]
-
-                rec = mukey, vals[0], vals[1]
-
+                rec = mukey, vals[0], vals[1], dAreasym[mukey]
                 ocur.insertRow(rec)
 
                 if not rec[2] in outputValues:
@@ -4225,8 +4590,8 @@ def AggregateCo_WTA_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
 
         # Create final output table with MUKEY, COMPPCT_R and sdvFld
         outputTbl = os.path.join(gdb, tblName)
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
         whereClause = "COMPPCT_R >=  " + str(cutOff)  # Leave in NULLs and try to substitute 200
         sqlClause =  (None, " ORDER BY MUKEY ASC, COMPPCT_R DESC")
 
@@ -4242,15 +4607,19 @@ def AggregateCo_WTA_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
         dMapunit = dict()
         dComponent = dict()
         dCoRating = dict()
+        dAreasym = dict()
 
         with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
 
             # MUKEY,COKEY , COMPPCT_R, attribcolumn
             for rec in cur:
-                mukey = rec[0]
-                cokey = rec[1]
-                compPct = rec[2]
-                rating = rec[3]
+                #mukey = rec[0]
+                #cokey = rec[1]
+                #compPct = rec[2]
+                #rating = rec[3]
+                mukey, cokey, compPct, rating, areasym = rec
+
+                dAreasym[mukey] = areasym
 
                 if rating is None:
                     rating = nullRating
@@ -4310,7 +4679,7 @@ def AggregateCo_WTA_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
         with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
             # Write final ratings to output table
             for mukey, vals in dFinalRatings.items():
-                rec = mukey, vals[0], vals[1]
+                rec = mukey, vals[0], vals[1], dAreasym[mukey]
                 ocur.insertRow(rec)
 
                 if not vals[1] in outputValues:
@@ -4342,6 +4711,7 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
     # Bad problem 2016-06-08.
     # Noticed that my final rating table may contain multiple ratings (tiebreak) for a map unit. This creates
     # a funky join that may display a different map color than the Identify value shows for the polygon. NIRRCAPCLASS.
+    # Added areasymbol to output
 
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
@@ -4353,8 +4723,8 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
         # Create final output table with MUKEY, COMPPCT_R and sdvFld
         outputTbl = os.path.join(gdb, tblName)
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
         if bNulls:
             whereClause = "COMPPCT_R >=  " + str(cutOff)
@@ -4380,9 +4750,8 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
         dCompPct = dict()
         dMapunit = dict()
         missingDomain = list()
+        dAreasym = dict()
         dCase = dict()
-
-
 
         # Read initial table for non-numeric data types. Capture domain values and all component ratings.
         #
@@ -4400,25 +4769,28 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
 
                 for rec in cur:
                     # "MUKEY", "COKEY", "COMPPCT_R", RATING
+                    mukey, cokey, compPct, rating, areasym = rec
+                    dAreasym[mukey] = areasym
+
                     try:
                         #PrintMsg("\t" + str(rec), 1)
                         # capture component ratings as index numbers instead.
                         #dComp[rec[1]].append(dValues[str(rec[3]).upper()][0])
-                        dComp[rec[1]].append(rec[3])
-                        dCompPct[rec[1]] = rec[2]
+                        dComp[cokey].append(rating)
+                        dCompPct[cokey] = compPct
 
                     except:
                         #dComp[rec[1]] = [dValues[str(rec[3]).upper()][0]]  #error
-                        dComp[rec[1]] = [rec[3]]
-                        dCompPct[rec[1]] = rec[2]
-                        dCase[str(rec[3]).upper()] = rec[3]  # save original value using uppercase key
+                        dComp[cokey] = [rating]
+                        dCompPct[cokey] = compPct
+                        dCase[str(rating).upper()] = rating  # save original value using uppercase key
 
                         # save list of components for each mapunit
                         try:
-                            dMapunit[rec[0]].append(rec[1])
+                            dMapunit[mukey].append(cokey)
 
                         except:
-                            dMapunit[rec[0]] = [rec[1]]
+                            dMapunit[mukey] = [cokey]
 
         elif dSDV["attributelogicaldatatype"].lower() in ["string", "float", "integer", "choice"]:
             if len(domainValues) > 1 and not "NONE" in domainValues:
@@ -4431,33 +4803,35 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
             with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
 
                 for rec in cur:
+                    mukey, cokey, compPct, rating, areasym = rec
+                    dAreasym[mukey] = areasym
                     # "MUKEY", "COKEY", "COMPPCT_R", RATING
                     try:
                         #PrintMsg("\t" + str(rec), 1)
                         # capture component ratings as index numbers instead
                         # Append uppercase rating value to component dictionary
-                        dComp[rec[1]].append(dValues[str(rec[3]).upper()][0])
-                        dCompPct[rec[1]] = rec[2]
+                        dComp[cokey].append(dValues[str(rating).upper()][0])
+                        dCompPct[cokey] = compPct
 
                     except:
                         # this is a new component record. create a new dictionary item.
                         #
                         #PrintMsg(" \ndomainValues is empty, but legendValues has " + str(legendValues), 1)
-                        dCase[str(rec[3]).upper()] = rec[3]
+                        dCase[str(rating).upper()] = rating
 
                         if str(rec[3]).upper() in dValues:
                             #PrintMsg("\tdValue good for: " + str(rec), 1)
-                            dComp[rec[1]] = [dValues[str(rec[3]).upper()][0]]
-                            dCompPct[rec[1]] = rec[2]
+                            dComp[cokey] = [dValues[str(rating).upper()][0]]
+                            dCompPct[cokey] = compPct
 
                             # compare actual rating value to domainValues to make sure case is correct
                             if not rec[3] in domainValues: # this is a case problem
                                 # replace the original dValue item
-                                dValues[str(rec[3]).upper()][1] = rec[3]
+                                dValues[str(rating).upper()][1] = rating
                                 # replace the value in domainValues list
                                 for i in range(len(domainValues)):
-                                    if str(domainValues[i]).upper() == str(rec[3]).upper():
-                                        domainValues[i] = rec[3]
+                                    if str(domainValues[i]).upper() == str(rating).upper():
+                                        domainValues[i] = rating
 
 
                         else:
@@ -4466,24 +4840,22 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                             PrintMsg("\tdValue not found for: " + str(rec), 1)
                             if not str(rec[3]) in missingDomain:
                                 # Try to add missing value to dDomainValues dict and domainValues list
-                                dValues[str(rec[3]).upper()] = [len(dValues), rec[3]]
-                                domainValues.append(rec[3])
-                                domainValuesUp.append(str(rec[3]).upper())
-                                missingDomain.append(str(rec[3]))
-                                dCompPct[rec[1]] = rec[2]
+                                dValues[str(rating).upper()] = [len(dValues), rating]
+                                domainValues.append(rating)
+                                domainValuesUp.append(str(rating).upper())
+                                missingDomain.append(str(rating))
+                                dCompPct[cokey] = compPct
                                 #PrintMsg("\tAdding value '" + str(rec[3]) + "' to domainValues", 1)
 
                         # save list of components for each mapunit
                         try:
-                            dMapunit[rec[0]].append(rec[1])
+                            dMapunit[mukey].append(cokey)
 
                         except:
-                            dMapunit[rec[0]] = [rec[1]]
+                            dMapunit[mukey] = [cokey]
 
         else:
             raise MyError, "Problem with handling domain values of type '" + dSDV["attributelogicaldatatype"]
-
-
 
         # Aggregate monthly index values to a single value for each component??? Would it not be better to
         # create a new function for COMONTH-DCD? Then I could simplify this function.
@@ -4517,8 +4889,8 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     else:
                         val = indexes[0]
 
-                    if cokey in ['11828955', '11828954', '11828956', '11828957'] and bVerbose:
-                        PrintMsg(" \nFinal index value for cokey " + cokey + ": " + str(dCompPct[cokey]) + "% , " + str(val), 1)
+                    #if cokey in ['11828955', '11828954', '11828956', '11828957'] and bVerbose:
+                    #    PrintMsg(" \nFinal index value for cokey " + cokey + ": " + str(dCompPct[cokey]) + "% , " + str(val), 1)
 
                     #PrintMsg("\tval: " + str(indexes), 1)
                     dComp[cokey] = val
@@ -4540,8 +4912,8 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     else:
                         val = indexes[0]
 
-                    if cokey in ['11828955', '11828954', '11828956', '11828957'] and bVerbose:
-                        PrintMsg(" \nFinal index value for cokey " + cokey + ": " + str(dCompPct[cokey]) + "% , " + str(val), 1)
+                    #if cokey in ['11828955', '11828954', '11828956', '11828957'] and bVerbose:
+                    #    PrintMsg(" \nFinal index value for cokey " + cokey + ": " + str(dCompPct[cokey]) + "% , " + str(val), 1)
 
                     dComp[cokey] = val
 
@@ -4568,8 +4940,7 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
 
         if bVerbose:
             PrintMsg(" \nWriting map unit rating data to final output table", 1)
-
-        #PrintMsg(" \nTieBreakRule: " + tieBreaker, 1)
+            PrintMsg(" \nUsing tiebreaker '" + tieBreaker + "' (where choices are " + dSDV["tiebreaklowlabel"] + " or " + dSDV["tiebreakhighlabel"] + ")", 1)
 
         if tieBreaker == dSDV["tiebreakhighlabel"]:
             with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
@@ -4603,13 +4974,13 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=True)[0]
                     muVal = SortData(muVals)
 
-                    if mukey == '2496170' and bVerbose:
+                    #if mukey == '2496170' and bVerbose:
                         #testVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=True)
                         #PrintMsg("\tSorted order for component data: " + str(testVals), 1)
-                        PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
+                    #    PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
 
 
-                    newrec = [mukey, muVal[0], domainValues[muVal[1]]]
+                    newrec = [mukey, muVal[0], domainValues[muVal[1]], dAreasym[mukey]]
                     ocur.insertRow(newrec)
 
                     if not newrec[2] in outputValues:
@@ -4648,15 +5019,16 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     #
                     #newVals = sorted(muVals, key = lambda x: (-x[0], -x[1]))[0]
                     #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=False)[0]
+
                     muVal = SortData(muVals)
 
-                    if mukey == '2496170' and bVerbose:
+                    #if mukey == '2496170' and bVerbose:
                         #testVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=False)
                         #PrintMsg("\tSorted order for component data: " + str(testVals), 1)
-                        PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
+                    #    PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
 
-
-                    newrec = [mukey, muVal[0], domainValues[muVal[1]]]
+                    #PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
+                    newrec = [mukey, muVal[0], domainValues[muVal[1]], dAreasym[mukey]]
                     ocur.insertRow(newrec)
 
                     if not newrec[2] in outputValues:
@@ -4687,6 +5059,7 @@ def AggregateCo_DCP_Domain(gdb, sdvAtt, sdvFld, initialTbl):
     #
     # Problem with domain values for some indexes which are numeric. Need to accomodate for
     # domain key values which cannot be 'uppercased'.
+    # Added areasymbol to output
 
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
@@ -4698,8 +5071,8 @@ def AggregateCo_DCP_Domain(gdb, sdvAtt, sdvFld, initialTbl):
         # Create final output table with MUKEY, COMPPCT_R and sdvFld
         outputTbl = os.path.join(gdb, tblName)
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
         whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " IS NOT NULL"
 
         # initialTbl must be in a file geodatabase to support ORDER_BY
@@ -4722,6 +5095,7 @@ def AggregateCo_DCP_Domain(gdb, sdvAtt, sdvFld, initialTbl):
         dMapunit = dict()
         missingDomain = list()
         dCase = dict()
+        dAreasym = dict()
 
         # Read initial table for non-numeric data types
         # 02-03-2016 Try adding 'choice' to this method to see if it handles Cons. Tree/Shrub better
@@ -4733,6 +5107,7 @@ def AggregateCo_DCP_Domain(gdb, sdvAtt, sdvFld, initialTbl):
             with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
 
                 for rec in cur:
+                    dAreasym[rec[0]] = rec[4]
                     try:
                         # capture component ratings as index numbers instead.
                         dComp[rec[1]].append(dValues[str(rec[3]).upper()][0])
@@ -4756,6 +5131,7 @@ def AggregateCo_DCP_Domain(gdb, sdvAtt, sdvFld, initialTbl):
             with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
 
                 for rec in cur:
+                    dAreasym[rec[0]] = rec[4]
                     try:
                         # capture component ratings as index numbers instead
                         dComp[rec[1]].append(dValues[str(rec[3]).upper()][0])
@@ -4847,7 +5223,7 @@ def AggregateCo_DCP_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     #newVals = sorted(muVals, key = lambda x : (-x[0], x[1]))[0]  # Works for maplegendkey=2
                     #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=True)[0]
                     muVal = SortData(muVals)
-                    newrec = [mukey, muVal[0], domainValues[muVal[1]]]
+                    newrec = [mukey, muVal[0], domainValues[muVal[1]], dAreasym[mukey]]
                     ocur.insertRow(newrec)
 
                     if not newrec[2] in outputValues:
@@ -4881,7 +5257,7 @@ def AggregateCo_DCP_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     #newVals = sorted(muVals, key = lambda x : (-x[0], -x[1]))[0] # Works for maplegendkey=2
                     #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=False)[0]
                     muVal = SortData(muVals)
-                    newrec = [mukey, muVal[0], domainValues[muVal[1]]]
+                    newrec = [mukey, muVal[0], domainValues[muVal[1]], dAreasym[mukey]]
                     ocur.insertRow(newrec)
 
                     if not newrec[2] in outputValues:
@@ -4915,8 +5291,8 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl):
         #resultcolumn = dSDV["resultcolumnname"].upper()
         fldPrecision = max(0, dSDV["attributeprecision"])
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
         sqlClause =  (None, "ORDER BY MUKEY ASC, COMPPCT_R DESC, " + dSDV["attributecolumnname"].upper() + " DESC")
 
@@ -4949,7 +5325,7 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl):
         with arcpy.da.SearchCursor(initialTbl, inFlds, where_clause=whereClause, sql_clause=sqlClause) as cur:
             with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                 for rec in cur:
-                    mukey, cokey, comppct, val = rec
+                    mukey, cokey, comppct, val, areasym = rec
 
                     if val is None and bZero:
                         # convert null values to zero
@@ -4960,7 +5336,7 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                             # write out record for previous mapunit
 
                             meanVal = round(float(sumProd) / sumPct, fldPrecision)
-                            newrec = [lastMukey, sumPct, meanVal]
+                            newrec = [lastMukey, sumPct, meanVal, areasym]
                             ocur.insertRow(newrec)
 
                             # save max-min values
@@ -4986,7 +5362,7 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                             sumProd = prod
 
                 # Add final record
-                newrec = [lastMukey, sumPct, meanVal]
+                newrec = [lastMukey, sumPct, meanVal, areasym]
                 ocur.insertRow(newrec)
 
         outputValues.sort()
@@ -5003,7 +5379,7 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl):
 ## ===================================================================================
 def Aggregate2_NCCPI(gdb, sdvAtt, sdvFld, initialTbl):
     # Aggregate mapunit-component data to the map unit level using a weighted average
-    #
+    # Added areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -5016,8 +5392,8 @@ def Aggregate2_NCCPI(gdb, sdvAtt, sdvFld, initialTbl):
         #resultcolumn = dSDV["resultcolumnname"].upper()
         fldPrecision = max(0, dSDV["attributeprecision"])
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
         sqlClause =  (None, "ORDER BY MUKEY ASC, COMPPCT_R DESC, " + dSDV["attributecolumnname"] + " DESC")
 
@@ -5044,14 +5420,14 @@ def Aggregate2_NCCPI(gdb, sdvAtt, sdvFld, initialTbl):
         with arcpy.da.SearchCursor(initialTbl, inFlds, where_clause=whereClause, sql_clause=sqlClause) as cur:
             with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                 for rec in cur:
-                    mukey, cokey, comppct, val = rec
+                    mukey, cokey, comppct, val, areasym = rec
                     #PrintMsg(mukey + ", " + str(comppct) + ", " + str(val), 1)
 
                     if mukey != lastMukey and lastMukey != "xxxx":
                         if sumPct > 0 and sumProd is not None:
                             # write out record for previous mapunit
                             meanVal = round(float(sumProd) / sumPct, fldPrecision)
-                            newrec = [lastMukey, sumPct, meanVal]
+                            newrec = [lastMukey, sumPct, meanVal, areasym]
                             ocur.insertRow(newrec)
 
                         # reset variables for the next mapunit record
@@ -5076,7 +5452,7 @@ def Aggregate2_NCCPI(gdb, sdvAtt, sdvFld, initialTbl):
                             sumProd = prod
 
                 # Add final record
-                newrec = [lastMukey, sumPct, meanVal]
+                newrec = [lastMukey, sumPct, meanVal, areasym]
                 ocur.insertRow(newrec)
                 #PrintMsg(" \nLast record: " + str(newrec), 0)
 
@@ -5104,6 +5480,8 @@ def AggregateCo_PP_SUM(gdb, sdvAtt, sdvFld, initialTbl):
     # sdv_initial table.
     #
     # Will try removing sql whereclause from cursor and apply it to each record instead.
+    #
+    # Added Areasymbol to output
 
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
@@ -5114,8 +5492,8 @@ def AggregateCo_PP_SUM(gdb, sdvAtt, sdvFld, initialTbl):
 
         outputTbl = os.path.join(gdb, tblName)
         fldPrecision = max(0, dSDV["attributeprecision"])
-        inFlds = ["MUKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "AREASYMBOL", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "AREASYMBOL", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
         sqlClause =  (None, "ORDER BY MUKEY ASC")
 
         # For Percent Present, do not apply the whereclause to the cursor. Wait
@@ -5143,10 +5521,12 @@ def AggregateCo_PP_SUM(gdb, sdvAtt, sdvFld, initialTbl):
         iMax = -9999999999
         iMin = 9999999999
 
+        #PrintMsg(" \nReading " + initialTbl + " and writing to " + outputTbl, 1)
+
         with arcpy.da.SearchCursor(initialTbl, inFlds, where_clause=whereClause, sql_clause=sqlClause) as cur:
             with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                 for rec in cur:
-                    mukey, comppct, val = rec
+                    mukey, areasym, comppct, val, areasym = rec
 
                     if comppct is None:
                         comppct = 0
@@ -5154,7 +5534,7 @@ def AggregateCo_PP_SUM(gdb, sdvAtt, sdvFld, initialTbl):
                     if mukey != lastMukey and lastMukey != "xxxx":
                         #if sumPct > 0:
                         # write out record for previous mapunit
-                        newrec = [lastMukey, sumPct]
+                        newrec = [lastMukey, areasym, sumPct, areasym]
                         ocur.insertRow(newrec)
                         iMax = max(sumPct, iMax)
                         iMin = min(sumPct, iMin)
@@ -5172,7 +5552,7 @@ def AggregateCo_PP_SUM(gdb, sdvAtt, sdvFld, initialTbl):
                         sumPct += comppct
 
                 # Add final record
-                newrec = [lastMukey, sumPct]
+                newrec = [lastMukey, areasym, sumPct, areasym]
                 ocur.insertRow(newrec)
 
         return outputTbl, [iMin, iMax]
@@ -5190,6 +5570,7 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl):
     # Aggregate mapunit-component-horizon data to the map unit level using a weighted average
     #
     # This version uses SUM for horizon data as in AWS
+    # Added areasymbol to output
     #
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
@@ -5203,8 +5584,8 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl):
         #resultcolumn = dSDV["resultcolumnname"].upper()
         fldPrecision = max(0, dSDV["attributeprecision"])
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", "HZDEPT_R", "HZDEPB_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", "HZDEPT_R", "HZDEPB_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
         sqlClause =  (None, "ORDER BY MUKEY ASC, COMPPCT_R DESC, HZDEPT_R ASC")
 
@@ -5240,7 +5621,7 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl):
                 #arcpy.SetProgressor("step", "Reading initial query table ...",  0, iCnt, 1)
 
                 for rec in cur:
-                    mukey, cokey, comppct, hzdept, hzdepb, val = rec
+                    mukey, cokey, comppct, hzdept, hzdepb, val, areasym = rec
                     # top = hzdept
                     # bot = hzdepb
                     # td = top of range
@@ -5259,7 +5640,7 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl):
 
                             if not cokey in dComp:
                                 # Create initial entry for this component using the first horiozon CHK
-                                dComp[cokey] = [mukey, comppct, hzT, aws]
+                                dComp[cokey] = [mukey, comppct, hzT, aws, areasym]
                                 try:
                                     dPct[mukey] = dPct[mukey] + comppct
 
@@ -5268,10 +5649,10 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl):
 
                             else:
                                 # accumulate total thickness and total rating value by adding to existing component values  CHK
-                                mukey, comppct, dHzT, dAWS = dComp[cokey]
+                                mukey, comppct, dHzT, dAWS, areasym = dComp[cokey]
                                 dAWS = dAWS + aws
                                 dHzT = dHzT + hzT
-                                dComp[cokey] = [mukey, comppct, dHzT, dAWS]
+                                dComp[cokey] = [mukey, comppct, dHzT, dAWS, areasym]
 
                         #arcpy.SetProgressorPosition()
 
@@ -5285,7 +5666,7 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl):
 
                     for cokey, dRec in dComp.items():
                         # get component level data  CHK
-                        mukey, comppct, hzT, val = dRec
+                        mukey, comppct, hzT, val, areasym = dRec
 
                         # get sum of component percent for the mapunit  CHK
                         try:
@@ -5310,15 +5691,15 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl):
                             hzT = hzT * adjCompPct    # Adjust component share of horizon thickness by comppct
 
                             # Update component values in component dictionary   CHK
-                            dComp[cokey] = mukey, comppct, hzT, aws
+                            dComp[cokey] = mukey, comppct, hzT, aws, areasym
 
                             # Populate dMu dictionary
                             if mukey in dMu:
-                                val1, val3 = dMu[mukey]
+                                val1, val3, areasym = dMu[mukey]
                                 comppct = comppct + val1
                                 aws = aws + val3
 
-                            dMu[mukey] = [comppct, aws]
+                            dMu[mukey] = [comppct, aws, areasym]
 
                 # Write out map unit aggregated AWS
                 #
@@ -5326,9 +5707,9 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl):
                 outputValues= [999999999, -9999999999]
 
                 for mukey, val in dMu.items():
-                    compPct, aws = val
+                    compPct, aws, areasym = val
                     aws = round(aws, fldPrecision)
-                    murec = [mukey, comppct, aws]
+                    murec = [mukey, comppct, aws, areasym]
                     ocur.insertRow(murec)
                     # save max-min values
                     outputValues[0] = min(aws, outputValues[0])
@@ -5350,7 +5731,7 @@ def AggregateHz_WTA_WTA(gdb, sdvAtt, sdvFld, initialTbl):
     # Aggregate mapunit-component-horizon data to the map unit level using a weighted average
     #
     # This version uses weighted average for horizon data as in AWC and most others
-    #
+    # Added areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -5361,8 +5742,8 @@ def AggregateHz_WTA_WTA(gdb, sdvAtt, sdvFld, initialTbl):
         # Create final output table with MUKEY, COMPPCT_R and sdvFld
         outputTbl = os.path.join(gdb, tblName)
         fldPrecision = max(0, dSDV["attributeprecision"])
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", "HZDEPT_R", "HZDEPB_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", "HZDEPT_R", "HZDEPB_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
         sqlClause =  (None, "ORDER BY MUKEY ASC, COMPPCT_R DESC, HZDEPT_R ASC")
 
@@ -5397,7 +5778,7 @@ def AggregateHz_WTA_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                 #arcpy.SetProgressor("step", "Reading initial query table ...",  0, iCnt, 1)
 
                 for rec in cur:
-                    mukey, cokey, comppct, hzdept, hzdepb, val = rec
+                    mukey, cokey, comppct, hzdept, hzdepb, val, areasym = rec
                     # top = hzdept
                     # bot = hzdepb
                     # td = top of range
@@ -5409,13 +5790,15 @@ def AggregateHz_WTA_WTA(gdb, sdvAtt, sdvFld, initialTbl):
 
                         # Calculate sum of horizon thickness and sum of component ratings for all horizons above bottom
                         hzT = min(hzdepb, bot) - max(hzdept, top)   # usable thickness from this horizon
+                        #if hzdept == 0:
+                        #    PrintMsg("\tFound horizon for mapunit (" + mukey + ":" + cokey + " with hzthickness of " + str(hzT), 1)
 
                         if hzT > 0:
                             aws = float(hzT) * val * comppct
 
                             if not cokey in dComp:
                                 # Create initial entry for this component using the first horiozon CHK
-                                dComp[cokey] = [mukey, comppct, hzT, aws]
+                                dComp[cokey] = [mukey, comppct, hzT, aws, areasym]
                                 try:
                                     dPct[mukey] = dPct[mukey] + comppct
 
@@ -5424,10 +5807,16 @@ def AggregateHz_WTA_WTA(gdb, sdvAtt, sdvFld, initialTbl):
 
                             else:
                                 # accumulate total thickness and total rating value by adding to existing component values  CHK
-                                mukey, comppct, dHzT, dAWS = dComp[cokey]
+                                mukey, comppct, dHzT, dAWS, areasym = dComp[cokey]
                                 dAWS = dAWS + aws
                                 dHzT = dHzT + hzT
-                                dComp[cokey] = [mukey, comppct, dHzT, dAWS]
+                                dComp[cokey] = [mukey, comppct, dHzT, dAWS, areasym]
+
+                        #else:
+                        #    PrintMsg("\tFound horizon for mapunit (" + mukey + ":" + cokey + " with hzthickness of " + str(hzT), 1)
+
+                    #else:
+                    #    PrintMsg("\tFound horizon with no data for mapunit (" + mukey + ":" + cokey + " with hzthickness of " + str(hzT), 1)
 
                 # get the total number of major components from the dictionary count
                 iComp = len(dComp)
@@ -5441,20 +5830,26 @@ def AggregateHz_WTA_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                     for cokey, vals in dComp.items():
 
                         # get component level data
-                        mukey, comppct, hzT, cval = vals
+                        mukey, comppct, hzT, cval, areasym = vals
 
                         # get sum of comppct for mapunit
                         sumPct = dPct[mukey]
 
                         # calculate component weighted values
+                        # get weighted layer thickness
+                        divisor = sumPct * hzT
 
-                        newval = float(cval) / (sumPct * hzT)
+                        if divisor > 0:
+                            newval = float(cval) / divisor
+
+                        else:
+                            newval = 0.0
 
                         if mukey in dMu:
-                            pct, mval = dMu[mukey]
+                            pct, mval, areasym = dMu[mukey]
                             newval = newval + mval
 
-                        dMu[mukey] = [sumPct, newval]
+                        dMu[mukey] = [sumPct, newval, areasym]
 
                 # Write out map unit aggregated AWS
                 #
@@ -5462,9 +5857,9 @@ def AggregateHz_WTA_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                 outputValues= [999999999, -9999999999]
 
                 for mukey, vals in dMu.items():
-                    sumPct, val = vals
+                    sumPct, val, areasym = vals
                     aws = round(val, fldPrecision)
-                    murec = [mukey, sumPct, aws]
+                    murec = [mukey, sumPct, aws, areasym]
                     ocur.insertRow(murec)
                     # save max-min values
                     outputValues[0] = min(aws, outputValues[0])
@@ -5487,7 +5882,7 @@ def AggregateHz_DCP_WTA(gdb, sdvAtt, sdvFld, initialTbl):
     # Dominant component for mapunit-component-horizon data to the map unit level
     #
     # This version uses weighted average for horizon data
-    #
+    # Added areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -5497,8 +5892,8 @@ def AggregateHz_DCP_WTA(gdb, sdvAtt, sdvFld, initialTbl):
 
         outputTbl = os.path.join(gdb, tblName)
         fldPrecision = max(0, dSDV["attributeprecision"])
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", "HZDEPT_R", "HZDEPB_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", "HZDEPT_R", "HZDEPB_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
         sqlClause =  (None, "ORDER BY MUKEY ASC, COMPPCT_R DESC, HZDEPT_R ASC")
         whereClause = "COMPPCT_R >=  " + str(cutOff)
@@ -5528,7 +5923,7 @@ def AggregateHz_DCP_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                 #arcpy.SetProgressor("step", "Reading initial query table ...",  0, iCnt, 1)
 
                 for rec in cur:
-                    mukey, cokey, comppct, hzdept, hzdepb, val = rec
+                    mukey, cokey, comppct, hzdept, hzdepb, val, areasym = rec
                     # top = hzdept
                     # bot = hzdepb
                     # td = top of range
@@ -5546,7 +5941,7 @@ def AggregateHz_DCP_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                             # Need to grab the top or dominant component for this mapunit
                             if not cokey in dComp and not mukey in dPct:
                                 # Create initial entry for this component using the first horiozon CHK
-                                dComp[cokey] = [mukey, comppct, hzT, aws]
+                                dComp[cokey] = [mukey, comppct, hzT, aws, areasym]
                                 try:
                                     dPct[mukey] = dPct[mukey] + comppct
 
@@ -5560,7 +5955,7 @@ def AggregateHz_DCP_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                                     mukey, comppct, dHzT, dAWS = dComp[cokey]
                                     dAWS = dAWS + aws
                                     dHzT = dHzT + hzT
-                                    dComp[cokey] = [mukey, comppct, dHzT, dAWS]
+                                    dComp[cokey] = [mukey, comppct, dHzT, dAWS, areasym]
 
                                 except:
                                     # Hopefully this is a component other than dominant
@@ -5578,7 +5973,7 @@ def AggregateHz_DCP_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                     for cokey, vals in dComp.items():
 
                         # get component level data
-                        mukey, comppct, hzT, cval = vals
+                        mukey, comppct, hzT, cval, areasym = vals
 
                         # get sum of comppct for mapunit
                         sumPct = dPct[mukey]
@@ -5590,15 +5985,15 @@ def AggregateHz_DCP_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                             pct, mval = dMu[mukey]
                             newval = newval + mval
 
-                        dMu[mukey] = [sumPct, newval]
+                        dMu[mukey] = [sumPct, newval, areasym]
 
                 # Write out map unit aggregated AWS
                 #
                 murec = list()
                 for mukey, vals in dMu.items():
-                    sumPct, val = vals
+                    sumPct, val, areasym = vals
                     val = round(val, fldPrecision)
-                    murec = [mukey, sumPct, val]
+                    murec = [mukey, sumPct, val, areasym]
                     ocur.insertRow(murec)
 
                     # save max-min values
@@ -5621,7 +6016,7 @@ def AggregateHz_MaxMin_WTA(gdb, sdvAtt, sdvFld, initialTbl):
     # Aggregate mapunit-component-horizon data to the map unit level using weighted average
     # for horizon data, but the assigns either the minimum or maximum component rating to
     # the map unit, depending upon the Tiebreaker setting.
-    #
+    # Added areasymbol to output
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
         #
@@ -5632,8 +6027,8 @@ def AggregateHz_MaxMin_WTA(gdb, sdvAtt, sdvFld, initialTbl):
         outputTbl = os.path.join(gdb, tblName)
         fldPrecision = max(0, dSDV["attributeprecision"])
 
-        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", "HZDEPT_R", "HZDEPB_R", dSDV["attributecolumnname"].upper()]
-        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper()]
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", "HZDEPT_R", "HZDEPB_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
         sqlClause =  (None, "ORDER BY MUKEY ASC, COMPPCT_R DESC, HZDEPT_R ASC")
 
@@ -5666,7 +6061,7 @@ def AggregateHz_MaxMin_WTA(gdb, sdvAtt, sdvFld, initialTbl):
             with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
 
                 for rec in cur:
-                    mukey, cokey, comppct, hzdept, hzdepb, val = rec
+                    mukey, cokey, comppct, hzdept, hzdepb, val, areasym = rec
                     # top = hzdept
                     # bot = hzdepb
                     # td = top of range
@@ -5688,14 +6083,14 @@ def AggregateHz_MaxMin_WTA(gdb, sdvAtt, sdvFld, initialTbl):
 
                             if not cokey in dComp:
                                 # Create initial entry for this component using the first horiozon CHK
-                                dComp[cokey] = [mukey, comppct, hzT, rating]
+                                dComp[cokey] = [mukey, comppct, hzT, rating, areasym]
 
                             else:
                                 # accumulate total thickness and total rating value by adding to existing component values  CHK
-                                mukey, comppct, dHzT, dRating = dComp[cokey]
+                                mukey, comppct, dHzT, dRating, areasym = dComp[cokey]
                                 dRating += rating
                                 dHzT += hzT
-                                dComp[cokey] = [mukey, comppct, dHzT, dRating]
+                                dComp[cokey] = [mukey, comppct, dHzT, dRating, areasym]
 
                 # get the total number of major components from the dictionary count
                 iComp = len(dComp)
@@ -5708,17 +6103,17 @@ def AggregateHz_MaxMin_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                     for cokey, vals in dComp.items():
 
                         # get component level data
-                        mukey, comppct, hzT, cval = vals
+                        mukey, comppct, hzT, cval, areasym = vals
                         rating = cval / hzT  # final horizon weighted average for this component
                         #PrintMsg("\t" + mukey + ", " + cokey + ", " + str(round(rating, 1)), 1)
 
                         try:
                             # append component weighted average rating to the mapunit dictionary
-                            dMu[mukey].append([comppct, rating])
+                            dMu[mukey].append([comppct, rating, areasym])
 
                         except:
                             # create a new mapunit record in the dictionary
-                            dMu[mukey] = [[comppct, rating]]
+                            dMu[mukey] = [[comppct, rating, areasym]]
 
                 # Write out map unit aggregated rating
                 #
@@ -5726,13 +6121,13 @@ def AggregateHz_MaxMin_WTA(gdb, sdvAtt, sdvFld, initialTbl):
                 outputValues= [999999999, -9999999999]
 
                 if tieBreaker == dSDV["tiebreakhighlabel"]:
-                    for mukey, vals in dMu.items():
+                    for mukey, muVals in dMu.items():
                         #newVals = sorted(vals, key = lambda x : (-x[1], x[0]))[0]  # Highest rating with associated comppct
                         #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=True)[0]
                         muVal = SortData(muVals)
-                        pct, val = muVal
+                        pct, val, areasym = muVal
                         rating = round(val, fldPrecision)
-                        murec = [mukey, pct, rating]
+                        murec = [mukey, pct, rating, areasym]
                         ocur.insertRow(murec)
                         # save overall max-min values
                         outputValues[0] = min(rating, outputValues[0])
@@ -5740,13 +6135,13 @@ def AggregateHz_MaxMin_WTA(gdb, sdvAtt, sdvFld, initialTbl):
 
                 else:
                     # Lower
-                    for mukey, vals in dMu.items():
+                    for mukey, muVals in dMu.items():
                         #newVals = sorted(vals, key = lambda x : (x[1], x[0]))[0]  # Lowest rating with associated comppct
                         #newVals = sorted(sorted(muVals, key = lambda x : x[0]), key = lambda x : x[1], reverse=False)[0]
                         muVal = SortData(muVals)
-                        pct, val = newVals
+                        pct, val, areasym = muVal
                         rating = round(val, fldPrecision)
-                        murec = [mukey, pct, rating]
+                        murec = [mukey, pct, rating, areasym]
                         ocur.insertRow(murec)
                         # save overall max-min values
                         outputValues[0] = min(rating, outputValues[0])
@@ -5879,7 +6274,7 @@ def UpdateMetadata(outputWS, target, parameterString):
 ## ===================================================================================
 
 # Import system modules
-import arcpy, sys, string, os, traceback, locale, time, operator
+import arcpy, sys, string, os, traceback, locale, time, operator, json
 import xml.etree.cElementTree as ET
 
 # Create the environment
@@ -6108,7 +6503,6 @@ try:
         domainValuesUp = list()
 
 
-
     # Get map legend information from the maplegendxml string
     dLegend = GetMapLegend(dSDV)    # dictionary containing all maplegendxml properties
 
@@ -6149,6 +6543,9 @@ try:
 
         else:
             dSDV["notratedphrase"] = 'Not rated' # no way to know if this is correct until all of the data has been processed
+
+
+
         #
         # Next see if the not rated value exists in the domain from mdstatdomdet or map legend values
         bNotRated = False
@@ -6172,6 +6569,16 @@ try:
         for val in domainValues:
             # PrintMsg("\tAdding key value (" + val.upper() + ") to dValues dictionary", 1)
             dValues[str(val).upper()] = [len(dValues), val]  # new 02/03
+
+
+
+
+    # Test JSON code for symbology
+    if bVerbose:
+        testJSON = CreateJSONLegend(dLegend)
+        PrintMsg(" \nTestJSON: " + str(testJSON) + " \n", 1)
+
+
 
     # For the result column we need to translate the sdvattribute value to an ArcGIS field data type
     #  'Choice' 'Float' 'Integer' 'string' 'String' 'VText'
@@ -6545,15 +6952,18 @@ try:
     if tblList == ['MAPUNIT', 'COMPONENT', 'CHORIZON']:
         if CreateRatingTable3(tblList, dSDV["attributetablename"].upper(), dComponent, dHorizon, initialTbl) == False:
             raise MyError, ""
+        del dComponent, dHorizon
 
     elif tblList == ['MAPUNIT', 'COMPONENT']:
         if CreateRatingTable2(tblList, dSDV["attributetablename"].upper(), dComponent, initialTbl) == False:
             raise MyError, ""
+        del dComponent
 
     elif tblList == ['MAPUNIT', 'COMPONENT', 'CHORIZON', dSDV["attributetablename"].upper()]:
         # COMPONENT, CHORIZON, CHTEXTUREGRP
         if CreateRatingTable3S(tblList, dSDV["attributetablename"].upper(), dComponent, dHorizon, dTbl, initialTbl) == False:
             raise MyError, ""
+        del dComponent, dHorizon
 
     elif tblList == ['MAPUNIT']:
         # No aggregation needed
@@ -6568,6 +6978,7 @@ try:
         if dSDV["attributetablename"].upper() == "COINTERP":
             if CreateRatingInterps(tblList, dSDV["attributetablename"].upper(), dComponent, dTbl, initialTbl) == False:
                 raise MyError, ""
+            del dComponent
 
         else:
             if CreateRatingTable2S(tblList, dSDV["attributetablename"].upper(), dComponent, dTbl, initialTbl) == False:
@@ -6577,6 +6988,7 @@ try:
         if dSDV["attributetablename"].upper() == "COSOILMOIST":
             if CreateSoilMoistureTable(tblList, dSDV["attributetablename"].upper(), dComponent, dTbl, initialTbl, begMo, endMo) == False:
                 raise MyError, ""
+            del dMonth, dComponent # trying to lower memory usage
 
         else:
             PrintMsg(" \nCannot handle table:" + dSDV["attributetablename"].upper(), 1)
@@ -6998,7 +7410,7 @@ try:
             userName = " ".join(user).title()
 
         elif " " in envUser:
-            user = env.User.split(" ")
+            user = envUser.split(" ")
             userName = " ".join(user).title()
 
         else:

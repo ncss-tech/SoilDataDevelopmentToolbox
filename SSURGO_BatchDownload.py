@@ -73,10 +73,17 @@ class MyError(Exception):
 ## ===================================================================================
 def errorMsg():
     try:
-        tb = sys.exc_info()[2]
-        tbinfo = traceback.format_tb(tb)[0]
-        theMsg = tbinfo + " \n" + str(sys.exc_type)+ ": " + str(sys.exc_value) + " \n"
-        PrintMsg(theMsg, 2)
+        exInfo = sys.exc_info()
+
+        if len(exInfo) > 2:
+            tb = exInfo[2]
+
+            if not tb is None and len(tb) > 0:
+                tbinfo = traceback.format_tb(tb)[0]
+                theMsg = tbinfo + " \n" + str(sys.exc_type)+ ": " + str(sys.exc_value) + " \n"
+                PrintMsg(theMsg, 2)
+
+        return
 
     except:
         PrintMsg("Unhandled error in errorMsg method", 2)
@@ -147,90 +154,6 @@ def CheckMSAccess():
     except:
         errorMsg()
         return ""
-
-## ===================================================================================
-def GetPublicationDate(areaSym):
-    #
-    #
-    #
-    # Please Note!!! Funtion not being used at this time
-    # Alternate method of getting SSURGO publication date using SDM Access query
-    #
-    # This should use SASTATUSMAP table instead of SACATALOG
-    # Add 'AND SAPUBSTATUSCODE = 2'
-    #
-    # Test version of SDA: http://sdmdataaccessha.dev.sc.egov.usda.gov/
-    #
-    import time, datetime, httplib, urllib2
-    import xml.etree.cElementTree as ET
-
-    try:
-
-        # date formatting
-        #    today = datetime.date.today()
-        #    myDate = today + datetime.timedelta(days = -(self.params[0].value))
-        #    myDate = str(myDate).replace("-","")
-        #    wc = "'" + self.params[1].value + "%' AND SAVEREST > '" + myDate + "'"
-
-        # return list sorted by date
-        #SELECT S.AREASYMBOL, CONVERT (varchar(10), [SAVEREST], 126) AS SDATE FROM SACATALOG S WHERE AREASYMBOL LIKE 'KS%'
-
-        #sQuery = "SELECT CONVERT(varchar(10), [SAVEREST], 126) AS SAVEREST FROM SACATALOG WHERE AREASYMBOL = '" + areaSym + "'"
-        sQuery = "SELECT CONVERT(varchar(10), [SAVEREST], 126) AS SAVEREST FROM SASTATUSMAP WHERE AREASYMBOL = '" + areaSym + "' AND SAPUBSTATUSCODE = 2"
-
-        # Send XML query to SDM Access service
-        #
-        sXML = """<?xml version="1.0" encoding="utf-8"?>
-    <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-      <soap12:Body>
-        <RunQuery xmlns="http://SDMDataAccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx">
-          <Query>""" + sQuery + """</Query>
-        </RunQuery>
-      </soap12:Body>
-    </soap12:Envelope>"""  # Original version SDA
-
-        dHeaders = dict()
-        dHeaders["Host"] = "sdmdataaccess.nrcs.usda.gov"  # Original SDA version
-        dHeaders["Content-Type"] = "text/xml; charset=utf-8"
-        dHeaders["SOAPAction"] = "http://SDMDataAccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx/RunQuery"          # Original version SDA"  # Test version SDA
-        dHeaders["Content-Length"] = len(sXML)
-        sURL = "SDMDataAccess.nrcs.usda.gov"  # original SDA
-
-        # Create SDM connection to service using HTTP
-        conn = httplib.HTTPConnection(sURL, 80)
-
-        # Send request in XML-Soap
-        conn.request("POST", "/Tabular/SDMTabularService.asmx", sXML, dHeaders)
-
-        # Get back XML response
-        response = conn.getresponse()
-        xmlString = response.read()
-
-        PrintMsg(" \nxmlString = " + xmlString, 1)
-
-        # Close connection to SDM
-        conn.close()
-
-        # Convert XML to tree format
-        tree = ET.fromstring(xmlString)
-
-        iCnt = 0
-        # Create empty value list
-        valList = list()
-
-        # Iterate through XML tree, finding required elements...
-        for rec in tree.iter():
-
-            if rec.tag == "SAVEREST":
-                # get the YYYYMMDD part of the datetime string
-                # then reformat to match SQL query
-                sdmDate = str(rec.text).split(" ")[0]
-
-        return sdmDate
-
-    except:
-        errorMsg()
-        return 0
 
 ## ===================================================================================
 def SSURGOVersion(newDB, tabularFolder):
@@ -332,7 +255,9 @@ def GetTemplateDate(newDB):
             dbDate = int(dateObj.strftime(intDate))
 
         else:
-            raise MyError, "SACATALOG table in Template database not found"
+            #raise MyError, "SACATALOG table in Template database not found"
+            #raise MyError, ""
+            return 0
 
         del saCatalog
         del newDB
@@ -384,6 +309,70 @@ def GetTabularDate(newFolder):
         errorMsg()
         return tabDate
 
+
+## ===================================================================================
+def GetReason(responseCode):
+    # Get SSURGO version from the Template database "SYSTEM Template Database Information" table
+    try:
+        dResponse = {
+            100: ('Continue', 'Request received, please continue'),
+            101: ('Switching Protocols', 'Switching to new protocol; obey Upgrade header'),
+            200: ('OK', 'Request fulfilled, document follows'),
+            201: ('Created', 'Document created, URL follows'),
+            202: ('Accepted', 'Request accepted, processing continues off-line'),
+            203: ('Non-Authoritative Information', 'Request fulfilled from cache'),
+            204: ('No Content', 'Request fulfilled, nothing follows'),
+            205: ('Reset Content', 'Clear input form for further input.'),
+            206: ('Partial Content', 'Partial content follows.'),
+            300: ('Multiple Choices', 'Object has several resources -- see URI list'),
+            301: ('Moved Permanently', 'Object moved permanently -- see URI list'),
+            302: ('Found', 'Object moved temporarily -- see URI list'),
+            303: ('See Other', 'Object moved -- see Method and URL list'),
+            304: ('Not Modified', 'Document has not changed since given time'),
+            305: ('Use Proxy', 'You must use proxy specified in Location to access this resource.'),
+            307: ('Temporary Redirect', 'Object moved temporarily -- see URI list'),
+            400: ('Bad Request', 'Bad request syntax or unsupported method'),
+            401: ('Unauthorized', 'No permission -- see authorization schemes'),
+            402: ('Payment Required', 'No payment -- see charging schemes'),
+            403: ('Forbidden', 'Request forbidden -- authorization will not help'),
+            404: ('Not Found', 'Nothing matches the given URI'),
+            405: ('Method Not Allowed', 'Specified method is invalid for this server.'),
+            406: ('Not Acceptable', 'URI not available in preferred format.'),
+            407: ('Proxy Authentication Required', 'You must authenticate with this proxy before proceeding.'),
+            408: ('Request Timeout', 'Request timed out; try again later.'),
+            409: ('Conflict', 'Request conflict.'),
+            410: ('Gone', 'URI no longer exists and has been permanently removed.'),
+            411: ('Length Required', 'Client must specify Content-Length.'),
+            412: ('Precondition Failed', 'Precondition in headers is false.'),
+            413: ('Request Entity Too Large', 'Entity is too large.'),
+            414: ('Request-URI Too Long', 'URI is too long.'),
+            415: ('Unsupported Media Type', 'Entity body in unsupported format.'),
+            416: ('Requested Range Not Satisfiable', 'Cannot satisfy request range.'),
+            417: ('Expectation Failed', 'Expect condition could not be satisfied.'),
+            500: ('Internal Server Error', 'Server got itself in trouble'),
+            501: ('Not Implemented', 'Server does not support this operation'),
+            502: ('Bad Gateway', 'Invalid responses from another server/proxy.'),
+            503: ('Service Unavailable', 'The server cannot process the request due to a high load'),
+            504: ('Gateway Timeout', 'The gateway server did not receive a timely response'),
+            505: ('HTTP Version Not Supported', 'Cannot fulfill request.'),
+            }
+
+        if responseCode in dResponse:
+            response = dResponse[responseCode]
+
+        else:
+            response = "Unknown code"
+
+        return response
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        return e
+
+    except:
+        errorMsg()
+        return "Unknown error"
+
 ## ===================================================================================
 def GetDownload(areasym, surveyDate, importDB):
     # download survey from Web Soil Survey URL and return name of the zip file
@@ -396,7 +385,12 @@ def GetDownload(areasym, surveyDate, importDB):
     # automatic tabular imports.
 
     # create URL string from survey string and WSS 3.0 cache URL
-    baseURL = "http://websoilsurvey.sc.egov.usda.gov/DSD/Download/Cache/SSA/"
+
+
+    #baseURL = "https://websoilsurvey-dev.dev.sc.egov.usda.gov/DSD/Download/Cache/SSA/" # Testing downloads from Dev
+    #baseURL = "http://websoilsurvey-dev.dev.sc.egov.usda.gov/DSD/Download/Cache/SSA/"  # bad url
+    baseURL = "https://websoilsurvey.sc.egov.usda.gov/DSD/Download/Cache/SSA/"
+    #baseURL = "http://websoilsurvey.sc.egov.usda.gov/DSD/Download/Cache/SSA/"
 
     try:
         # List of states that use a Template database other than US_2003.
@@ -416,17 +410,12 @@ def GetDownload(areasym, surveyDate, importDB):
 
         # Use this zipfile for downloads without the Template database
         zipDate = str(surveyDate)[0:4] + "-" + str(surveyDate)[4:6] + "-" + str(surveyDate)[6:8]
-        zipName = "wss_SSA_" + areaSym + "_[" + str(zipDate) + "].zip"
+        zipName = "wss_SSA_" + areaSym + "_[" + str(zipDate) + "].zip"  # use this name for Public cache
 
         # Use this URL for downloads with the state or US_2003 database
         #zipName = "wss_SSA_" + areaSym + db + "_[" + surveyDate + "].zip"
 
         zipURL = baseURL + zipName
-
-        PrintMsg("\tDownloading survey " + areaSym + " from Web Soil Survey...", 0)
-
-        # Open request to Web Soil Survey for that zip file
-        request = urlopen(zipURL)
 
         # set the download's output location and filename
         local_zip = os.path.join(outputFolder, zipName)
@@ -435,23 +424,42 @@ def GetDownload(areasym, surveyDate, importDB):
         if os.path.isfile(local_zip):
             os.remove(local_zip)
 
-        # save the download file to the specified folder
-        output = open(local_zip, "wb")
-        output.write(request.read())
-        output.close()
-        del request
-        del output
+        PrintMsg("\tDownloading survey " + areaSym + " from Web Soil Survey...", 0)
 
-        # if we get this far then the download succeeded
-        return zipName
+        # Open request to Web Soil Survey for that zip file
+        # Below I am using the 'retrieve' method which doesn't seem to give me any kind of status
+        # Maybe I should try the 'open' method. But then I will have to save the zip file as a separate step.
+        downloader = urllib.FancyURLopener()
+        #msg = downloader.retrieve(zipURL, local_zip)
+        #responseCode = 200
 
-    except URLError, e:
-        if hasattr(e, 'reason'):
-            PrintMsg("\t\t" + areaSym + " - URL Error: " + str(e.reason), 1)
+        # This replacement code for 'retrieve' method is not working. Missing a step?
+        respObj = downloader.open(zipURL)
+        responseCode = respObj.code
+        #PrintMsg(" \n" + zipURL, 1)
+        #PrintMsg(local_zip, 1)
+        #PrintMsg(" \nResponse code: " + str(respObj.code), 1)
 
-        elif hasattr(e, 'code'):
-            PrintMsg("\t\t" + zipName + " - " + e.msg + " (errorcode " + str(e.code) + ")", 1)
+        if responseCode == 200:
+            # save the download file to the specified folder
+            output = open(local_zip, "wb")
+            output.write(respObj.read())
+            output.close()
+            del respObj
+            del output
 
+            if not os.path.isfile(local_zip):
+                raise MyError, "Failed to download zipfile"
+
+            # if we get this far then the download succeeded
+            return zipName
+
+        else:
+            raise MyError, GetReason(responseCode[1])
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
         return ""
 
     except socket.timeout, e:
@@ -472,8 +480,7 @@ def GetDownload(areasym, surveyDate, importDB):
         PrintMsg("\tFailed to download zipfile", 0)
         errorMsg()
         return ""
-        sleep(1)
-        return ""
+
 
 ## ===================================================================================
 def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
@@ -505,10 +512,11 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
             elif os.path.isfile(newDB):
                 # Template database exists, get date from the SACATALOG table
                 dbDate = GetTemplateDate(newDB)
-                if dbDate == 0:
-                    PrintMsg(" \nLocal dataset " + areaSym + " already exists but is incomplete", 1)
+                #if dbDate == 0:
+                #    PrintMsg(" \nLocal dataset " + areaSym + " already exists but is incomplete", 1)
 
-                else:
+                #else:
+                if dbDate != 0:
                     PrintMsg(" \nLocal dataset for " + areaSym + " already exists (date of " + str(dbDate) + ")", 0)
 
             else:
@@ -518,13 +526,20 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
 
             if dbDate == 0:
                 # Could not get SAVEREST date from database, assume old dataset is incomplete and overwrite
-                #PrintMsg("\tLocal dataset is incomplete and will be overwritten", 1)
+                PrintMsg("\tLocal dataset (" + newFolder + ") is incomplete and will be overwritten", 0)
+                env.workspace = outputFolder
                 shutil.rmtree(newFolder, True)
-                sleep(3)
+                #arcpy.Delete_management(newFolder)
+                sleep(1)
                 bNewer = True
 
                 if arcpy.Exists(newFolder):
-                    raise MyError, "Failed to delete old dataset (" + newFolder + ")"
+                    # I see shutil fail when there is a file lock on the spatial\soilmu_a_ shapefile.
+                    # Not sure why. lock file exists even without the addition of MUNAME and FARMLNDCL columns.
+                    # Got the above problem fixed, but now failing to delete the parent soil_ folder
+                    #shutil.rmtree(newFolder, ignore_errors=False) # Try, try again
+                    arcpy.Delete_management(newFolder)
+                    #raise MyError, "1. Failed to delete old dataset (" + newFolder + ")"
 
             else:
                 # Compare SDM date with local database date
@@ -533,12 +548,13 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
                     #
                     #PrintMsg("\tReplacing local dataset with newer download", 1)
                     bNewer = True
+                    env.workspace = outputFolder
                     # delete old data folder
                     shutil.rmtree(newFolder, True)
                     sleep(3)
 
                     if arcpy.Exists(newFolder):
-                        raise MyError, "Failed to delete old dataset (" + newFolder + ")"
+                        raise MyError, "2. Failed to delete old dataset (" + newFolder + ")"
 
                 else:
                     # according to the filename-date, the WSS version is the same or older
@@ -575,6 +591,7 @@ def ProcessSurvey(outputFolder, importDB, areaSym, bImport, bRemoveTXT, iGet, iT
         env.workspace = outputFolder
         surveyInfo = survey.split(",")
         areaSym = surveyInfo[0].strip().upper()
+        bLast = False
 
         # get date string
         surveyDate = int(surveyInfo[1].strip().replace("-", ""))
@@ -618,7 +635,7 @@ def ProcessSurvey(outputFolder, importDB, areaSym, bImport, bRemoveTXT, iGet, iT
                 if zipName == "" or zipName is None:
                     # Failed second attempt to download zip file
                     # Give up on this survey
-                    return "Failed"
+                    raise MyError, ""
 
             bZip = UnzipDownload(outputFolder, newFolder, importDB, zipName)
 
@@ -630,13 +647,16 @@ def ProcessSurvey(outputFolder, importDB, areaSym, bImport, bRemoveTXT, iGet, iT
                 if not bZip:
                     # Failed second attempt to unzip
                     # Give up on this survey
-                    return "Failed"
+                    raise MyError, ""
 
             # Import tabular. Only try once.
             if bImport:
-                if not ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT):
+                if iGet == iTotal:
+                    bLast = True
+
+                if not ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT, bLast):
                     # Bail clear out of the whole download process
-                    return "Failed"
+                    raise MyError, ""
 
             return "Successful"
 
@@ -888,7 +908,7 @@ def SortMapunits(newDB):
         return False
 
 ## ===================================================================================
-def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT):
+def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT, bLast):
     # Given zip file name, try to unzip it and then import the text files into the
     # Template database
     #
@@ -944,6 +964,21 @@ def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT):
         # that make up the tabular data set.
         mdstattabsTable = os.path.join(env.workspace, "mdstattabs")
 
+        # Create a list of all standalone tables in ArcMap. The existence of a SSURGO table in ArcMap
+        # can interfere with the import process
+        tableList = list()
+        try:
+            mxd = arcpy.mapping.MapDocument("CURRENT")
+            df = mxd.activeDataFrame
+
+            tableViews = arcpy.mapping.ListTableViews(mxd, "*", df)
+            if len(tableViews) > 0:
+                for tbl in tableViews:
+                    tableList.append(tbl.name.lower())
+
+        except:
+            pass
+
         # set progressor object which allows progress information to be passed for every merge complete
         arcpy.SetProgressor("step", "Importing tabular data", 0, len(txtFiles) + 2, 1)
 
@@ -969,14 +1004,19 @@ def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT):
             txtPath = os.path.join(tabularFolder, txtFile + ".txt")
 
             # continue if the target table exists
-            if arcpy.Exists(tbl):
+            if arcpy.Exists(os.path.join(env.workspace, tbl)):
+                # Make sure there is no table with same name already present in ArcMap TOC
+                if tbl.lower() in tableList:
+                    #PrintMsg("\tRemoving table view: " + tbl, 1)
+                    delView = arcpy.mapping.ListTableViews(mxd, tbl, df)[0]
+                    arcpy.mapping.RemoveTableView(df, delView)
 
                 # Create cursor for all fields to populate the current table
                 with arcpy.da.InsertCursor(os.path.join(env.workspace, tbl), "*") as cursor:
                     # counter for current record number
                     iRows = 1
                     fldLengths = list()
-                    fldList = arcpy.Describe(tbl).fields
+                    fldList = arcpy.Describe(os.path.join(env.workspace, tbl)).fields
 
                     for fld in fldList:
                         if fld.type != "OID":
@@ -1015,6 +1055,7 @@ def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT):
 
                     except:
                         errorMsg()
+                        #PrintMsg(" \n" + str(row), 1)
                         raise MyError, "Error loading line no. " + Number_Format(iRows, 0, True) + " of " + txtFile + ".txt"
 
             else:
@@ -1088,7 +1129,7 @@ def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT):
 
             # Import SSURGO metadata for shapefiles
             #if bMuName:
-            bNamed = AddMuName(newFolder)
+            bNamed = AddMuName(newFolder, bLast)
 
             # Remove all the text files from the tabular folder
             if bRemoveTXT:
@@ -1111,12 +1152,15 @@ def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT):
         return False
 
 ## ===================================================================================
-def AddMuName(newFolder):
+def AddMuName(newFolder, bLast):
     # Add muname column (map unit name) to soil polygon shapefile
     #
     # Started having problems with Addfield when the shapefile is on a Network Share.
     # Could it be virus scan locking the table??
     # No system or geoprocessing error message is displayed since this is not a serious problem
+    #
+    # ImportMetadata_conversion is leaving a shared lockfile behind. This lockfile will persist
+    # until the ArcGIS application is closed or another SSURGO import is processed.
     #
     try:
 
@@ -1147,13 +1191,9 @@ def AddMuName(newFolder):
                     PrintMsg("\tAdding MUNAME, FARMLNDCL attributes to " + muShp, 0)
                     # add muname column to shapefile
 
-                    try:
-                        sleep(1)
-                        arcpy.AddField_management (muShp, "MUNAME", "TEXT", "", "", 175)
-                        arcpy.AddField_management (muShp, "FARMLNDCL", "TEXT", "", "", 175)
-
-                    except:
-                        raise MyError, "Failed to add additional fields to shapefile"
+                    sleep(1)
+                    arcpy.AddField_management (muShp, "MUNAME", "TEXT", "", "", 175)
+                    arcpy.AddField_management (muShp, "FARMLNDCL", "TEXT", "", "", 175)
 
                     # read mukey and muname into dictionary from mapunit.txt file
                     with open(muTxt, 'r') as f:
@@ -1175,6 +1215,10 @@ def AddMuName(newFolder):
 
                     del muTxt, data, muDict
 
+            except:
+                raise MyError, "Failed to add additional fields to shapefile"
+
+            try:
                 # import FGDC metadata to mapunit polygon shapefile
                 spatialFolder = os.path.join(newFolder, "spatial")
                 env.workspace = spatialFolder
@@ -1185,8 +1229,28 @@ def AddMuName(newFolder):
                     PrintMsg("\tImporting metadata for " + muShp, 0)
                     arcpy.SetProgressorLabel("Importing metadata...")
                     metaData = os.path.join(newFolder, "soil_metadata_" + areaSym.lower() + ".xml")
+
+                    if not arcpy.Exists(metaData):
+                        raise MyError, "SSURGO metadata file (" + metaData + ") not found"
+
+                    # This ImportMetadata_conversion is leaving a lock file behind
                     arcpy.ImportMetadata_conversion(metaData, "FROM_FGDC", os.path.join(spatialFolder, muShp), "ENABLED")
+
+                    if bLast:
+                        try:
+                            # Trying to use another shapefile as a decoy for the lock file
+
+                            dummyMetadata = os.path.join(os.path.dirname(sys.argv[0]),"dummymetadata.xml")
+                            dummyShp = os.path.join(os.path.dirname(sys.argv[0]),"dummy.shp")
+                            arcpy.Copy_management(dummyShp, os.path.join(env.scratchFolder, "dummy.shp"))
+                            arcpy.ImportMetadata_conversion(dummyMetadata, "FROM_FGDC", os.path.join(env.scratchFolder, "dummy.shp"), "ENABLED")
+
+                        except:
+                            pass
+
+                    # Maybe I could try changing to a new workspace or refreshing a different workspace?
                     del spatialFolder, muShp, metaData
+
 
                     # remove log file
                     # soil_metadata_ne137_xslttran.log
@@ -1196,7 +1260,8 @@ def AddMuName(newFolder):
                         arcpy.Delete_management(logFile, "File")
 
             except:
-                PrintMsg("\tFailed to add MUNAME column to shapefile", 1)
+                errorMsg()
+                PrintMsg("\tFailed to add metdata to shapefile", 1)
 
             return True
 
@@ -1216,10 +1281,11 @@ def AddMuName(newFolder):
 ## ===================================================================================
 # main
 # Import system modules
-import arcpy, sys, os, locale, string, traceback, shutil, zipfile, subprocess, glob, socket, csv, re
-from urllib2 import urlopen, URLError, HTTPError
+import arcpy, sys, os, locale, string, traceback, urllib, shutil, zipfile, subprocess, glob, socket, csv, re
+import httplib
+#, URLError, HTTPError
 from arcpy import env
-from _winreg import *
+#from _winreg import *
 from datetime import datetime
 from time import sleep
 
@@ -1307,12 +1373,22 @@ try:
     if len(failedList) > 0 or len(skippedList) > 0:
         PrintMsg(" \nDownload process completed (" + Number_Format(len(goodList), 0, True) + " succeeded) with the following issues...", 1)
 
+        if len(failedList) > 0:
+            PrintMsg(" \n\tWSS download failed for: " + ", ".join(failedList), 2)
+
+        if len(skippedList) > 0:
+            PrintMsg(" \n\tSkipped because a current version already exists: " + ", ".join(skippedList), 1)
+
+        PrintMsg(" ", 0)
+
     else:
+        errorMsg()
         if importDB:
-            PrintMsg(" \nAll " + Number_Format(len(asList), 0, True) + " surveys succcessfully downloaded, tabular import process complete", 0)
+            PrintMsg(" \nAll " + Number_Format(len(asList), 0, True) + " surveys succcessfully downloaded, tabular import process complete \n ", 0)
 
         else:
-            PrintMsg(" \nAll " + Number_Format(len(asList), 0, True) + " surveys succcessfully downloaded (no tabular import)", 0)
+            PrintMsg(" \nAll " + Number_Format(len(asList), 0, True) + " surveys succcessfully downloaded (no tabular import) \n ", 0)
+
 
     arcpy.SetProgressorLabel("Processing complete...")
     env.workspace = outputFolder
@@ -1323,12 +1399,3 @@ except MyError, e:
 
 except:
     errorMsg()
-
-finally:
-    if len(failedList) > 0:
-        PrintMsg(" \n\tWSS download failed for: " + ", ".join(failedList), 2)
-
-    if len(skippedList) > 0:
-        PrintMsg(" \n\tSkipped because a current version already exists: " + ", ".join(skippedList), 1)
-
-    PrintMsg(" ", 0)

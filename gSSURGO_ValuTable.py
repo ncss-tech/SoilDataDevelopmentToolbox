@@ -11,7 +11,7 @@
 # each component and then a weighted average is calculated for the map unit.
 #
 # The rest of the AWS columns are calculated for all components at a variety of depths.
-# Output is to a geodatabase table (Valu2)
+# Output is to a geodatabase table (Valu1)
 #
 # To do list for FY2016....
 # In order for this script to meet the 2015 standard for the Valu1 table it needs to:
@@ -22,6 +22,8 @@
 #   perform independent validation of SOC results
 #   compare metadata dates to make sure they are properly coded and inserted
 #   look at array processing for calculations based upon depth ranges
+#
+# changed the OM to carbon conversion from * 0.58 to / 1.724 after running FY2017 value table
 
 ## ===================================================================================
 class MyError(Exception):
@@ -120,7 +122,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
 
         # MAPUNIT TABLE
         #
-        PrintMsg(" \nReading MAPUNIT table...", 0)
+        PrintMsg(" \n\tReading MAPUNIT table...", 0)
         whereClause = ""
         fldMu = [["mukey", "mukey"], ["musym", "musym"], ["muname", "muname"]]
         fldMu2 = list()
@@ -148,7 +150,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
 
         # COMPONENT TABLE
         #
-        PrintMsg(" \nReading COMPONENT table...", 0)
+        PrintMsg(" \n\tReading COMPONENT table...", 0)
         fldCo = [["mukey", "mukey"], ["cokey", "cokey"], ["comppct_r", "comppct_r"], ["majcompflag", "majcompflag"], \
         ["compname", "compname"], ["compkind", "compkind"], ["taxorder", "taxorder"], ["taxsubgrp", "taxsubgrp"], \
         ["localphase", "localphase"], ["otherph", "otherph"], ["hydricrating", "hydricrating"], ["drainagecl", "drainagecl"]]
@@ -178,7 +180,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
 
         # HORIZON TABLE
         #
-        PrintMsg(" \nReading HORIZON table...", 0)
+        PrintMsg(" \n\tReading HORIZON table...", 0)
         fldHz = [["cokey", "cokey"], ["chkey", "chkey"], ["hzname", "hzname"], ["desgnmaster", "desgnmaster"], \
         ["hzdept_r", "hzdept_r"], ["hzdepb_r", "hzdepb_r"], ["sandtotal_r", "sandtotal_r"], \
         ["silttotal_r", "silttotal_r"], ["claytotal_r", "claytotal_r"], ["om_r", "om_r"], \
@@ -209,7 +211,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
 
             # HORIZON TEXTURE
             #
-            PrintMsg(" \nMaking query table (CT) for texture information", 0)
+            #PrintMsg(" \n\tMaking query table (CT) for texture information", 0)
             inputTbls = list()
             tbls = ["chtexturegrp", "chtexture"]
             for tbl in tbls:
@@ -241,7 +243,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
         # COMPONENT RESTRICTIONS which will be saved to a gdb table
         #
         crTbl = os.path.join(inputDB, "corestrictions")
-        PrintMsg(" \nWriting component restrictions to " + os.path.join(outputDB, "QueryTable_CR"), 0)
+        #PrintMsg(" \n\tReading component restriction data...", 0)
         fldCr = [["cokey", "cokey"], \
         ["reskind", "reskind"],\
         ["reshard", "reshard"],\
@@ -276,7 +278,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
                     crList.append(cokey)
                     dCr[cokey] = rec
 
-        PrintMsg(" \nCreating QueryTable_HZ in " + outputDB, 0)
+        #PrintMsg(" \n\tCreating QueryTable_HZ in " + outputDB, 0)
         fldCo.pop(0)
         fldCo2.pop(0)
         fldHz.pop(0)
@@ -313,7 +315,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
         component.cokey = chorizon.cokey and mapunit.objectid = 1"
 
         outputTable = os.path.join(outputDB, "QueryTable_HZ")
-        PrintMsg(" \nCreating table " + outputTable, 0)
+        #PrintMsg(" \nCreating table " + outputTable, 0)
         arcpy.MakeQueryTable_management(['mapunit', 'component', 'chorizon'], queryTemp, "USE_KEY_FIELDS", "#", fldAll, whereClause)
         arcpy.CreateTable_management(outputDB, "QueryTable_HZ", queryTemp)
         arcpy.AddField_management(outputTable, "texture", "TEXT", "", "", "30", "texture")
@@ -512,7 +514,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
 
                 lb = v[1] # update last bottom depth
 
-        PrintMsg(" \nWriting component restrictions to " + outputCR, 0)
+        #PrintMsg(" \nWriting component restrictions to " + outputCR, 0)
         arcpy.SetProgressor ("step", "Writing component restriction data to " + outputCR + "...", 0, len(dCr), 1)
 
         with arcpy.da.InsertCursor(outputCR, fldCr2) as ocur:
@@ -548,7 +550,7 @@ def CreateOutputTableMu(theMuTable, depthList, dPct):
             raise MyError, "Previous output table (" + theMuTable + ") is in use and cannot be removed"
             return False
 
-        PrintMsg(" \nCreating new output table (" + os.path.basename(theMuTable) + ") for mapunit level data", 0)
+        #PrintMsg(" \nCreating new output table (" + os.path.basename(theMuTable) + ") for mapunit level data", 0)
         outputDB = os.path.dirname(theMuTable)
         tmpTable = os.path.join("IN_MEMORY", os.path.basename(theMuTable))
 
@@ -623,7 +625,7 @@ def CreateOutputTableMu(theMuTable, depthList, dPct):
 
         arcpy.Delete_management(os.path.join("IN_MEMORY", os.path.basename(theMuTable)))
 
-        # Reading from the original mapunit table, populate the output Valu2 table with mukey and musumpct
+        # Reading from the original mapunit table, populate the output Valu1 table with mukey and musumpct
         #PrintMsg(" \n\tPopulating " + theMuTable + " with mukey values", 1)
         with arcpy.da.SearchCursor(os.path.join(outputDB, "mapunit"), ["mukey"]) as incur:
             outcur = arcpy.da.InsertCursor(theMuTable, ["mukey", "musumcpct"])
@@ -664,7 +666,7 @@ def CreateOutputTableCo(theCompTable, depthList):
             raise MyError, "Previous output table (" + theCompTable + ") is in use and cannot be removed"
             return False
 
-        PrintMsg(" \nCreating new output table (" + os.path.basename(theCompTable) + ") for component level data", 0)
+        #PrintMsg(" \nCreating new output table (" + os.path.basename(theCompTable) + ") for component level data", 0)
 
         outputDB = os.path.dirname(theCompTable)
         tmpTable = os.path.join("IN_MEMORY", os.path.basename(theCompTable))
@@ -939,7 +941,7 @@ def CalcRZDepth(inputDB, outputDB, theCompTable, theMuTable, maxD, dPct, dCR):
         #if bInput == False:
         #    raise MyError, "Problem querying input database"
 
-        PrintMsg(" \nProcessing input table (" + queryTbl + ")")
+        #PrintMsg(" \nProcessing input table (" + queryTbl + ")")
 
         # Create dictionaries and lists
         dMapunit = dict()   # store mapunit weighted restriction depths
@@ -1179,7 +1181,7 @@ def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, theMuTable, dRestrictions
 
         numRows = int(arcpy.GetCount_management(queryTbl).getOutput(0))
 
-        PrintMsg(" \nCalculating Root Zone AWS for " + str(td) + " to " + str(bd) + "cm...", 0)
+        PrintMsg(" \n\tCalculating Root Zone AWS for " + str(td) + " to " + str(bd) + "cm...", 0)
 
         # QueryTable_HZ fields
         qFieldNames = ["mukey", "cokey", "comppct_r",  "compname", "localphase", "majcompflag", "compkind", "taxorder", "taxsubgrp", "desgnmaster", "om_r", "awc_r", "hzdept_r", "hzdepb_r", "texture", "lieutex"]
@@ -1367,7 +1369,7 @@ def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, theMuTable, dRestrictions
             # Read through the component-level data and summarize to the mapunit level
 
             if iComp > 0:
-                PrintMsg(" \nSaving component average RZAWS to table... (" + str(iComp) + ")", 0 )
+                #PrintMsg(" \nSaving component average RZAWS to table... (" + str(iComp) + ")", 0 )
                 arcpy.SetProgressor("step", "Saving component data...",  0, iComp, 1)
                 iCo = 0 # count component records written to theCompTbl
 
@@ -1437,7 +1439,7 @@ def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, theMuTable, dRestrictions
                 raise MyError, "No component data in dictionary dComp"
 
             if len(dMu) > 0:
-                PrintMsg(" \nSaving map unit average RZAWS to table...(" + str(len(dMu)) + ")", 0 )
+                PrintMsg(" \n\tSaving map unit average RZAWS to table...(" + str(len(dMu)) + ")", 0 )
 
             else:
                 raise MyError, "No map unit information in dictionary dMu"
@@ -1505,7 +1507,7 @@ def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, theMuTable, dRestrictions
         return False
 
 ## ===================================================================================
-def CalcAWS(inputDB, outputDB, theCompTable, theMuTable, dPct):
+def CalcAWS(inputDB, outputDB, theCompTable, theMuTable, dPct, depthList):
     # Create a component-level summary table
     # Calculate the standard mapunit-weighted available waters supply for each mapunit and
     # add it to the map unit-level table.
@@ -1524,7 +1526,7 @@ def CalcAWS(inputDB, outputDB, theCompTable, theMuTable, dPct):
         missingList = list()
         minusList = list()
 
-        PrintMsg(" \nCalculating standard available water supply for:", 0)
+        PrintMsg(" \n\tCalculating standard available water supply for:", 0)
 
         for rng in depthList:
             # Calculating and updating just one AWS column at a time
@@ -1601,7 +1603,7 @@ def CalcAWS(inputDB, outputDB, theCompTable, theMuTable, dPct):
                 # Read through the component-level data and summarize to the mapunit level
 
                 if iComp > 0:
-                    PrintMsg("\t" + str(td) + " - " + str(bd) + "cm (" + Number_Format(iComp, 0, True) + " components)"  , 0)
+                    PrintMsg("\t\t" + str(td) + " - " + str(bd) + "cm (" + Number_Format(iComp, 0, True) + " components)"  , 0)
                     arcpy.SetProgressor("step", "Saving map unit and component AWS data...",  0, iComp, 1)
 
                     for corec in coCursor:
@@ -1687,7 +1689,7 @@ def CalcAWS(inputDB, outputDB, theCompTable, theMuTable, dPct):
 
         if len(missingList) > 0:
             missingList = list(set(missingList))
-            PrintMsg(" \nFollowing mapunits have no comppct_r: " + ", ".join(missingList), 1)
+            PrintMsg(" \n\tFollowing mapunits have no comppct_r: " + ", ".join(missingList), 1)
 
         PrintMsg("", 0)
 
@@ -1707,8 +1709,8 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
     # Create a component-level summary table
     # Calculate the standard mapunit-weighted available SOC for each mapunit and
     # add it to the map unit-level table
-    #
-    # Current problems: have  MuSOC with multiple records for mukey=2479888
+    # Does not calculate SOC below the following component restrictions:
+    #     Lithic bedrock, Paralithic bedrock, Densic bedrock, Fragipan, Duripan, Sulfuric
 
     try:
         # Using the same component horizon table that has been
@@ -1723,7 +1725,7 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
         missingList = list()
         minusList = list()
 
-        PrintMsg(" \nCalculating soil organic carbon for:", 0)
+        PrintMsg(" \n\tCalculating soil organic carbon for:", 0)
 
         for rng in depthList:
             # Calculating and updating just one SOC column at a time
@@ -1788,7 +1790,9 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                             rz = maxD
                             resKind = ""
 
-                        # Now check for horizon restrictions within this range
+                        # Now check for horizon restrictions within this range. Do not calculate SOC past
+                        # root zone restrictive layers.
+                        #
                         if top < rz < bot:
                             # restriction found in this horizon, use it to set a new depth
                             #PrintMsg("\t\t" + resKind + " restriction for " + mukey + ":" + cokey + " at " + str(rz) + "cm", 1)
@@ -1809,8 +1813,9 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                                 fragvol = 0.0
                                 pass
 
-                            # Calculate SOC using horizon thickness, OM, BD, FragVol, CompPct
-                            soc =  ( (hzT * ( ( om * 0.58 ) * db3 )) / 100.0 ) * ((100.0 - fragvol) / 100.0) * ( compPct * 100 )
+                            # Calculate SOC using horizon thickness, OM, BD, FragVol, CompPct.
+                            # changed the OM to carbon conversion from * 0.58 to / 1.724 after running FY2017 value table
+                            soc =  ( (hzT * ( ( om / 1.724 ) * db3 )) / 100.0 ) * ((100.0 - fragvol) / 100.0) * ( compPct * 100 )
 
                             if not cokey in dComp:
                                 # Create initial entry for this component using the first horizon CHK
@@ -1832,7 +1837,7 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                 # Read through the component-level data and summarize to the mapunit level
                 #
                 if iComp > 0:
-                    PrintMsg("\t" + str(td) + " - " + str(bd) + "cm (" + Number_Format(iComp, 0, True) + " components)", 0)
+                    PrintMsg("\t\t" + str(td) + " - " + str(bd) + "cm (" + Number_Format(iComp, 0, True) + " components)", 0)
                     arcpy.SetProgressor("step", "Saving map unit and component SOC data...",  0, iComp, 1)
 
                     for corec in coCursor:
@@ -1876,8 +1881,6 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
 
                                 corec[1] = soc                      # Test
 
-
-
                                 hzT = hzT * compPct / 100.0      # Adjust component share of horizon thickness by comppct
                                 corec[2] = hzT             # This is new for the TK0_5A column
                                 coCursor.updateRow(corec)
@@ -1897,8 +1900,7 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                                     hzT = hzT + val2
                                     soc = soc + val3
 
-                                dMu[mukey] = (compPct, hzT, soc)  # SOC is a little low
-                                #dMu[mukey] = (compPct, hzT, ( soc / adjCompPct))
+                                dMu[mukey] = (compPct, hzT, soc)
 
 
                         arcpy.SetProgressorPosition()
@@ -2074,7 +2076,7 @@ def MakeNCCPIQueryTable(inputDB, qTable):
         rule = 'NCCPI - National Commodity Crop Productivity Index (Ver 2.0)'
         #theSQL = "COMPONENT.COMPPCT_R > 0 AND COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.MRULENAME = '" + rule + "'"
         theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.MRULENAME = '" + rule + "'"
-        PrintMsg(" \nCalculating NCCPI weighted averages for all major components...", 0)
+        PrintMsg(" \n\tCalculating NCCPI weighted averages for all major components...", 0)
 
         # Things to be aware of with MakeQueryTable:
         # USE_KEY_FIELDS does not create OBJECTID field. Lack of OBJECTID precludes sorting on Mukey.
@@ -2099,13 +2101,13 @@ def MakeNCCPIQueryTable(inputDB, qTable):
         return False
 
 ## ===================================================================================
-def CalcNCCPI(inputDB, qTable, dPct):
+def CalcNCCPI(inputDB, theMuTable, qTable, dPct):
     #
     #
     try:
         # and write to Mu_NCCPI2 table
         #
-        PrintMsg(" \nAggregating data to mapunit level...", 0)
+        #PrintMsg(" \n\tAggregating data to mapunit level...", 0)
 
         # Alternate component fields for all NCCPI values
         cFlds = ["MUKEY","COKEY","COMPPCT_R","COMPNAME","LOCALPHASE", "DUMMY"]
@@ -2134,7 +2136,7 @@ def CalcNCCPI(inputDB, qTable, dPct):
         iCnt = int(arcpy.GetCount_management(qTable).getOutput(0))
         noVal = list()  # Get a list of components with no overall index rating
 
-        PrintMsg(" \nReading query table with " + Number_Format(iCnt, 0, True) + " records...", 0)
+        #PrintMsg(" \n\tReading query table with " + Number_Format(iCnt, 0, True) + " records...", 0)
 
         arcpy.SetProgressor("step", "Reading query table...", 0,iCnt, 1)
 
@@ -2206,7 +2208,7 @@ def CalcNCCPI(inputDB, qTable, dPct):
 
         if iCnt > 0:
 
-            PrintMsg(" \nSaving map unit weighted NCCPI data (" + Number_Format(iCnt, 0, True) + " records) to " + os.path.basename(theMuTable) + "..." , 0)
+            #PrintMsg(" \n\tSaving map unit weighted NCCPI data (" + Number_Format(iCnt, 0, True) + " records) to " + os.path.basename(theMuTable) + "..." , 0)
             # Write map unit aggregate data to Mu_NCCPI2 table
             #
             # theMuTable is a global variable. Need to check this out in the gSSURGO_ValuTable script
@@ -2272,7 +2274,7 @@ def CalcPWSL(inputDB, outputDB, theMuTable, dPct):
         # Using the same component horizon table as always
         queryTbl = os.path.join(outputDB, "QueryTable_Hz")
         numRows = int(arcpy.GetCount_management(queryTbl).getOutput(0))
-        PrintMsg(" \nCalculating Potential Wet Soil Landscapes using " + queryTbl + "...", 0)
+        PrintMsg(" \n\tCalculating Potential Wet Soil Landscapes using " + queryTbl + "...", 0)
         qFieldNames = ["mukey", "muname", "cokey", "comppct_r",  "compname", "localphase", "otherph", "majcompflag", "compkind", "hydricrating", "drainagecl"]
         pwSQL = "COMPPCT_R > 0"
         compList = list()
@@ -2724,6 +2726,137 @@ def UpdateMetadata(outputWS, target, surveyInfo):
         False
 
 ## ===================================================================================
+def CreateValuTable(inputDB):
+    # Run all processes from here
+
+    try:
+        arcpy.OverwriteOutput = True
+
+        # Set location for temporary tables
+        #outputDB = "IN_MEMORY"
+        outputDB = env.scratchGDB
+
+        # Name of mapunit level output table (global variable)
+        theMuTable = os.path.join(inputDB, "Valu1")
+
+        # Name of component level output table (global variable)
+        theCompTable = os.path.join(inputDB, "Co_VALU")
+
+        # Set output workspace to same as the input table
+        #env.workspace = os.path.dirname(arcpy.Describe(queryTbl).catalogPath)
+        env.workspace = inputDB
+
+        # Save record of any issues to a text file
+        logFile = os.path.basename(inputDB)[:-4] + "_Problems.txt"
+        logFile = os.path.join(os.path.dirname(inputDB), logFile)
+
+        # Get the mapunit - sum of component percent for calculations
+        dPct = GetSumPct(inputDB)
+        if len(dPct) == 0:
+            raise MyError, ""
+
+        # Create initial set of query tables used for RZAWS, AWS and SOC
+        if CreateQueryTables(inputDB, outputDB, 150.0) == False:
+            raise MyError, ""
+
+        # Create permanent output tables for the map unit and component levels
+        depthList = [(0,5), (5, 20), (20, 50), (50, 100), (100, 150), (150, 999), (0, 20), (0, 30), (0, 100), (0, 150), (0, 999)]
+
+        if CreateOutputTableMu(theMuTable, depthList, dPct) == False:
+            raise MyError, ""
+
+        if CreateOutputTableCo(theCompTable, depthList) == False:
+            raise MyError, ""
+
+        # Store component restrictions for root growth in a dictionary
+        resListAWS = "('Lithic bedrock','Paralithic bedrock','Densic bedrock', 'Densic material', 'Fragipan', 'Duripan', 'Sulfuric')"
+        dRZRestrictions = GetCoRestrictions(outputDB, 150.0, resListAWS)
+
+        # Find the top restriction for each component, both from the corestrictions table and the horizon properties
+        dComp2 = CalcRZDepth(inputDB, outputDB, theCompTable, theMuTable, 150.0, dPct, dRZRestrictions)
+
+        # Calculate root zone available water capacity using a floor of 150cm or a root restriction depth
+        #
+        # dComp2[cokey] = [mukey, compName, localPhase, compPct, resDept, restriction]
+        if CalcRZAWS(inputDB, outputDB, 0.0, 150.0, theCompTable, theMuTable, dComp2, 150.0, dPct) == False:
+            raise MyError, ""
+
+        # Calculate standard available water supply
+        if CalcAWS(inputDB, outputDB, theCompTable, theMuTable, dPct, depthList) == False:
+            raise MyError, ""
+
+        # Run SOC calculations
+        # Seems to be a problem with SOC calculations, numbers are high
+        maxD = 999.0
+        # Get bedrock restrictions for SOC  and write them to the output tables
+        resListSOC = "('Lithic bedrock', 'Paralithic bedrock', 'Densic bedrock')"
+        dSOCRestrictions = GetCoRestrictions(outputDB, maxD, resListSOC)
+
+        # Store all component-horizon fragment volumes (percent) in a dictionary (by chkey)
+        # and use in the root zone SOC calculations
+        dFrags = GetFragVol(inputDB)
+
+        if len(dFrags) == 0:
+            raise MyError, "No fragment volume information"
+
+        # Calculate soil organic carbon for all the different depth ranges
+        depthList = [(0,5), (5, 20), (20, 50), (50, 100), (100, 150), (150, 999), (0, 20), (0, 30), (0, 100), (0, 150), (0, 999)]
+        if CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList, dSOCRestrictions, maxD) == False:
+            raise MyError, ""
+
+        # Calculate NCCPI
+        # Create query table using component and chorizon tables
+        nccpiTbl = "NCCPI_Table"
+        if  MakeNCCPIQueryTable(inputDB, nccpiTbl) == False:
+            raise MyError, ""
+
+        if CalcNCCPI(inputDB, theMuTable, nccpiTbl, dPct) == False:
+            raise MyError, ""
+
+        if CalcPWSL(inputDB, outputDB, theMuTable, dPct) == False:
+            raise MyError, ""
+
+        PrintMsg(" \n\tAll calculations complete", 0)
+
+        # Create metadata for the VALU table
+        # Query the output SACATALOG table to get list of surveys that were exported to the gSSURGO
+        #
+        saTbl = os.path.join(inputDB, "sacatalog")
+        expList = list()
+        queryList = list()
+
+        with arcpy.da.SearchCursor(saTbl, ["AREASYMBOL", "SAVEREST"]) as srcCursor:
+            for rec in srcCursor:
+                expList.append(rec[0] + " (" + str(rec[1]).split()[0] + ")")
+                queryList.append("'" + rec[0] + "'")
+
+        surveyInfo = ", ".join(expList)
+        queryInfo = ", ".join(queryList)
+
+        # Update metadata for the geodatabase and all featureclasses
+        PrintMsg(" \n\tUpdating " + os.path.basename(theMuTable) + " metadata...", 0)
+        bMetadata = UpdateMetadata(inputDB, theMuTable, surveyInfo)
+
+        if arcpy.Exists(theCompTable):
+            arcpy.Delete_management(theCompTable)
+
+        #if bMetadata:
+        #    PrintMsg("\t\tMetadata complete", 0)
+
+        PrintMsg(" \n\tValu1 table complete for " + inputDB + " \n ", 0)
+
+        return True
+
+    except MyError, e:
+        # Example: raise MyError("this is an error message")
+        PrintMsg(str(e) + " \n", 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+## ===================================================================================
 ## ====================================== Main Body ==================================
 # Import modules
 import os, sys, string, re, locale, arcpy, traceback, collections
@@ -2770,124 +2903,15 @@ from arcpy import env
 
 
 try:
-    # Diagnostic map unit mukey:
-    tmukey = 'xx'
+    if __name__ == "__main__":
 
-    env.overwriteOutput = True
+        # Create geoprocessor object
+        #gp = arcgisscripting.create(9.3)
 
-    # Create geoprocessor object
-    #gp = arcgisscripting.create(9.3)
-    arcpy.OverwriteOutput = True
+        inputDB = arcpy.GetParameterAsText(0)            # Input gSSURGO database
 
-    inputDB = arcpy.GetParameterAsText(0)            # Input gSSURGO database
+        bValu = CreateValuTable(inputDB)
 
-    # Set location for temporary tables
-    #outputDB = "IN_MEMORY"
-    outputDB = env.scratchGDB
-
-    # Name of mapunit level output table (global variable)
-    theMuTable = os.path.join(inputDB, "Valu2")
-
-    # Name of component level output table (global variable)
-    theCompTable = os.path.join(inputDB, "Co_VALU")
-
-    # Set output workspace to same as the input table
-    #env.workspace = os.path.dirname(arcpy.Describe(queryTbl).catalogPath)
-    env.workspace = inputDB
-
-    # Save record of any issues to a text file
-    logFile = os.path.basename(inputDB)[:-4] + "_Problems.txt"
-    logFile = os.path.join(os.path.dirname(inputDB), logFile)
-
-    # Get the mapunit - sum of component percent for calculations
-    dPct = GetSumPct(inputDB)
-    if len(dPct) == 0:
-        raise MyError, ""
-
-    # Create initial set of query tables used for RZAWS, AWS and SOC
-    if CreateQueryTables(inputDB, outputDB, 150.0) == False:
-        raise MyError, ""
-
-    # Create permanent output tables for the map unit and component levels
-    depthList = [(0,5), (5, 20), (20, 50), (50, 100), (100, 150), (150, 999), (0, 20), (0, 30), (0, 100), (0, 150), (0, 999)]
-
-    if CreateOutputTableMu(theMuTable, depthList, dPct) == False:
-        raise MyError, ""
-
-    if CreateOutputTableCo(theCompTable, depthList) == False:
-        raise MyError, ""
-
-    # Store component restrictions for root growth in a dictionary
-    resListAWS = "('Lithic bedrock','Paralithic bedrock','Densic bedrock', 'Densic material', 'Fragipan', 'Duripan', 'Sulfuric')"
-    dRZRestrictions = GetCoRestrictions(outputDB, 150.0, resListAWS)
-
-    # Find the top restriction for each component, both from the corestrictions table and the horizon properties
-    dComp2 = CalcRZDepth(inputDB, outputDB, theCompTable, theMuTable, 150.0, dPct, dRZRestrictions)
-
-    # Calculate root zone available water capacity using a floor of 150cm or a root restriction depth
-    #
-    # dComp2[cokey] = [mukey, compName, localPhase, compPct, resDept, restriction]
-    if CalcRZAWS(inputDB, outputDB, 0.0, 150.0, theCompTable, theMuTable, dComp2, 150.0, dPct) == False:
-        raise MyError, ""
-
-    # Calculate standard available water supply
-    if CalcAWS(inputDB, outputDB, theCompTable, theMuTable, dPct) == False:
-        raise MyError, ""
-
-    # Run SOC calculations
-    # Seems to be a problem with SOC calculations, numbers are high
-    maxD = 999.0
-    # Get bedrock restrictions for SOC  and write them to the output tables
-    resListSOC = "('Lithic bedrock', 'Paralithic bedrock', 'Densic bedrock')"
-    dSOCRestrictions = GetCoRestrictions(outputDB, maxD, resListSOC)
-
-    # Store all horizon fragment volumes in a dictionary and use in the root zone SOC calculations
-    dFrags = GetFragVol(inputDB)
-
-    if len(dFrags) == 0:
-        raise MyError, "No fragment volume information"
-
-    # Calculate soil organic carbon for all the different depth ranges
-    depthList = [(0,5), (5, 20), (20, 50), (50, 100), (100, 150), (150, 999), (0, 20), (0, 30), (0, 100), (0, 150), (0, 999)]
-    if CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList, dSOCRestrictions, maxD) == False:
-        raise MyError, ""
-
-    # Calculate NCCPI
-    # Create query table using component and chorizon tables
-    nccpiTbl = "NCCPI_Table"
-    if  MakeNCCPIQueryTable(inputDB, nccpiTbl) == False:
-        raise MyError, ""
-
-    if CalcNCCPI(inputDB, nccpiTbl, dPct) == False:
-        raise MyError, ""
-
-    if CalcPWSL(inputDB, outputDB, theMuTable, dPct) == False:
-        raise MyError, ""
-
-    PrintMsg(" \nAll calculations complete", 0)
-
-    # Create metadata for the VALU table
-    # Query the output SACATALOG table to get list of surveys that were exported to the gSSURGO
-    #
-    saTbl = os.path.join(inputDB, "sacatalog")
-    expList = list()
-    queryList = list()
-
-    with arcpy.da.SearchCursor(saTbl, ["AREASYMBOL", "SAVEREST"]) as srcCursor:
-        for rec in srcCursor:
-            expList.append(rec[0] + " (" + str(rec[1]).split()[0] + ")")
-            queryList.append("'" + rec[0] + "'")
-
-    surveyInfo = ", ".join(expList)
-    queryInfo = ", ".join(queryList)
-
-    # Update metadata for the geodatabase and all featureclasses
-    PrintMsg(" \nUpdating " + os.path.basename(theMuTable) + " metadata...", 0)
-    bMetadata = UpdateMetadata(inputDB, theMuTable, surveyInfo)
-
-    PrintMsg("\tMetadata complete", 0)
-
-    PrintMsg(" \nValu2 table complete for " + inputDB + " \n ", 0)
 
 except MyError, e:
     # Example: raise MyError("this is an error message")

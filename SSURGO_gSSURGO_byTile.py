@@ -71,8 +71,7 @@ def CheckWSS(missingList):
     #
     # This should use SASTATUSMAP table instead of SACATALOG
     # Add 'AND SAPUBSTATUSCODE = 2' for finding spatial only
-    import time, datetime, httplib, urllib2
-    import xml.etree.cElementTree as ET
+    import time, datetime, urllib2, json
 
     missingAS = list()
 
@@ -85,52 +84,44 @@ def CheckWSS(missingList):
         sQuery = "SELECT AREASYMBOL FROM SASTATUSMAP WHERE AREASYMBOL IN (" + missingQuery + ") AND SAPUBSTATUSCODE = 2"
         #PrintMsg(" \nQuery: " + sQuery, 1)
 
-        # Send XML query to SDM Access service
-        #
-        sXML = """<?xml version="1.0" encoding="utf-8"?>
-    <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-      <soap12:Body>
-        <RunQuery xmlns="http://SDMDataAccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx">
-          <Query>""" + sQuery + """</Query>
-        </RunQuery>
-      </soap12:Body>
-    </soap12:Envelope>"""
 
-        dHeaders = dict()
-        dHeaders["Host"] = "sdmdataaccess.nrcs.usda.gov"
-        dHeaders["Content-Type"] = "text/xml; charset=utf-8"
-        dHeaders["SOAPAction"] = "http://SDMDataAccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx/RunQuery"
-        dHeaders["Content-Length"] = len(sXML)
-        sURL = "SDMDataAccess.nrcs.usda.gov"
+	# NEW POST REST REQUEST BEGINS HERE
+	#
+        # Uses new HTTPS URL
+        # Post Rest returns
+        theURL = "https://sdmdataaccess.nrcs.usda.gov"
+        url = theURL + "/Tabular/SDMTabularService/post.rest"
 
-        # Create SDM connection to service using HTTP
-        conn = httplib.HTTPConnection(sURL, 80)
+        # Create request using JSON, return data as JSON
+        dRequest = dict()
+        dRequest["FORMAT"] = "JSON"
+        dRequest["QUERY"] = sQuery
+        jData = json.dumps(dRequest)
 
-        # Send request in XML-Soap
-        conn.request("POST", "/Tabular/SDMTabularService.asmx", sXML, dHeaders)
+        # Send request to SDA Tabular service using urllib2 library
+        req = urllib2.Request(url, jData)
+        resp = urllib2.urlopen(req)
+        jsonString = resp.read()
 
-        # Get back XML response
-        response = conn.getresponse()
-        xmlString = response.read()
+        # Convert the returned JSON string into a Python dictionary.
+        data = json.loads(jsonString)
+        del jsonString, resp, req
 
-        # Close connection to SDM
-        conn.close()
-
-        # Convert XML to tree format
-        tree = ET.fromstring(xmlString)
-
-        iCnt = 0
-        # Create empty value list
+        # Find data section (key='Table')
         valList = list()
 
-        # Iterate through XML tree, finding required elements...
-        for rec in tree.iter():
+        if "Table" in data:
+            dataList = data["Table"]  # Data as a list of lists. All values come back as string.
 
-            if rec.tag == "AREASYMBOL":
-                # get the YYYYMMDD part of the datetime string
-                # then reformat to match SQL query
-                a = rec.text
-                valList.append(a)
+            # Iterate through dataList and reformat the data to create the menu choicelist
+
+            for rec in dataList:
+                areasym = rec[0]
+                valList.append(areasym)
+
+        else:
+            # No data returned for this query
+            pass
 
         reallyMissing = list()
 

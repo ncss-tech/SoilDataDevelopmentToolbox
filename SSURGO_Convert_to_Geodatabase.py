@@ -212,7 +212,7 @@ def CreateSSURGO_DB(outputWS, inputXML, areasymbolList, aliasName):
 
         arcpy.CreateFileGDB_management(outputFolder, gdbName, "10.0")
 
-        #arcpy.ImportXMLWorkspaceDocument_management (os.path.join(outputFolder, gdbName), inputXML, "DATA")
+        # The following command will fail when the user only has a Basic license
         arcpy.ImportXMLWorkspaceDocument_management (os.path.join(outputFolder, gdbName), inputXML, "SCHEMA_ONLY")
 
         if not arcpy.Exists(os.path.join(outputFolder, gdbName)):
@@ -1493,6 +1493,7 @@ def UpdateMetadata(outputWS, target, surveyInfo, description, remove_gp_history_
         dInstall = arcpy.GetInstallInfo()
         installPath = dInstall["InstallDir"]
         prod = r"Metadata/Translator/ARCGIS2FGDC.xml"
+        #prod = r"Metadata/Translator/ArcGIS2ISO19139.xml"
         mdTranslator = os.path.join(installPath, prod)
 
         # Define input and output XML files
@@ -1904,6 +1905,15 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles):
     # main function
 
     try:
+        # Creating the file geodatabase uses the ImportXMLWorkspaceDocument command which requires
+        #
+        # ArcInfo: Advanced license
+        # ArcEditor: Standard license
+        # ArcView: Basic license
+        licenseLevel = arcpy.ProductInfo().upper()
+        if licenseLevel == "BASIC":
+            raise MyError, "License level must be Standard or Advanced to run this tool"
+
         env.overwriteOutput= True
         codePage = 'iso-8859-1'  # allow csv reader to handle non-ascii characters
         # According to Gary Spivak, SDM downloads are UTF-8 and NAIS downloads are iso-8859-1
