@@ -1,0 +1,127 @@
+  def updateParameters(self):
+    # Modify the values and properties of parameters before internal
+    # validation is performed.  This method is called whenever a parameter
+    # has been changed.
+
+    try:
+      # Handle choice list according to the first two parameter values
+      clearChoices = False
+      refreshChoices = False
+
+      if self.params[1].value is None:
+        # No wildcard string used
+        # Normally would also test param 0 (survey age in days) to see if it is None,
+        # but I've purposely allowed the survey age value to be empty in this tool.
+        clearChoices = True
+        refreshChoices = False
+
+      else:
+        # param 1 has just been changed to a new wildcard value
+        if not self.params[0].hasBeenValidated or (self.params[1].altered and not self.params[1].hasBeenValidated):
+          clearChoices = True
+          refreshChoices = True
+          wc = self.params[1].value
+
+          # Reformat the wildcard string to use a percent sign (SQL Server syntax)
+          if wc.endswith('*'):
+            wc = "'" + wc.replace('*', '%') + "'"
+
+          elif not wc.endswith('%'):
+            wc = "'" + wc + "%" + "'"
+
+          else:
+            wc = "'" + wc + "%'"
+
+      if clearChoices:
+        # Clear the choice list
+        self.params[3].filter.list = []
+        self.params[3].values = []
+
+      if refreshChoices:
+        # Clear the choice list and create a new one
+        self.params[3].filter.list = []
+        self.params[3].values = []
+        # Create empty value list
+        valList = list()
+        sDate = ""
+
+        if self.params[0].value > 0:
+          # Build the query string for Soil Data Access and include a SAVEREST date
+          # User specified an age set in days
+          # Incorporate SAVEREST into query
+          today = datetime.date.today()
+          myDate = today + datetime.timedelta(days = -(self.params[0].value))
+          myDate = str(myDate).replace("-","")
+          #wc = wc + " AND SAVEREST > '" + myDate + "'"
+          sDate = " AND SAVEREST > '" + myDate + "'"
+
+          # return list sorted by date
+          # list ALL surveys, spatial or not
+          sQuery = "SELECT AREASYMBOL, AREANAME, CONVERT(varchar(10), [SAVEREST], 126) AS SAVEREST FROM SASTATUSMAP WHERE AREASYMBOL LIKE " + wc + sDate + " ORDER BY SAVEREST DESC, AREASYMBOL"
+
+        else:
+          # Build the query string for Soil Data Access (no SAVEREST date)
+          # return list sorted by Areasymbol
+          sQuery = "SELECT AREASYMBOL, AREANAME, CONVERT(varchar(10), [SAVEREST], 126) AS SAVEREST FROM SASTATUSMAP WHERE AREASYMBOL LIKE " + wc + sDate + " ORDER BY AREASYMBOL"
+
+	# NEW POST REST REQUEST BEGINS HERE
+	#
+        # Uses new HTTPS URL
+        # Post Rest returns
+        theURL = "https://sdmdataaccess.nrcs.usda.gov"
+        url = theURL + "/Tabular/SDMTabularService/post.rest"
+
+        # Create request using JSON, return data as JSON
+        dRequest = dict()
+        dRequest["FORMAT"] = "JSON"
+        dRequest["QUERY"] = sQuery
+        jData = json.dumps(dRequest)
+
+        # Send request to SDA Tabular service using urllib2 library
+        req = urllib2.Request(url, jData)
+        resp = urllib2.urlopen(req)
+        jsonString = resp.read()
+
+        # Convert the returned JSON string into a Python dictionary.
+        data = json.loads(jsonString)
+        del jsonString, resp, req
+
+        # Find data section (key='Table')
+        valList = list()
+
+        if "Table" in data:
+          dataList = data["Table"]  # Data as a list of lists. All values come back as string.
+
+          # Iterate through dataList and reformat the data to create the menu choicelist
+
+          for rec in dataList:
+            areasym, areaname, date = rec
+            date = date.split(" ")[0]
+            valList.append(areasym + ",  " + str(date) + ",  " + areaname)
+
+        else:
+          # No data returned for this query
+          pass
+
+        #if len(valList) > 0:
+        self.params[3].filter.list = valList
+
+        # NEW POST REST REQUEST ENDS HERE
+
+
+      # If a template database has been specified, go ahead and add MUNAME to shapefile
+      # but allow the user to uncheck option
+      if self.params[4].value is not None and not self.params[4].hasBeenValidated:
+        self.params[6].value = True
+
+      elif self.params[4].value is None:
+        self.params[6].value = False
+
+      return
+
+    except:
+      tb = sys.exc_info()[2]
+      tbinfo = traceback.format_tb(tb)[0]
+      theMsg = tbinfo + " \n" + str(sys.exc_type)+ ": " + str(sys.exc_value) + " \n"
+      #self.params[7].value = theMsg
+      return

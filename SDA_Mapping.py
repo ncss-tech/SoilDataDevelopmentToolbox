@@ -1,9 +1,9 @@
-# gSSURGO_Mapping.py
+# SDA_Mapping.py
 #
-# Creates Soil Data Viewer-type maps using gSSURGO and the sdv* attribute tables
+# Creates Soil Data Viewer-type maps using Soil Data Access and the sdv* attribute tables
 # Uses mdstatrship* tables and sdvattribute table to populate menu
 #
-# 2016-06-11
+# 2016-06-22
 
 #
 # THINGS TO DO:
@@ -81,6 +81,10 @@
 # interphr is the High fuzzy value, interphrc is the High rating class
 # interplr is the Low fuzzy value, interplrc is the Low rating class
 # Very Limited = 1.0; Somewhat limited = 0.22
+
+# Branched off gSSURGO_Mapping2.py on 6-13-2016 to add function for JSON symbology. May need to remerge the two
+# because I've probably fixed some old stuff in this version of the script. Not sure if the reverse is true.
+#
 
 
 
@@ -165,12 +169,16 @@ def SortData(muVals):
     # Sort a list of tuples containing comppct_r and rating value or index and return a single tuple.
 
     try:
+
         if tieBreaker == dSDV["tiebreakhighlabel"]:
             # return higher value
             muVal = sorted(sorted(muVals, key = lambda x : x[1], reverse=True), key = lambda x : x[0], reverse=True)[0]
 
         elif tieBreaker == dSDV["tiebreaklowlabel"]:
             muVal = sorted(sorted(muVals, key = lambda x : x[1], reverse=False), key = lambda x : x[0], reverse=True)[0]
+
+        else:
+            muVal = (None, None)
 
         return muVal
 
@@ -179,33 +187,108 @@ def SortData(muVals):
         return (None, None)
 
 ## ===================================================================================
-def GetMapLegend():
+def ColorRamp(count, items, upperColor, lowerColor):
+    # For Progressive color ramps, there are no colors defined for each legend item.
+    # Create a dictionary of colors based upon the upper and lower colors. Key value is
+    # 'part' which is the number of colors used to define the color ramp.
+    # count is always equal to three and part is always zero-based
+
+    try:
+        PrintMsg(" \nCreating color ramp based upon " + str(count) + " item ramp", 1)
+        dColors = dict()
+
+        dRGB = dict()
+            # RGB colors:
+        # 255, 0, 0 = red
+        # 255, 255, 0 = yellow
+        # 0, 255, 0 = green
+        # 0, 255, 255 = cyan
+        # 0, 0, 255 = blue
+
+        # pH example: Creating color ramp based upon 4 colors red -> yellow -> cyan -> blue
+        #
+        # red    -> yellow  (255, 0, 0)   -> (255, 255, 0)
+        #
+        # yellow -> cyan    (255, 255, 0) -> (0, 255, 255)
+        #
+        # cyan   -> blue    (0, 255, 255) -> (0, 0, 255)
+
+        dRGB[(255,0,0)] = "red"
+        dRGB[(255,255,0)] = "yellow"
+        dRGB[(0,255,0)] ="green"
+        dRGB[(0,255,255)] = "cyan"
+        dRGB[(0,0,255)] = "blue"
+
+        #PrintMsg(" \nlowerColor: " + str(lowerColor), 1)
+        #PrintMsg(" \nupperColor: " + str(upperColor), 1)
+        PrintMsg(dRGB[upperColor[0]] + "->" + dRGB[lowerColor[0]], 1)
+        PrintMsg(dRGB[upperColor[1]] + "->" + dRGB[lowerColor[1]], 1)
+        PrintMsg(dRGB[upperColor[2]] + "->" + dRGB[lowerColor[2]], 1)
+
+        PrintMsg(" \n" + str(upperColor[0]) + "->" + str(lowerColor[0]), 1)
+        PrintMsg(str(upperColor[1]) + "->" + str(lowerColor[1]), 1)
+        PrintMsg(str(upperColor[2]) + "->" + str(lowerColor[2]), 1)
+
+        # create lists of colors for each legend item
+        redList = list()
+        greenList = list()
+        blueList = list()
+        interVal = int(items / (count - 1))
+
+        #for i in range(count - 1):
+        if 1 == 2:  # skip this for now
+            # My understanding is that 3 points define the color ramp. Beginning color, middle color and ending color
+            # Handle each pair of points (0-1, 1-2) and append the color lists for each to make the complete set
+            #for i in range(count):
+            # for each color (r=0, g=1, b= 2)
+            if lowerColor[i][0] != upperColor[i][0]:
+                tmpList = range(lowerColor[i][0], upperColor[i][0], int((upperColor[i][0] - lowerColor[i][0]) / interVal) )
+
+            else:
+                tmpList = [lowerColor[i][0]] * interVal
+
+            redList.extend(tmpList)
+
+            if lowerColor[i][1] != upperColor[i][1]:
+                tmpList = range(lowerColor[i][1], upperColor[i][1], int((upperColor[i][1] - lowerColor[i][1]) / interVal) )
+                PrintMsg(" \ntmpList: " + str(lowerColor[i][1]) + "; " + str(upperColor[i][1]) , 1)
+
+            else:
+                tmpList = [lowerColor[i][1]] * interVal
+
+            greenList.extend(tmpList)
+
+            if lowerColor[i][2] != upperColor[i][2]:
+                tmpList = range(lowerColor[i][2], upperColor[i][2], int((upperColor[i][2] - lowerColor[i][2]) / interVal) )
+
+            else:
+                tmpList = [lowerColor[i][2]] * interVal
+
+            blueList.extend(tmpList)
+
+        #PrintMsg(" \nRedList " + str(i) + ": " + str(redList))
+        #PrintMsg(" \nGreenList " + str(i) + ": " + str(greenList))
+        #PrintMsg(" \nBlueList "  + str(i) + ": " + str(blueList))
+
+        #for i in range(len(redList)):
+        #    PrintMsg("\t" + str(i) + " (" + str(redList[1]) + ", " + str(greenList[i]) + ", " + str(blueList[i]) + ")", 1)
+
+        return dColors
+
+    except:
+        errorMsg()
+        return dColors
+
+## ===================================================================================
+def GetMapLegend(dAtts):
     # Get map legend values and order from maplegendxml column in sdvattribute table
     # Return dLegend dictionary containing contents of XML.
-    #
-    #>>> dLegend["colors"][1]                    # legend item number
-    # {'blue': '0', 'green': '0', 'red': '255'}  # Legend item color
-    #
-    # >>> dLegend["labels"][1]                   # legend item order, value, label
-    # {'order': '1', 'value': 'Not prime farmland', 'label': 'Not prime farmland'}
-    #
-    #>>> dLegend["maplegendkey"]
-    # '2'
-    #>>> dLegend["type"]
-    # '2'
-    # >>> dLegend["name"]
-    # 'Defined'
-
-    # name: Random (type = 0)
-    # name: Progressive (type = 1)
-    # name: Defined (type = 2)
-
 
     try:
         #bVerbose = False  # This function seems to work well, but prints a lot of messages.
 
         if bFuzzy:
-            # Skip map legend because the fuzzy values will not match the SDV map legend XML
+            # Skip map legend because the fuzzy values will not match the XML legend.
             return dict()
 
         arcpy.SetProgressorLabel("Getting map legend information")
@@ -213,7 +296,7 @@ def GetMapLegend():
         if bVerbose:
             PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
 
-        xmlString = dSDV["maplegendxml"]
+        xmlString = dAtts["maplegendxml"]
 
         if bVerbose:
             PrintMsg(" \n" + xmlString + " \n ", 1)
@@ -243,6 +326,40 @@ def GetMapLegend():
             if rec.tag == "ColorRampType":
                 dLegend["type"] = rec.attrib["type"]
                 dLegend["name"] = rec.attrib["name"]
+                if rec.attrib["name"] == "Progressive":
+                    dLegend["count"] = int(rec.attrib["count"])
+
+            if "name" in dLegend and dLegend["name"] == "Progressive":
+
+                if rec.tag == "LowerColor":
+                    # 'part' is zero-based and related to count
+                    part = int(rec.attrib["part"])
+                    red = int(rec.attrib["red"])
+                    green = int(rec.attrib["green"])
+                    blue = int(rec.attrib["blue"])
+                    #PrintMsg("Lower Color part #" + str(part) + ": " + str(red) + ", " + str(green) + ", " + str(blue), 1)
+
+                    if rec.tag in dLegend:
+                        dLegend[rec.tag][part] = (red, green, blue)
+
+                    else:
+                        dLegend[rec.tag] = dict()
+                        dLegend[rec.tag][part] = (red, green, blue)
+
+                if rec.tag == "UpperColor":
+                    part = int(rec.attrib["part"])
+                    red = int(rec.attrib["red"])
+                    green = int(rec.attrib["green"])
+                    blue = int(rec.attrib["blue"])
+                    #PrintMsg("Upper Color part #" + str(part) + ": " + str(red) + ", " + str(green) + ", " + str(blue), 1)
+
+                    if rec.tag in dLegend:
+                        dLegend[rec.tag][part] = (red, green, blue)
+
+                    else:
+                        dLegend[rec.tag] = dict()
+                        dLegend[rec.tag][part] = (red, green, blue)
+
 
             if rec.tag == "Labels":
                 order = int(rec.attrib["order"])
@@ -253,6 +370,7 @@ def GetMapLegend():
                         val = int(rec.attrib["value"])
                         label = rec.attrib["label"]
                         rec.attrib["value"] = val
+                        #rec.attrib["label"] = label
                         dLabels[order] = rec.attrib
 
                     except:
@@ -307,31 +425,36 @@ def GetMapLegend():
         #PrintMsg(" \n" + dAtts["attributename"] + " Legend Key: " + dLegend["maplegendkey"] + ", Type: " + dLegend["type"] + ", Name: " + dLegend["name"] , 1)
 
         if bVerbose:
-            PrintMsg(" \n" + dSDV["attributename"] + " Legend Key: " + dLegend["maplegendkey"] + ", Type: " + dLegend["type"] + ", Name: " + dLegend["name"] , 1)
-            PrintMsg(" \ndLegend: " + str(dLegend), 1)
+            PrintMsg(" \n" + dAtts["attributename"] + " Legend Key: " + dLegend["maplegendkey"] + ", Type: " + dLegend["type"] + ", Name: " + dLegend["name"] , 1)
 
             for order, vals in dLabels.items():
-                #PrintMsg("\tNew " + str(order) + ": ", 1)
+                PrintMsg("\tNew " + str(order) + ": ", 1)
 
-                #for key, val in vals.items():
-                #    PrintMsg("\t\t" + key + ": " + str(val), 1)
+                for key, val in vals.items():
+                    PrintMsg("\t\t" + key + ": " + str(val), 1)
 
                 try:
                     r = int(dColors[order]["red"])
                     g = int(dColors[order]["green"])
                     b = int(dColors[order]["blue"])
                     rgb = (r,g,b)
-                    #PrintMsg("\t\tRGB: " + str(rgb), 1)
+                    PrintMsg("\t\tRGB: " + str(rgb), 1)
 
                 except:
                     pass
+
+        #if dLegend["name"] == "Progressive":
+        #    dColors = ColorRamp(dLegend["count"], len(dLabels), dLegend["LowerColor"], dLegend["UpperColor"])
+
+        if bVerbose:
+            PrintMsg(" \ndLegend: " + str(dLegend), 1)
 
         return dLegend
 
     except MyError, e:
         # Example: raise MyError, "This is an error message"
         PrintMsg(str(e), 2)
-        return dic()
+        return dict()
 
     except:
         errorMsg()
@@ -378,7 +501,7 @@ def CreateNumericLayer(sdvLyrFile, dLegend, outputValues, classBV, classBL):
 
         if bVerbose:
             PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
-            #PrintMsg(" \nTop of CreateNumericLayer \n classBV: " + str(classBV) + " \nclassBL: " + str(classBL), 1)
+            PrintMsg(" \nTop of CreateNumericLayer \n classBV: " + str(classBV) + " \nclassBL: " + str(classBL), 1)
             # For pH, the classBV and classBL are already set properly at this point. Need to skip any changes to
             # these two variables.
 
@@ -413,9 +536,6 @@ def CreateNumericLayer(sdvLyrFile, dLegend, outputValues, classBV, classBL):
 
             except:
                 dLabels = dict()
-
-            #if bVerbose:
-            #    PrintMsg(" \noutputValues are " + str(outputValues), 1)
 
             if len(outputValues) == 2:
                 # Use this one if outputValues are integer with a unique values renderer
@@ -948,6 +1068,7 @@ def GetNumericLegend(dLegend, outputValues):
         errorMsg()
         return [], []
 
+
 ## ===================================================================================
 def CreateJSONLegend(dLegend):
     #
@@ -958,53 +1079,57 @@ def CreateJSONLegend(dLegend):
         #    read appropriate json file into layerDefinition dictionary
         #    update layerDefinition dictionary using other dictionaries
 
-
+        if bVerbose:
+            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
+            #PrintMsg(str(dSDV), 1)
         #
         # 2. Legend
         # original dLegend contains key:hexcode and value: legend label
         #
         # original colorlist is ordered list of hexcodes
         #
-        dLegend, colorList = ReadLegend(legendFile, dataType)
+        #dLegend, colorList = ReadLegend(legendFile, dataType)
 
         if dLegend is None or len(dLegend) == 0:
             raise MyError, ""
         #
 
-        # 3. Ratings. Get field definitions and rating datatype before hand.
-        #dFieldTypes = FieldTypes()
-        #dRatings, dValues = ReadRatings(ratingFile, dataType.upper())
+        if len(dLegend["colors"]) == 0 or dLegend["name"] == "Progressive":
+            PrintMsg(" \nNo legend colors defined in " + dLegend["name"] + " dLegend", 1)
 
-        if dRatings is None or len(dRatings) == 0:
-            raise MyError, ""
+        else:
+            PrintMsg(" \ncolors: " + str(dLegend["colors"]), 1)
 
-        # 4. Assemble all required legend information into a single, ordered list
-        legendList = list()
-        #PrintMsg(" \ndRatings: " + str(dRatings), 1)
+            # 4. Assemble all required legend information into a single, ordered list
+            legendList = list()
+            #PrintMsg(" \ndRatings: " + str(dRatings), 1)
+            colorList = list()
 
-        for clr in colorList:
-            try:
-                #PrintMsg("\tGetting legend info for " + clr, 1)
-                rating = dRatings[clr]
-                legendLabel = dLegend[clr]
-                legendList.append([rating, legendLabel, clr])
-                #PrintMsg(" \n" + str(rating) + ": " + str(legendLabel) + "; " + clr, 1)
+            for clr in colorList:
+                try:
+                    #PrintMsg("\tGetting legend info for " + clr, 1)
+                    rating = dRatings[clr]
+                    legendLabel = dLegend[clr]
+                    legendList.append([rating, legendLabel, clr])
+                    #PrintMsg(" \n" + str(rating) + ": " + str(legendLabel) + "; " + clr, 1)
 
-            except:
-                pass
-                #errorMsg()
+                except:
+                    pass
+                    #errorMsg()
 
         #PrintMsg(" \nlegendList: " + str(legendList), 1)
 
         # 5. Create layer definition using JSON string
 
-        if dataType.upper() in ['CHOICE', 'STRING', 'VTEXT']:
+        if dSDV["effectivelogicaldatatype"].lower() in ['choice', 'string', 'vtext']:
             #PrintMsg(" \nGetting unique values legend", 1)
-            dLayerDefinition = UniqueValuesJSON(legendList)
+            #dLayerDefinition = UniqueValuesJSON(legendList)
+            pass
 
-        elif dataType.upper() in ['FLOAT','INTEGER']:
+        elif dSDV["effectivelogicaldatatype"].lower() in ['float','integer']:
             #PrintMsg(" \nGetting class breaks legend", 1)
-            dLayerDefinition = ClassBreaksJSON(legendList)
+            #dLayerDefinition = ClassBreaksJSON(legendList)
+            pass
 
     except MyError, e:
         PrintMsg(str(e), 2)
@@ -1037,7 +1162,19 @@ def ClassBreaksJSON(legendList):
     #
     # defaultSymbol is used to draw any polygon whose value is not within one of the defined ranges
 
+    # RGB colors:
+    # 255, 0, 0 = red
+    # 255, 255, 0 = yellow
+    # 0, 255, 0 = green
+    # 0, 255, 255 = cyan
+    # 0, 0, 255 = blue
+
     try:
+        if bVerbose:
+            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
+
+        drawOutlines = False
+
         # Set outline symbology
         if drawOutlines == False:
             outLineColor = [0, 0, 0, 0]
@@ -1075,7 +1212,7 @@ def ClassBreaksJSON(legendList):
 
         #PrintMsg(" \nTesting JSON string values in dictionary: " + str(d["currentVersion"]), 1)
 
-        d["field"]  = dParams["ResultColumnName"]
+        d["field"]  = dSDV["resultcolumnname"]
         d["drawingInfo"] = dict() # new
         d["defaultSymbol"]["outline"]["color"] = outLineColor
 
@@ -1101,7 +1238,7 @@ def ClassBreaksJSON(legendList):
                 pass
 
         # Add new rating field to list of layer fields
-        d["field"] = dParams["ResultColumnName"]
+        d["field"] = dSDV["ResultColumnName"]
         d["minValue"] = minValue
 
         cnt = 0
@@ -1183,6 +1320,10 @@ def UniqueValuesJSON(legendList):
     # returns JSON string for unique values template. Use this for text, choice, vtext.
     #
     try:
+        if bVerbose:
+            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
+
+        drawOutlines = False
 
         if drawOutlines == False:
             outLineColor = [0, 0, 0, 0]
@@ -1259,7 +1400,7 @@ def UniqueValuesJSON(legendList):
 
         d["currentVersion"] = 10.01
         d["id"] = 1
-        d["name"] = dParams["SdvAttributeName"]
+        d["name"] = dSDV["attributename"]
         d["description"] = "Web Soil Survey Thematic Map"
         d["definitionExpression"] = ""
         d["geometryType"] = "esriGeometryPolygon"
@@ -1269,19 +1410,19 @@ def UniqueValuesJSON(legendList):
         d["hasAttachments"] = False
         d["htmlPopupType"] = "esriServerHTMLPopupTypeNone"
         d["drawingInfo"]["renderer"]["type"] = "uniqueValue"
-        d["drawingInfo"]["renderer"]["field1"] = dParams["ResultColumnName"]
-        d["displayField"] = dParams["ResultColumnName"]
+        d["drawingInfo"]["renderer"]["field1"] = dSDV["resultcolumnname"]
+        d["displayField"] = dSDV["resultcolumnname"]
         #PrintMsg(" \n[drawingInfo][renderer][field1]: " + str(d["drawingInfo"]["renderer"]["field1"]) + " \n ",  1)
 
         # Add new rating field to list of layer fields
         dAtt = dict()
-        dAtt["name"] = dParams["ResultColumnName"]
-        dAtt["alias"] = dParams["ResultColumnName"]
+        dAtt["name"] = dSDV["resultcolumnname"]
+        dAtt["alias"] = dSDV["resultcolumnname"]
         dAtt["type"] = "esriFieldTypeString"
         d["fields"].append(dAtt)
 
         try:
-            length = dFieldTypes["ResultDataType"].upper()[1]
+            length = dFieldTypes["resultdatatype"].upper()[1]
 
         except:
             length = 254
@@ -1309,14 +1450,14 @@ def UniqueValuesJSON(legendList):
 
             legendItems["description"] = ""  # This isn't really used unless I want to pull in a description of this individual rating
 
-            if not dParams["UnitsofMeasure"] is None and cnt == 1:
-                legendItems["label"] = label + " (" + dParams["UnitsofMeasure"] + ")"
+            if not dSDV["unitsofmeasure"] is None and cnt == 1:
+                legendItems["label"] = label + " (" + dSDV["unitsofmeasure"] + ")"
 
             else:
                 legendItems["label"] = label
 
             legendItems["symbol"] = symbol
-            d["drawingInfo"]["renderer"] = {"type" : "uniqueValue", "field1" : dParams["ResultColumnName"], "field2" : None, "field3" : None}
+            d["drawingInfo"]["renderer"] = {"type" : "uniqueValue", "field1" : dSDV["resultcolumnname"], "field2" : None, "field3" : None}
             uniqueValueInfos.append(legendItems)
 
         d["drawingInfo"]["renderer"]["uniqueValueInfos"] = uniqueValueInfos
@@ -1593,9 +1734,9 @@ def CreateMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, outputVa
 
             if len(dLabels) > 0:
                 #PrintMsg(" \nGot labels....", 1)
-                #if bVerbose:
-                #    for key, val in dLabels.items():
-                #        PrintMsg("\tdLabels[" + str(key) + "] = " + str(val), 1)
+                if bVerbose:
+                    for key, val in dLabels.items():
+                        PrintMsg("\tdLabels[" + str(key) + "] = " + str(val), 1)
 
                 if float(dLabels[1]["upper_value"]) > float(dLabels[len(dLabels)]["upper_value"]):
                     # Need to swap because legend is high-to-low
@@ -1739,10 +1880,10 @@ def CreateMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, outputVa
             try:
                 #
                 # try calculating new class breakvalues
-                #if bVerbose:
-                #    PrintMsg(" \nRight before CreateNumericLayer: " + str(dSDV["maplegendkey"]) , 1)
-                #    PrintMsg("ClassBreakValues: " + str(classBV), 1)
-                #    PrintMsg("ClassBreakLabels: " + str(classBL), 1)
+                if bVerbose:
+                    PrintMsg(" \nMapLegendKey right before CreateNumericLayer: " + str(dSDV["maplegendkey"]) , 1)
+                    PrintMsg("ClassBreakValues: " + str(classBV), 1)
+                    PrintMsg("ClassBreakLabels: " + str(classBL), 1)
 
 
                 tmpSDVLayer = CreateNumericLayer(sdvLyrFile, dLegend, outputValues, classBV, classBL)
@@ -1750,12 +1891,6 @@ def CreateMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, outputVa
                 if tmpSDVLayer is None:
                     #arcpy.RemoveJoin_management(inputLayer, os.path.basename(outputTbl))
                     raise MyError, ""
-
-                #if bVerbose:
-                #    PrintMsg(" \nAfter CreateNumericLayer: " + str(dSDV["maplegendkey"]) , 1)
-                #    PrintMsg("ClassBreakValues: " + str(tmpSDVLayer.symbology.classBreakValues), 1)
-                #    PrintMsg("ClassBreakLabels: " + str(classBL), 1)
-                #    PrintMsg(" \nTrying to update symbology using tmpSDVLayer", 1)
 
                 arcpy.mapping.UpdateLayer(df, finalMapLayer, tmpSDVLayer, True)
 
@@ -1779,10 +1914,10 @@ def CreateMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, outputVa
                         classBV.reverse()
                         classBL.reverse()
 
-                    #if bVerbose:
-                    #    PrintMsg(" \nMAPLEGENDKEY: " + str(dSDV["maplegendkey"]) , 1)
-                    #    PrintMsg("PP ClassBreakValues: " + str(classBV), 1)
-                    #    PrintMsg("PP ClassBreakLabels: " + str(classBL), 1)
+                    if bVerbose:
+                        PrintMsg(" \nMAPLEGENDKEY: " + str(dSDV["maplegendkey"]) , 1)
+                        PrintMsg("PP ClassBreakValues: " + str(classBV), 1)
+                        PrintMsg("PP ClassBreakLabels: " + str(classBL), 1)
 
                     if not dSDV["attributeuomabbrev"] is None:
                         #PrintMsg(" \nAdding " + dSDV["attributeuomabbrev"] + " to legend 953", 1)
@@ -1837,10 +1972,10 @@ def CreateMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, outputVa
                         classBV.reverse()
                         classBL.reverse()
 
-                    #if bVerbose:
-                    #    PrintMsg(" \nMAPLEGENDKEY: " + str(dSDV["maplegendkey"]) , 1)
-                    #    PrintMsg("ClassBreakValues: " + str(classBV), 1)
-                    #    PrintMsg("ClassBreakLabels: " + str(classBL), 1)
+                    if bVerbose:
+                        PrintMsg(" \nMAPLEGENDKEY: " + str(dSDV["maplegendkey"]) , 1)
+                        PrintMsg("ClassBreakValues: " + str(classBV), 1)
+                        PrintMsg("ClassBreakLabels: " + str(classBL), 1)
 
                     finalMapLayer.symbology.classBreakLabels = classBL # Got comppct symbology without this line
 
@@ -2364,7 +2499,7 @@ def ReadTable(tbl, flds, wc, level, sql):
     # to handle aggregation methods and tie-handling
     # ReadTable(dSDV["attributetablename"].upper(), flds, primSQL, level, sql)
     try:
-        arcpy.SetProgressorLabel("Reading input data")
+        arcpy.SetProgressorLabel("Reading input data (" + tbl.lower() +")")
         # wc = primSQL
         # Create dictionary to store data for this table
         dTbl = dict()
@@ -2431,7 +2566,8 @@ def GetAreasymbols(gdb):
 
 ## ===================================================================================
 def GetSDVAtts(gdb, sdvAtt):
-    # return list of months
+    # Create a dictionary containing SDV attributes for the selected attribute fields
+    #
     try:
         # Open sdvattribute table and query for [attributename] = sdvAtt
         dSDV = dict()  # dictionary that will store all sdvattribute data using column name as key
@@ -2538,12 +2674,13 @@ def GetValuesFromLegend(dLegend):
         legendValues = list()
 
         if len(dLegend) > 0:
-            # input dictionary already contains information
+
             dLabels = dLegend["labels"] # dictionary containing just the label properties such as value and labeltext
 
+
         else:
-            # input legend dictionary has no information
             dLabels = dict()
+            legendValues = list()
             dLegend["name"] = "Progressive"  # bFuzzy
             dLegend["type"] = "1"
 
@@ -3285,6 +3422,8 @@ def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl):
         if outputTbl == "":
             return outputTbl, outputValues
 
+        fldPrecision = max(0, dSDV["attributeprecision"])
+
         if dSDV["effectivelogicaldatatype"].lower() in ["integer", "float"]:
             # populate sdv_initial table and create list of min-max values
             iMax = -999999999
@@ -3294,8 +3433,13 @@ def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl):
                 with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
                     for rec in cur:
                         mukey, val = rec
+
+                        if not val is None:
+                            val = round(val, fldPrecision)
+
                         iMax = max(val, iMax)
                         iMin = min(val, iMin)
+                        rec = [mukey, val]
                         ocur.insertRow(rec)
 
             # add max and min values to list
@@ -3371,6 +3515,7 @@ def AggregateCo_DCP(gdb, sdvAtt, sdvFld, initialTbl):
             # populate sdv_initial table and create list of min-max values
             iMax = -999999999
             iMin = 999999999
+            fldPrecision = max(0, dSDV["attributeprecision"])
 
             with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause) as cur:
 
@@ -3378,7 +3523,13 @@ def AggregateCo_DCP(gdb, sdvAtt, sdvFld, initialTbl):
                     for rec in cur:
 
                         if rec[0] != lastMukey and lastMukey != "xxxx":
-                            newrec = [rec[0], rec[2], rec[3]]
+
+                            if not rec[3] is None:
+                                newrec = [rec[0], rec[2], round(rec[3], fldPrecision)]
+
+                            else:
+                                newrec =[rec[0], rec[2], None]
+
                             ocur.insertRow(newrec)
                             iMax = max(rec[3], iMax)
                             iMin = min(rec[3], iMin)
@@ -3881,6 +4032,8 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
                 #
                 # numeric values
                 if dSDV["effectivelogicaldatatype"].lower() in ['integer', 'float']:
+                    fldPrecision = max(0, dSDV["attributeprecision"])
+
                     for rec in cur:
                         # Assume that this is the rating for the component
                         # PrintMsg("\t" + str(rec[1]) + ": " + str(rec[3]), 1)
@@ -4006,7 +4159,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl):
 
         #PrintMsg(" \noutputValues: " + str(outputValues), 1)
 
-        if dSDV["effectivelogicaldatatype"].lower() == "integer":
+        if dSDV["effectivelogicaldatatype"].lower() in ["float", "integer"]:
             return outputTbl, outputValues
 
         else:
@@ -4059,11 +4212,18 @@ def AggregateCo_DCP_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
             return outputTbl, outputValues
 
         dMapunit = dict()
+        dataCnt = int(arcpy.GetCount_management(initialTbl).getOutput(0))
 
         with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
+            #cnt = 0
+            #PrintMsg(" \nReading input table " + os.path.basename(initialTbl) + "...", 1)
+            arcpy.SetProgressor("step", "Reading input table " + os.path.basename(initialTbl) + "...", 0, dataCnt, 1 )
 
             # "MUKEY", "COMPPCT_R", attribcolumn
             for rec in cur:
+                arcpy.SetProgressorPosition()
+
+                #arcpy.SetProgressorLabel("Reading input record (" + Number_Format(cnt, 0, True) + ")")
                 mukey = rec[0]
                 compPct = rec[1]
                 rating = rec[2]
@@ -4077,9 +4237,16 @@ def AggregateCo_DCP_DTWT(gdb, sdvAtt, sdvFld, initialTbl):
                 except:
                     dMapunit[mukey] = [[compPct, rating]]
 
+
+        del initialTbl  # Trying to save some memory 2016-06-23
+
+
         with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
+            #PrintMsg(" \nWriting to output table " + outputTbl + "...", 1)
+            arcpy.SetProgressor("step", "Writing to output table (" + os.path.basename(outputTbl) + ")", 0, len(dMapunit), 1 )
 
             for mukey, coVals in dMapunit.items():
+                arcpy.SetProgressorPosition()
                 # Grab the first pair of values (pct, depth) from the sorted list.
                 # This is the dominant component rating using tie breaker setting
                 dcpRating = SortData(coVals)
@@ -4785,8 +4952,6 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
         missingDomain = list()
         dCase = dict()
 
-
-
         # Read initial table for non-numeric data types. Capture domain values and all component ratings.
         #
         if bVerbose:
@@ -4886,8 +5051,6 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
         else:
             raise MyError, "Problem with handling domain values of type '" + dSDV["attributelogicaldatatype"]
 
-
-
         # Aggregate monthly index values to a single value for each component??? Would it not be better to
         # create a new function for COMONTH-DCD? Then I could simplify this function.
         #
@@ -4920,8 +5083,8 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     else:
                         val = indexes[0]
 
-                    if cokey in ['11828955', '11828954', '11828956', '11828957'] and bVerbose:
-                        PrintMsg(" \nFinal index value for cokey " + cokey + ": " + str(dCompPct[cokey]) + "% , " + str(val), 1)
+                    #if cokey in ['11828955', '11828954', '11828956', '11828957'] and bVerbose:
+                    #    PrintMsg(" \nFinal index value for cokey " + cokey + ": " + str(dCompPct[cokey]) + "% , " + str(val), 1)
 
                     #PrintMsg("\tval: " + str(indexes), 1)
                     dComp[cokey] = val
@@ -4943,8 +5106,8 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     else:
                         val = indexes[0]
 
-                    if cokey in ['11828955', '11828954', '11828956', '11828957'] and bVerbose:
-                        PrintMsg(" \nFinal index value for cokey " + cokey + ": " + str(dCompPct[cokey]) + "% , " + str(val), 1)
+                    #if cokey in ['11828955', '11828954', '11828956', '11828957'] and bVerbose:
+                    #    PrintMsg(" \nFinal index value for cokey " + cokey + ": " + str(dCompPct[cokey]) + "% , " + str(val), 1)
 
                     dComp[cokey] = val
 
@@ -4971,8 +5134,7 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
 
         if bVerbose:
             PrintMsg(" \nWriting map unit rating data to final output table", 1)
-
-        #PrintMsg(" \nTieBreakRule: " + tieBreaker, 1)
+            PrintMsg(" \nUsing tiebreaker '" + tieBreaker + "' (where choices are " + dSDV["tiebreaklowlabel"] + " or " + dSDV["tiebreakhighlabel"] + ")", 1)
 
         if tieBreaker == dSDV["tiebreakhighlabel"]:
             with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
@@ -5006,10 +5168,10 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=True)[0]
                     muVal = SortData(muVals)
 
-                    if mukey == '2496170' and bVerbose:
+                    #if mukey == '2496170' and bVerbose:
                         #testVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=True)
                         #PrintMsg("\tSorted order for component data: " + str(testVals), 1)
-                        PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
+                    #    PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
 
 
                     newrec = [mukey, muVal[0], domainValues[muVal[1]]]
@@ -5051,14 +5213,15 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl):
                     #
                     #newVals = sorted(muVals, key = lambda x: (-x[0], -x[1]))[0]
                     #newVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=False)[0]
+
                     muVal = SortData(muVals)
 
-                    if mukey == '2496170' and bVerbose:
+                    #if mukey == '2496170' and bVerbose:
                         #testVals = sorted(sorted(muVals, key = lambda x : x[0], reverse=True), key = lambda x : x[1], reverse=False)
                         #PrintMsg("\tSorted order for component data: " + str(testVals), 1)
-                        PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
+                    #    PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
 
-
+                    #PrintMsg(" \n" + tieBreaker + ". Checking index values for mukey " + mukey + ": " + str(muVal[0]) + ", " + str(domainValues[muVal[1]]), 1)
                     newrec = [mukey, muVal[0], domainValues[muVal[1]]]
                     ocur.insertRow(newrec)
 
@@ -6282,7 +6445,7 @@ def UpdateMetadata(outputWS, target, parameterString):
 ## ===================================================================================
 
 # Import system modules
-import arcpy, sys, string, os, traceback, locale, time, operator
+import arcpy, sys, string, os, traceback, locale, time, operator, json
 import xml.etree.cElementTree as ET
 
 # Create the environment
@@ -6306,7 +6469,7 @@ try:
     bNulls = arcpy.GetParameter(14)               # Include NULL values in rating summary or weighting
     sRV = arcpy.GetParameter(15)                  # flag to switch from standard RV attributes to low or high
 
-    bVerbose = True                               # hard-coded boolean to print diagnostic messages
+    bVerbose = False                               # hard-coded boolean to print diagnostic messages
 
     # All comppct_r queries have been set to >=
 
@@ -6511,9 +6674,8 @@ try:
         domainValuesUp = list()
 
 
-
     # Get map legend information from the maplegendxml string
-    dLegend = GetMapLegend()    # dictionary containing all maplegendxml properties
+    dLegend = GetMapLegend(dSDV)    # dictionary containing all maplegendxml properties
 
     if len(dLegend) > 0:
         legendValues = GetValuesFromLegend(dLegend)
@@ -6552,6 +6714,9 @@ try:
 
         else:
             dSDV["notratedphrase"] = 'Not rated' # no way to know if this is correct until all of the data has been processed
+
+
+
         #
         # Next see if the not rated value exists in the domain from mdstatdomdet or map legend values
         bNotRated = False
@@ -6575,6 +6740,16 @@ try:
         for val in domainValues:
             # PrintMsg("\tAdding key value (" + val.upper() + ") to dValues dictionary", 1)
             dValues[str(val).upper()] = [len(dValues), val]  # new 02/03
+
+
+
+
+    # Test JSON code for symbology
+    if bVerbose:
+        testJSON = CreateJSONLegend(dLegend)
+        PrintMsg(" \nTestJSON: " + str(testJSON) + " \n", 1)
+
+
 
     # For the result column we need to translate the sdvattribute value to an ArcGIS field data type
     #  'Choice' 'Float' 'Integer' 'string' 'String' 'VText'
@@ -6623,9 +6798,8 @@ try:
             hzQuery = "((" + tf + " = " + str(top) + " or " + bf + " = " + str(bot) + ") or ( " + tf + " <= " + str(top) + " and " + bf + " >= " + str(bot) + " ) )"
 
         else:
-            topRng = str(tuple(range(top, bot)))
-            botRng = str(tuple(range((top + 1), (bot + 1))))
-            hzQuery = "((" + tf + " in " + topRng + " or " + bf + " in " + botRng + ") or ( " + tf + " <= " + str(top) + " and " + bf + " >= " + str(bot) + " ) )"
+            rng = str(tuple(range(top, bot)))
+            hzQuery = "((" + tf + " in " + rng + " or " + bf + " in " + rng + ") or ( " + tf + " <= " + str(top) + " and " + bf + " >= " + str(bot) + " ) )"
 
     elif secCst != "":
         #PrintMsg(" \nAdding primary and secondary constraint to layer name (" + primCst + " " + secCst + ")", 1)
@@ -6949,15 +7123,18 @@ try:
     if tblList == ['MAPUNIT', 'COMPONENT', 'CHORIZON']:
         if CreateRatingTable3(tblList, dSDV["attributetablename"].upper(), dComponent, dHorizon, initialTbl) == False:
             raise MyError, ""
+        del dComponent, dHorizon
 
     elif tblList == ['MAPUNIT', 'COMPONENT']:
         if CreateRatingTable2(tblList, dSDV["attributetablename"].upper(), dComponent, initialTbl) == False:
             raise MyError, ""
+        del dComponent
 
     elif tblList == ['MAPUNIT', 'COMPONENT', 'CHORIZON', dSDV["attributetablename"].upper()]:
         # COMPONENT, CHORIZON, CHTEXTUREGRP
         if CreateRatingTable3S(tblList, dSDV["attributetablename"].upper(), dComponent, dHorizon, dTbl, initialTbl) == False:
             raise MyError, ""
+        del dComponent, dHorizon
 
     elif tblList == ['MAPUNIT']:
         # No aggregation needed
@@ -6972,6 +7149,7 @@ try:
         if dSDV["attributetablename"].upper() == "COINTERP":
             if CreateRatingInterps(tblList, dSDV["attributetablename"].upper(), dComponent, dTbl, initialTbl) == False:
                 raise MyError, ""
+            del dComponent
 
         else:
             if CreateRatingTable2S(tblList, dSDV["attributetablename"].upper(), dComponent, dTbl, initialTbl) == False:
@@ -6981,6 +7159,7 @@ try:
         if dSDV["attributetablename"].upper() == "COSOILMOIST":
             if CreateSoilMoistureTable(tblList, dSDV["attributetablename"].upper(), dComponent, dTbl, initialTbl, begMo, endMo) == False:
                 raise MyError, ""
+            del dMonth, dComponent # trying to lower memory usage
 
         else:
             PrintMsg(" \nCannot handle table:" + dSDV["attributetablename"].upper(), 1)
