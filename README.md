@@ -56,3 +56,5 @@ This is an ArcToolbox designed to process and manage FY2017 SSURGO downloads fro
 <li>Merge Template Databases by Map - Tool used to append data from multiple soil surveys into a single, custom Access database for the selected surveys in a map layer. </li>
 <li>Project SSURGO Datasets - Projects a selected set of SSURGO downloads (WGS 1984 shapefiles) to a new folder with a projected coordinate system.</li>
 </ul>
+
+<a href="https://www.nrcs.usda.gov/wps/portal/nrcs/detail/soils/survey/geo/?cid=nrcs142p2_053628"> Description of Gridded SSURGO Databasex</a>
