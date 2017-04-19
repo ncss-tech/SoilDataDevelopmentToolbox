@@ -57,4 +57,4 @@ This is an ArcToolbox designed to process and manage FY2017 SSURGO downloads fro
 <li>Project SSURGO Datasets - Projects a selected set of SSURGO downloads (WGS 1984 shapefiles) to a new folder with a projected coordinate system.</li>
 </ul>
 
-<a href="https://www.nrcs.usda.gov/wps/portal/nrcs/detail/soils/survey/geo/?cid=nrcs142p2_053628"> Description of Gridded SSURGO Databasex</a>
+<a href="https://www.nrcs.usda.gov/wps/portal/nrcs/detail/soils/survey/geo/?cid=nrcs142p2_053628"> Description of Gridded SSURGO Database</a>
