@@ -59,6 +59,7 @@ This is an ArcToolbox designed to process and manage FY2017 SSURGO downloads fro
 
 <ul>
 <li><a href="https://www.nrcs.usda.gov/wps/portal/nrcs/detail/soils/survey/geo/?cid=nrcs142p2_053628"> Description of Gridded SSURGO Database</a></li>
+<li><a href="https://www.nrcs.usda.gov/wps/PA_NRCSConsumption/download?cid=nrcs142p2_051847&ext=pdf"> gSSURGO User Guide</a></li>
 <li><a href="https://youtu.be/iJyv71M85WE"> Webinar - gSSURGO for Disaster Recovery Planning</a></li>
 </ul>
 
