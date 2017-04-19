@@ -1,5 +1,8 @@
 # SoilDataDevelopmentToolbox
 This is an ArcToolbox designed to process and manage FY2017 SSURGO downloads from Web Soil Survey and use them to create gSSURGO databases. Also includes gSSURGO Mapping toolset for creating Soil Data Viewer-style maps and the gSSURGO Reporting toolset. Version date 2017-01-11.
+
+<a href="https://www.nrcs.usda.gov/wps/PA_NRCSConsumption/download?cid=nrcseprd362254&ext=zip"> Soil Data Management Toolbox</a>
+
 # Download SSURGO Toolset
 <ul>
 <li>Download SSURGO by Areasymbol - Use Soil Data Access and Web Soil Survey download page to get SSURGO datasets. User can a wildcard to query the database by Areasymbol or by age. </li> 
