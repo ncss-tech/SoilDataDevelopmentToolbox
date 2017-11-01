@@ -1,6 +1,5 @@
 # SoilDataDevelopmentToolbox
 
-<p><strong>Soil Data Development Toolbox</strong></p>
 <ul>
   <li>Download SSURGO Toolset</li>
     <ul><li>Download SSURGO by AreaSymbol ~ Use Soil Data Access and Web Soil Survey download page to get SSURGO datasets. User can a wildcard to query the database by Areasymbol or by age.</li></ul>
@@ -29,7 +28,7 @@
     <ul><li>Interp Rating Reasons ~ Creates a report based upon the rating reasons map layers created by the 'Map Interpretation Reasons' tool.</li></ul>
    <ul><li>Pre-Summary ~ Creates simple report for gSSURGO Map layer. Information from the different related tables (mapunit, component, horizon) will be incorporated.</li></ul>
   <ul> <li> Rating Acres ~ Creates simple acreage report for gSSURGO Map layer. Map layer must be based upon a text or integer field. Floating point values cannot be categorized.</li></ul>
- <li> SSURGO Data Management Toolset</li></ul>
+ <li> SSURGO Data Management Toolset</li>
     <ul><li>Merge Soil Shapefiles ~ Tool used to append soil polygon shapefiles from multiple soil surveys into a single shapefile.</li>
    <ul><li> Merge Soil Shapefiles by DB ~ Tool used to append soil polygon shapefiles from multiple soil surveys into a single shapefile, matching the contents of a Template database.</li></ul>
     <ul><li>Merge Soil Shapefiles by Map ~ Tool used to append soil polygon shapefiles from multiple soil surveys into a single shapefile, matching the selection in a survey boundary map layer.</li></ul>
