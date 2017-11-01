@@ -36,3 +36,17 @@
    <ul><li> Merge Template Databases by Map ~ Tool used to append data from multiple soil surveys into a single, custom Access database for the selected surveys in a map layer.</li></ul>
    <ul> <li>Project SSURGO Datasets ~ Projects a selected set of SSURGO downloads (WGS 1984 shapefiles) to a new folder with a projected coordinate system.</li></ul>
 </ul>
+ 
+ Additonal Information:
+ 
+ <ul><li>
+<a href="https://www.nrcs.usda.gov/wps/portal/nrcs/detail/soils/survey/geo/?cid=nrcs142p2_053628">Description of Gridded Soil Survey Geographic (gSSURGO) Database</a></li>
+</ul>
+ <ul><li>
+<a href="https://www.youtube.com/watch?v=iJyv71M85WE&t=1s">gSSURGO for Dissaster Recovery Planning</a></li>
+</ul>
+<ul><li>
+<a href="https://www.youtube.com/watch?v=5liZL2WLoIw">Working with the New FY2015 SSURGO and gSSURGO (10/2014)</a></li>
+</ul>
+ 
+ 
