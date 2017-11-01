@@ -258,8 +258,8 @@ def SnapToNLCD(inputFC, iRaster, theSnapRaster):
         PrintMsg(" \nAligning output raster to match NLCD:", 0)
         PrintMsg("\tUR: " + sX2 + sY2 + " " + theUnits.lower(), 0)
         PrintMsg("\tLL: " + sX1 + sY1 + " " + theUnits.lower(), 0)
-        PrintMsg(" \n\tNumber of rows =    \t" + Number_Format(numRows * 30 / iRaster), 0)
-        PrintMsg("\tNumber of columns = \t" + Number_Format(numCols * 30 / iRaster), 0)
+        PrintMsg(" \n\tNumber of rows =    \t" + str(numRows * 30 / iRaster), 0)
+        PrintMsg("\tNumber of columns = \t" + str(numCols * 30 / iRaster), 0)
 
         return theExtent
 
@@ -681,7 +681,7 @@ def elapsedTime(start):
 def Number_Format(num, places=0, bCommas=True):
     try:
     # Format a number according to locality and given places
-        #locale.setlocale(locale.LC_ALL, "")
+        locale.setlocale(locale.LC_ALL, "")
         if bCommas:
             theNumber = locale.format("%.*f", (places, num), True)
 
@@ -805,9 +805,15 @@ def CheckStatistics(outputRaster):
         return False
 
 ## ===================================================================================
-def UpdateMetadata(outputWS, target, surveyInfo, iRaster):
+def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
     #
     # Used for non-ISO metadata
+    #
+    # Process:
+    #     1. Read gSSURGO_MapunitRaster.xml
+    #     2. Replace 'XX" keywords with updated information
+    #     3. Write new file xxImport.xml
+    #     4. Import xxImport.xml to raster
     #
     # Search words:  xxSTATExx, xxSURVEYSxx, xxTODAYxx, xxFYxx
     #
@@ -819,12 +825,13 @@ def UpdateMetadata(outputWS, target, surveyInfo, iRaster):
         dInstall = arcpy.GetInstallInfo()
         installPath = dInstall["InstallDir"]
         prod = r"Metadata/Translator/ARCGIS2FGDC.xml"
-        mdTranslator = os.path.join(installPath, prod)
+        mdTranslator = os.path.join(installPath, prod)  # This file is not being used
 
         # Define input and output XML files
         mdImport = os.path.join(env.scratchFolder, "xxImport.xml")  # the metadata xml that will provide the updated info
         xmlPath = os.path.dirname(sys.argv[0])
         mdExport = os.path.join(xmlPath, "gSSURGO_MapunitRaster.xml") # original template metadata in script directory
+        #PrintMsg(" \nParsing gSSURGO template metadata file: " + mdExport, 1)
 
         # Cleanup output XML files from previous runs
         if os.path.isfile(mdImport):
@@ -833,7 +840,7 @@ def UpdateMetadata(outputWS, target, surveyInfo, iRaster):
         # Get replacement value for the search words
         #
         stDict = StateNames()
-        st = os.path.basename(outputWS)[8:-4]
+        st = os.path.basename(theGDB)[8:-4]
 
         if st in stDict:
             # Get state name from the geodatabase
@@ -869,7 +876,7 @@ def UpdateMetadata(outputWS, target, surveyInfo, iRaster):
             # title, edition, issue
             #
             for child in citeInfo:
-                #PrintMsg("\t\t" + str(child.tag), 0)
+                PrintMsg("\t\t" + str(child.tag), 0)
                 if child.tag == "title":
                     if child.text.find('xxSTATExx') >= 0:
                         child.text = child.text.replace('xxSTATExx', mdState)
@@ -890,7 +897,7 @@ def UpdateMetadata(outputWS, target, surveyInfo, iRaster):
         ePlace = root.find('idinfo/keywords/place')
 
         if not ePlace is None:
-            #PrintMsg("\t\tplace keywords", 0)
+            PrintMsg("\t\tplace keywords", 0)
 
             for child in ePlace.iter('placekey'):
                 if child.text == "xxSTATExx":
@@ -902,7 +909,7 @@ def UpdateMetadata(outputWS, target, surveyInfo, iRaster):
         # Update credits
         eIdInfo = root.find('idinfo')
         if not eIdInfo is None:
-            #PrintMsg("\t\tcredits", 0)
+            PrintMsg("\t\tcredits", 0)
 
             for child in eIdInfo.iter('datacred'):
                 sCreds = child.text
@@ -925,7 +932,9 @@ def UpdateMetadata(outputWS, target, surveyInfo, iRaster):
 
             if ip.find("xxFYxx") >= 0:
                 idPurpose.text = ip.replace("xxFYxx", fy)
-                #PrintMsg("\t\tpurpose", 0)
+                PrintMsg("\t\tpurpose", 0)
+
+        # PrintMsg(" \nSaving template metadata to " + mdImport, 1)
 
         #  create new xml file which will be imported, thereby updating the table's metadata
         tree.write(mdImport, encoding="utf-8", xml_declaration=None, default_namespace=None, method="xml")
@@ -933,19 +942,21 @@ def UpdateMetadata(outputWS, target, surveyInfo, iRaster):
         # import updated metadata to the geodatabase table
         # Using three different methods with the same XML file works for ArcGIS 10.1
         #
-        #PrintMsg("\t\tApplying metadata translators...")
-        arcpy.MetadataImporter_conversion (mdImport, target)
-        arcpy.ImportMetadata_conversion(mdImport, "FROM_FGDC", target, "DISABLED")
+        # PrintMsg(" \nImporting metadata " + mdImport + " to " + target, 1)
+        arcpy.MetadataImporter_conversion(mdImport, target)  # This works. Raster now has metadata with 'XX keywords'. Is this step neccessary to update the source information?
+
+        #PrintMsg(" \nUpdating metadata for " + target + " using file " + mdImport, 1)
+        #arcpy.ImportMetadata_conversion(mdImport, "FROM_FGDC", target, "DISABLED")  # Tool Validate problem here
+        arcpy.MetadataImporter_conversion(target, mdImport) # Try this alternate tool with Windows 10.
 
         # delete the temporary xml metadata file
         if os.path.isfile(mdImport):
-            os.remove(mdImport)
+            #os.remove(mdImport)
             pass
 
         # delete metadata tool logs
         logFolder = os.path.dirname(env.scratchFolder)
         logFile = os.path.basename(mdImport).split(".")[0] + "*"
-
 
         currentWS = env.workspace
         env.workspace = logFolder
@@ -990,7 +1001,7 @@ def CheckSpatialReference(inputFC):
         return False
 
 ## ===================================================================================
-def ConvertToRaster(theGDB, outputWS, theSnapRaster, iRaster, bTiled):
+def ConvertToRaster(target, theSnapRaster, iRaster, bTiled):
     # main function used for raster conversion
     try:
         #
@@ -1000,9 +1011,18 @@ def ConvertToRaster(theGDB, outputWS, theSnapRaster, iRaster, bTiled):
         # Set geoprocessing environment
         #
         env.overwriteOutput = True
-        env.workspace = theGDB
+        #env.workspace = theGDB
         arcpy.env.compression = "LZ77"
         env.tileSize = "128 128"
+        desc = arcpy.Describe(target)
+
+        if desc.dataType.lower() == "workspace":
+            theGDB = target
+            inputFC = os.path.join(theGDB, "MUPOLYGON")
+
+        elif desc.dataType.lower() == "featureclass":
+            inputFC = target
+            theGDB = os.path.dirname(target)
 
         # Make sure that the env.scratchGDB is NOT Default.gdb. This causes problems for
         # some unknown reason.
@@ -1026,28 +1046,22 @@ def ConvertToRaster(theGDB, outputWS, theSnapRaster, iRaster, bTiled):
 
         # Need to check for dashes or spaces in folder names or leading numbers in database or raster names
 
-        if outputWS != "":
-            # determine type of output workspace and use it to set the output raster format
-            # try to find the name of the tile from the geodatabase name
-            # set the name of the output raster using the tilename and cell resolution
-            if outputWS[-4:].lower() in ['.gdb','.mdb']:
-                rasterExt = ""
+        # create final raster in same workspace as input polygon featureclass
+        rasterExt = ""
 
-            else:
-                rasterExt = ".img"
-
-            tileName = os.path.basename(theGDB)[os.path.basename(theGDB).rfind("_") + 1:os.path.basename(theGDB).rfind(".gdb")]
-            outputRaster = os.path.join(outputWS, "MapunitRaster_" + tileName.lower() + "_" + str(iRaster) + "m" + rasterExt)
+        if desc.dataType.lower() == "workspace":
+            # input is a geodatabase, skip the extra bit in the tilename. Just convert the standard MUPOLYGON.
+            outputRaster = os.path.join(theGDB, "MapunitRaster_" + str(iRaster) + "m")
 
         else:
-            # create final raster in same workspace as input polygon featureclass
-            rasterExt = ""
-            outputWS = theGDB
-            tileName = os.path.basename(theGDB)[os.path.basename(theGDB).rfind("_") + 1:os.path.basename(theGDB).rfind(".gdb")]
-            # outputRaster = os.path.join(theGDB, "MapunitRaster_"    + tileName + "_" + str(iRaster) + "m")
-            outputRaster = os.path.join(theGDB, "MapunitRaster_" + tileName.lower() + "_" + str(iRaster) + "m")
+            # Input is a featureclass
+            if os.path.basename(inputFC).upper() == "MUPOLYGON":
+                outputRaster = os.path.join(theGDB, "MapunitRaster_" + str(iRaster) + "m")
 
-        inputFC = os.path.join(theGDB, "MUPOLYGON")
+            else:
+                tileName = inputFC[(inputFC.rfind("_") + 1):]
+                outputRaster = os.path.join(theGDB, "MapunitRaster_" + tileName.lower() + "_" + str(iRaster) + "m")
+
         inputSA = os.path.join(theGDB, "SAPOLYGON")
 
         if not arcpy.Exists(inputFC):
@@ -1121,7 +1135,8 @@ def ConvertToRaster(theGDB, outputWS, theSnapRaster, iRaster, bTiled):
 
             sqlClause = ("DISTINCT", None)
 
-            with arcpy.da.SearchCursor(inputSA, ["AREASYMBOL"], sql_clause=sqlClause) as cur:
+            #with arcpy.da.SearchCursor(inputSA, ["AREASYMBOL"], sql_clause=sqlClause) as cur:
+            with arcpy.da.SearchCursor(inputFC, ["AREASYMBOL"], sql_clause=sqlClause) as cur:
                 # Create a unique, UNSORTED list of AREASYMBOL values in the SAPOLYGON featureclass
                 # The original order of polygons in the SAPOLYGON featureclass should be sorted spatially.
                 # Not sure if this order will help mosaic, but worth trying.
@@ -1338,7 +1353,7 @@ def ConvertToRaster(theGDB, outputWS, theSnapRaster, iRaster, bTiled):
                 PrintMsg("\tInitial attempt to create statistics failed, trying another method...", 0)
                 time.sleep(3)
 
-                if arcpy.Exists(os.path.join(outputWS, "SAPOLYGON")):
+                if arcpy.Exists(os.path.join(theGDB, "SAPOLYGON")):
                     # Try running CalculateStatistics with an AOI to limit the area that is processed
                     # if we have to use SAPOLYGON as an AOI, this will be REALLY slow
                     #arcpy.CalculateStatistics_management (outputRaster, 1, 1, "", "OVERWRITE", os.path.join(outputWS, "SAPOLYGON") )
@@ -1423,7 +1438,7 @@ def ConvertToRaster(theGDB, outputWS, theSnapRaster, iRaster, bTiled):
         arcpy.SetProgressorLabel("Updating metadata...")
 
         arcpy.SetProgressorLabel("Compacting database...")
-        bMetaData = UpdateMetadata(outputWS, outputRaster, surveyInfo, iRaster)
+        bMetaData = UpdateMetadata(theGDB, outputRaster, surveyInfo, iRaster)
 
         arcpy.SetProgressorLabel("Compacting database...")
         PrintMsg("\tCompacting geodatabase...", 0)
@@ -1482,10 +1497,10 @@ try:
     if __name__ == "__main__":
         # get parameters
         theGDB = arcpy.GetParameterAsText(0)                   # required geodatabase containing MUPOLYGON featureclass
-        outputWS = arcpy.GetParameterAsText(1)                # optional output workspace. If not set, output raster will be created in the same workspace
-        theSnapRaster = arcpy.GetParameterAsText(2)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
-        iRaster = arcpy.GetParameter(3)                       # output raster resolution
-        bTiled = arcpy.GetParameter(4)                                         # boolean - split raster into survey-tiles and then mosaic
+        #outputWS = arcpy.GetParameterAsText(1)                # optional output workspace. If not set, output raster will be created in the same workspace
+        theSnapRaster = arcpy.GetParameterAsText(1)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
+        iRaster = arcpy.GetParameter(2)                       # output raster resolution
+        bTiled = arcpy.GetParameter(3)                                         # boolean - split raster into survey-tiles and then mosaic
 
         env.overwriteOutput= True
 
@@ -1500,7 +1515,7 @@ try:
             raise MyError, "Required Spatial Analyst extension is not available"
 
         # Call function that does all of the work
-        bRaster = ConvertToRaster(theGDB, outputWS, theSnapRaster, iRaster, bTiled)
+        bRaster = ConvertToRaster(theGDB, theSnapRaster, iRaster, bTiled)
         arcpy.CheckInExtension("Spatial")
 
 except MyError, e:

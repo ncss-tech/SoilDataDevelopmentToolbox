@@ -2,7 +2,7 @@
   <idinfo>
     <citation>
       <citeinfo>
-        <title>Soils_2016_12_10_21_16_13</title>
+        <title>MUPOLYGON</title>
         <geoform>vector digital data</geoform>
       </citeinfo>
     </citation>
@@ -15,24 +15,24 @@
     </status>
     <spdom>
       <bounding>
-        <westbc>-99.297020</westbc>
-        <eastbc>-99.275353</eastbc>
-        <northbc>39.574323</northbc>
-        <southbc>39.562930</southbc>
+        <westbc>-99.610570</westbc>
+        <eastbc>-99.574227</eastbc>
+        <northbc>39.147166</northbc>
+        <southbc>39.116903</southbc>
       </bounding>
     </spdom>
     <keywords>
       <theme>
         <themekt>None</themekt>
-        <themekey>soils</themekey>
-        <themekey>Web Soil Survey</themekey>
         <themekey>SSURGO</themekey>
+        <themekey>Web Soil Survey</themekey>
+        <themekey>soils</themekey>
       </theme>
       <theme>
         <themekt>ISO 19115 Topic Categories</themekt>
-        <themekey>geoscientific information</themekey>
-        <themekey>environment</themekey>
         <themekey>farming</themekey>
+        <themekey>environment</themekey>
+        <themekey>geoscientific information</themekey>
       </theme>
       <place>
         <placekt>Counties and County Equivalents of the States of the United States and the District of Columbia (FIPS Pub 6-3)</placekt>
@@ -60,7 +60,7 @@
       </cntinfo>
     </ptcontac>
     <datacred>xxCREDITSxx</datacred>
-    <native>Microsoft Windows 7 Version 6.1 (Build 7601) Service Pack 1; Esri ArcGIS 10.3.0.4322</native>
+    <native> Version 6.2 (Build 9200) ; Esri ArcGIS 10.4.1.5686</native>
   </idinfo>
   <dataqual>
     <lineage>
@@ -101,7 +101,7 @@
     <ptvctinf>
       <sdtsterm>
         <sdtstype>GT-polygon composed of chains</sdtstype>
-        <ptvctcnt>38</ptvctcnt>
+        <ptvctcnt>125</ptvctcnt>
       </sdtsterm>
     </ptvctinf>
   </spdoinfo>
@@ -123,33 +123,43 @@
   <eainfo>
     <detailed>
       <enttyp>
-        <enttypl>Soils_2016_12_10_21_16_13</enttypl>
+        <enttypl>MUPOLYGON</enttypl>
       </enttyp>
       <attr>
-        <attrlabl>Shape_Area</attrlabl>
-        <attrdef>Area of feature in internal units squared.</attrdef>
+        <attrlabl>OBJECTID</attrlabl>
+        <attrdef>Internal feature number.</attrdef>
         <attrdefs>Esri</attrdefs>
         <attrdomv>
-          <udom>Positive real numbers that are automatically generated.</udom>
+          <udom>Sequential unique whole numbers that are automatically generated.</udom>
         </attrdomv>
+      </attr>
+      <attr>
+        <attrlabl>muname</attrlabl>
+      </attr>
+      <attr>
+        <attrlabl>pHwater</attrlabl>
+      </attr>
+      <attr>
+        <attrlabl>natmusym</attrlabl>
+      </attr>
+      <attr>
+        <attrlabl>NirrCpScls</attrlabl>
+      </attr>
+      <attr>
+        <attrlabl>AREASYMBOL</attrlabl>
+        <attrdef>A symbol that uniquely identifies a single occurrence of a particular type of area (e.g. Lancaster Co., Nebraska is NE109).</attrdef>
+      </attr>
+      <attr>
+        <attrlabl>DwellWB</attrlabl>
       </attr>
       <attr>
         <attrlabl>FrmlndCls</attrlabl>
       </attr>
       <attr>
-        <attrlabl>SPATIALVER</attrlabl>
-        <attrdef>A sequential integer number used to denote the serial version of the spatial data for a soil survey area.</attrdef>
+        <attrlabl>NirrCpCls</attrlabl>
       </attr>
       <attr>
         <attrlabl>Acres</attrlabl>
-      </attr>
-      <attr>
-        <attrlabl>MUKEY</attrlabl>
-        <attrdef>A non-connotative string of characters used to uniquely identify a record in the Mapunit table.</attrdef>
-      </attr>
-      <attr>
-        <attrlabl>MUSYM</attrlabl>
-        <attrdef>The symbol used to uniquely identify the soil mapunit in the soil survey.</attrdef>
       </attr>
       <attr>
         <attrlabl>Shape</attrlabl>
@@ -160,26 +170,31 @@
         </attrdomv>
       </attr>
       <attr>
-        <attrlabl>Slope</attrlabl>
+        <attrlabl>MUSYM</attrlabl>
+        <attrdef>The symbol used to uniquely identify the soil mapunit in the soil survey.</attrdef>
       </attr>
       <attr>
-        <attrlabl>AREASYMBOL</attrlabl>
-        <attrdef>A symbol that uniquely identifies a single occurrence of a particular type of area (e.g. Lancaster Co., Nebraska is NE109).</attrdef>
+        <attrlabl>SPATIALVER</attrlabl>
+        <attrdef>A sequential integer number used to denote the serial version of the spatial data for a soil survey area.</attrdef>
       </attr>
       <attr>
-        <attrlabl>CaC03</attrlabl>
+        <attrlabl>HydrcRatng</attrlabl>
       </attr>
       <attr>
-        <attrlabl>OBJECTID</attrlabl>
-        <attrdef>Internal feature number.</attrdef>
-        <attrdefs>Esri</attrdefs>
-        <attrdomv>
-          <udom>Sequential unique whole numbers that are automatically generated.</udom>
-        </attrdomv>
+        <attrlabl>MUKEY</attrlabl>
+        <attrdef>A non-connotative string of characters used to uniquely identify a record in the Mapunit table.</attrdef>
       </attr>
       <attr>
         <attrlabl>Shape_Length</attrlabl>
         <attrdef>Length of feature in internal units.</attrdef>
+        <attrdefs>Esri</attrdefs>
+        <attrdomv>
+          <udom>Positive real numbers that are automatically generated.</udom>
+        </attrdomv>
+      </attr>
+      <attr>
+        <attrlabl>Shape_Area</attrlabl>
+        <attrdef>Area of feature in internal units squared.</attrdef>
         <attrdefs>Esri</attrdefs>
         <attrdomv>
           <udom>Positive real numbers that are automatically generated.</udom>
@@ -229,7 +244,7 @@
     </stdorder>
   </distinfo>
   <metainfo>
-    <metd>20161210</metd>
+    <metd>20170705</metd>
     <metc>
       <cntinfo>
         <cntorgp>
@@ -237,8 +252,8 @@
         </cntorgp>
         <cntaddr>
           <addrtype>mailing</addrtype>
-          <address>100 Centennial Mall North</address>
           <address>Federal Building, Room 152</address>
+          <address>100 Centennial Mall North</address>
           <city>Lincoln</city>
           <state>NE</state>
           <postal>68508-3866</postal>

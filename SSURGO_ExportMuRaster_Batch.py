@@ -250,13 +250,13 @@ from arcpy.sa import *
 # Create the Geoprocessor object
 try:
     # get parameters
-    wc = arcpy.GetParameterAsText(0)                      # Wildcard filter used to create geodatabase list
-    inputFolder = arcpy.GetParameter(1)             # Folder containing all geodatabases to be processed
-    gdbList = arcpy.GetParameter(2)                       # list of geodatabase names to be processed
-    outputWS = arcpy.GetParameterAsText(3)                # optional output workspace. If not set, output raster will be created in the same workspace
-    theSnapRaster = arcpy.GetParameterAsText(4)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
-    iRaster = arcpy.GetParameter(5)                       # output raster resolution
-    bTiled = arcpy.GetParameter(6)                        # breakup raster conversion using AREASYMBOL attribute to tile the process
+    dataType = arcpy.GetParameter(0)                      # 'All MUPOLYGON layers' or 'Standard MUPOLYGON layer'. Only used in the Validation code.
+    inputFolder = arcpy.GetParameterAsText(1)             # Folder containing all geodatabases to be processed
+    inputList = arcpy.GetParameter(2)                     # list of geodatabase names to be processed
+    theSnapRaster = arcpy.GetParameterAsText(3)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
+    iRaster = arcpy.GetParameter(4)                       # output raster resolution
+    bTiled = arcpy.GetParameter(5)                        # breakup raster conversion using AREASYMBOL attribute to tile the process
+
     import SSURGO_ExportMuRaster
 
     env.overwriteOutput = True
@@ -265,15 +265,16 @@ try:
     start = time.time()
     arcpy.SetProgressor("default", "Converting soil polygon layers to raster...")
 
-    for db in gdbList:
-        arcpy.SetProgressorLabel("Creating map unit raster for " + db)
-        theWS = os.path.join(str(inputFolder), db)
-        PrintMsg(" \n" + (65 * "*"), 0)
-        PrintMsg("Processing " + theWS, 0)
-        PrintMsg(" \n" + (65 * "*"), 0)
-        bRaster = SSURGO_ExportMuRaster.ConvertToRaster(theWS, outputWS, theSnapRaster, iRaster, bTiled)
+    for input in inputList:
+        # gdb could be a geodatabase or an mupolygon featureclass
+        arcpy.SetProgressorLabel("Creating map unit raster for " + input)
 
-    theMsg = " \nTotal processing time for " + str(len(gdbList)) + " rasters: " + elapsedTime(start) + " \n "
+        PrintMsg(" \n" + (65 * "*"), 0)
+        PrintMsg("Processing " + input, 0)
+        PrintMsg(" \n" + (65 * "*"), 0)
+        bRaster = SSURGO_ExportMuRaster.ConvertToRaster(input, theSnapRaster, iRaster, bTiled)
+
+    theMsg = " \nTotal processing time for " + str(len(inputList)) + " rasters: " + elapsedTime(start) + " \n "
     PrintMsg(theMsg, 0)
 
 except MyError, e:

@@ -390,6 +390,9 @@ def GetDownload(areasym, surveyDate, importDB):
     #baseURL = "https://websoilsurvey-dev.dev.sc.egov.usda.gov/DSD/Download/Cache/SSA/" # Testing downloads from Dev
     #baseURL = "http://websoilsurvey-dev.dev.sc.egov.usda.gov/DSD/Download/Cache/SSA/"  # bad url
     baseURL = "https://websoilsurvey.sc.egov.usda.gov/DSD/Download/Cache/SSA/"
+
+    # Test for Pre-Cache access
+    # baseURL = "https://soilsdashboard.sc.egov.usda.gov/DataManager/WSSFileShare?dir=DownloadSoilsData/PreCache/SSA/" 
     #baseURL = "http://websoilsurvey.sc.egov.usda.gov/DSD/Download/Cache/SSA/"
 
     try:
@@ -449,7 +452,8 @@ def GetDownload(areasym, surveyDate, importDB):
             del output
 
             if not os.path.isfile(local_zip):
-                raise MyError, "Failed to download zipfile"
+                PrintMsg("Failed to download zipfile", 1)
+                return ""
 
             # if we get this far then the download succeeded
             return zipName
@@ -1230,23 +1234,33 @@ def AddMuName(newFolder, bLast):
                     arcpy.SetProgressorLabel("Importing metadata...")
                     metaData = os.path.join(newFolder, "soil_metadata_" + areaSym.lower() + ".xml")
 
-                    if not arcpy.Exists(metaData):
-                        raise MyError, "SSURGO metadata file (" + metaData + ") not found"
+                    # Determine whether this script is running in 32 or 64 bit mode
+                    pythonVersion = sys.version
 
-                    # This ImportMetadata_conversion is leaving a lock file behind
-                    arcpy.ImportMetadata_conversion(metaData, "FROM_FGDC", os.path.join(spatialFolder, muShp), "ENABLED")
+                    if pythonVersion.find("32 bit") == -1:
+                        # Print a non-fatal warning to the user that the metadata will not be updated in 64 bit mode
+                        PrintMsg(" \nWarning! Unable to update metadata when using background-mode geoprocessing", 1)
 
-                    if bLast:
-                        try:
-                            # Trying to use another shapefile as a decoy for the lock file
+                    else:
+                        if not arcpy.Exists(metaData):
+                            raise MyError, "SSURGO metadata file (" + metaData + ") not found"
 
-                            dummyMetadata = os.path.join(os.path.dirname(sys.argv[0]),"dummymetadata.xml")
-                            dummyShp = os.path.join(os.path.dirname(sys.argv[0]),"dummy.shp")
-                            arcpy.Copy_management(dummyShp, os.path.join(env.scratchFolder, "dummy.shp"))
-                            arcpy.ImportMetadata_conversion(dummyMetadata, "FROM_FGDC", os.path.join(env.scratchFolder, "dummy.shp"), "ENABLED")
+                        # This ImportMetadata_conversion is leaving a lock file behind
+                        arcpy.ImportMetadata_conversion(metaData, "FROM_FGDC", os.path.join(spatialFolder, muShp), "ENABLED")
 
-                        except:
-                            pass
+                        if bLast:
+                            try:
+                                # Trying to use another shapefile as a decoy for the lock file
+
+                                dummyMetadata = os.path.join(os.path.dirname(sys.argv[0]),"dummymetadata.xml")
+                                dummyShp = os.path.join(os.path.dirname(sys.argv[0]),"dummy.shp")
+                                arcpy.Copy_management(dummyShp, os.path.join(env.scratchFolder, "dummy.shp"))
+                                arcpy.ImportMetadata_conversion(dummyMetadata, "FROM_FGDC", os.path.join(env.scratchFolder, "dummy.shp"), "ENABLED")
+
+                            except:
+                                pass
+
+                            
 
                     # Maybe I could try changing to a new workspace or refreshing a different workspace?
                     del spatialFolder, muShp, metaData

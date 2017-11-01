@@ -372,8 +372,8 @@ def QuerySDA(sQuery):
 
         # Create request using JSON, return data as JSON
         dRequest = dict()
-        dRequest["FORMAT"] = "JSON"
-        dRequest["QUERY"] = sQuery
+        dRequest["format"] = "JSON"
+        dRequest["query"] = sQuery
         jData = json.dumps(dRequest)
 
         # Send request to SDA Tabular service using urllib2 library

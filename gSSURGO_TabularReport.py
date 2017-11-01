@@ -242,7 +242,7 @@ try:
         PrintMsg(" \nInput rating table: " + inputTbl, 0)
         PrintMsg(" \nUsing report template: " + template, 0)
         #PrintMsg(" \nUsing field mapping: " + str(fm), 0)
-        PrintMsg(" \nRating data type: " + fieldType, 0)
+        #PrintMsg(" \nRating data type: " + fieldType, 0)
 
         arcpy.mapping.AddTableView(df, sdvTbl)
 
@@ -272,17 +272,39 @@ try:
         # Remove the 'SDV_Data' table view
         arcpy.mapping.RemoveTableView(df, sdvTbl)
 
+
         if arcpy.Exists(reportPDF):
             arcpy.SetProgressorLabel("Report complete")
             PrintMsg(" \nReport complete (" + reportPDF + ")\n ", 0)
             os.startfile(reportPDF)
 
+        # Is this an attempt to keep the MXD object from breaking??
+        if mxd.filePath != "":
+            mxd = arcpy.mapping.MapDocument(mxd.filePath)
+
+
     else:
         raise MyError, "Failed to identify target layer"
+        try:
+            mxd = arcpy.mapping.MapDocument(mxd.filePath)
 
+        except:
+            pass
+
+    del mxd
 
 except MyError, e:
     PrintMsg(str(e), 2)
+    try:
+        mxd = arcpy.mapping.MapDocument(mxd.filePath)
+
+    except:
+        pass
 
 except:
     errorMsg()
+    try:
+        mxd = arcpy.mapping.MapDocument(mxd.filePath)
+
+    except:
+        pass

@@ -63,6 +63,23 @@ def errorMsg():
         pass
 
 ## ===================================================================================
+def Number_Format(num, places=0, bCommas=True):
+    try:
+    # Format a number according to locality and given places
+        locale.setlocale(locale.LC_ALL, "")
+        if bCommas:
+            theNumber = locale.format("%.*f", (places, num), True)
+
+        else:
+            theNumber = locale.format("%.*f", (places, num), False)
+        return theNumber
+
+    except:
+        errorMsg()
+
+        return "???"
+
+## ===================================================================================
 def CheckWSS(missingList):
     # If some of the selected soil survey downloads are not available in the download
     # folder, confirm with Soil Data Access service to make sure that WSS does not have them.
@@ -94,8 +111,8 @@ def CheckWSS(missingList):
 
         # Create request using JSON, return data as JSON
         dRequest = dict()
-        dRequest["FORMAT"] = "JSON"
-        dRequest["QUERY"] = sQuery
+        dRequest["format"] = "JSON"
+        dRequest["query"] = sQuery
         jData = json.dumps(dRequest)
 
         # Send request to SDA Tabular service using urllib2 library
@@ -144,6 +161,169 @@ def CheckWSS(missingList):
         return False
 
 ## ===================================================================================
+def ClipMupolygon(gdb, aoiLayer, aoiField, aoiValue):
+
+    try:
+        env.overwriteOutput = True
+        operation = "CLIP"
+
+        # Get output geodatabase
+        soilsFC = os.path.join(gdb, "MUPOLYGON")
+        soilsLayer = "SoilsLayer"
+        arcpy.MakeFeatureLayer_management(soilsFC, soilsLayer)
+        field = arcpy.ListFields(aoiLayer, aoiField)[0]
+        fieldType = field.type.upper()  # STRING, DOUBLE, SMALLINTEGER, LONGINTEGER, SINGLE, FLOAT
+        env.workspace = gdb
+
+        outputClip = os.path.join(gdb, arcpy.ValidateTableName("MUPOLYGON_" + str(aoiValue), gdb))
+
+        if fieldType in ["SMALLINTEGER", "LONGINTEGER", "SINGLE", "LONG", "INTEGER"]:
+            sql = aoiField + " = " + str(int(aoiValue))
+
+        else:
+            #PrintMsg("\tTile attribute datatype: " + fieldType, 1)
+            sql = aoiField + " = '" + aoiValue + "'"
+
+        PrintMsg("Clipping soil polygons for " + sql, 0)
+
+        arcpy.SelectLayerByAttribute_management(aoiLayer, "NEW_SELECTION", sql)
+
+        # Allow for NAD1983 to WGS1984 datum transformation if needed
+        #
+        tm = "WGS_1984_(ITRF00)_To_NAD_1983"
+        arcpy.env.geographicTransformations = tm
+
+        # Clean up temporary layers and featureclasses
+        #
+        selectedPolygons = "Selected_Polygons"
+        extentLayer = "AOI_Extent"
+        extentFC = os.path.join(env.scratchGDB, extentLayer)
+        outputFC = os.path.join(env.scratchGDB, selectedPolygons)
+        sortedFC = os.path.join(env.scratchGDB, "SortedPolygons")
+        cleanupList = [extentLayer, extentFC, outputFC]
+
+        for layer in cleanupList:
+            if arcpy.Exists(layer):
+                arcpy.Delete_management(layer)
+
+        # Find extents of the AOI
+        #
+        #PrintMsg(" \nGetting extent for AOI", 0)
+        xMin = 9999999999999
+        yMin = 9999999999999
+        xMax = -9999999999999
+        yMax = -9999999999999
+
+        # targetLayer is being used here to supply output coordinate system
+        with arcpy.da.SearchCursor(aoiLayer, ["SHAPE@"], "", soilsLayer) as cur:
+
+            for rec in cur:
+                ext = rec[0].extent
+                xMin = min(xMin, ext.XMin)
+                yMin = min(yMin, ext.YMin)
+                xMax = max(xMax, ext.XMax)
+                yMax = max(yMax, ext.YMax)
+
+        # Create temporary AOI extents featureclass
+        #
+        point = arcpy.Point()
+        array = arcpy.Array()
+        featureList = list()
+        coordList = [[[xMin, yMin],[xMin, yMax],[xMax, yMax], [xMax, yMin],[xMin, yMin]]]
+
+        for feature in coordList:
+            for coordPair in feature:
+                point.X = coordPair[0]
+                point.Y = coordPair[1]
+                array.add(point)
+
+        polygon = arcpy.Polygon(array)
+        featureList.append(polygon)
+
+        arcpy.CopyFeatures_management([polygon], extentFC)
+        arcpy.DefineProjection_management(extentFC, soilsLayer)
+        #PrintMsg(" \nAOI Extent:  " + str(xMin) + "; " + str(yMin) + "; " + str(xMax) + "; " + str(yMax), 0)
+
+        # Select target layer polygons within the AOI extent
+        # in a script, the featurelayer (extentLayer) may not exist
+        #
+        #PrintMsg(" \nSelecting target layer polygons within AOI", 0)
+        arcpy.MakeFeatureLayer_management(extentFC, extentLayer)
+
+        inputDesc = arcpy.Describe(soilsLayer)
+        inputGDB = os.path.dirname(inputDesc.catalogPath)  # assuming gSSURGO, no featuredataset
+        outputGDB = os.path.dirname(outputClip)
+
+        if not inputDesc.hasSpatialIndex:
+            arcpy.AddSpatialIndex_management(soilsLayer)
+
+        arcpy.SelectLayerByLocation_management(soilsLayer, "INTERSECT", extentLayer, "", "NEW_SELECTION")
+
+        # Create temporary featureclass using selected target polygons
+        #
+        #PrintMsg(" \n\tCreating temporary featureclass", 0)
+        arcpy.CopyFeatures_management(soilsLayer, outputFC)
+        arcpy.SelectLayerByAttribute_management(soilsLayer, "CLEAR_SELECTION")
+
+        # Create spatial index on temporary featureclass to see if that speeds up the clip
+        arcpy.AddSpatialIndex_management(outputFC)
+
+        # Clipping process
+
+        # resort polygons after clip to get rid of tile artifact
+
+        # arcpy.Sort_management(sortedFC, outputClip, [[shpField, "ASCENDING"]], "UL")  # Try sorting before clip. Not sure if this well help right here.
+
+        if operation == "CLIP":
+            #PrintMsg(" \n\tCreating final layer " + os.path.basename(outputClip) + "...", 0)
+            #arcpy.Clip_analysis(outputFC, aoiLayer, outputClip)
+            arcpy.Clip_analysis(outputFC, aoiLayer, sortedFC)
+            fields = arcpy.Describe(sortedFC).fields
+            shpField = [f.name for f in fields if f.type.upper() == "GEOMETRY"][0]
+            arcpy.Sort_management(sortedFC, outputClip, [[shpField, "ASCENDING"]], "UL")  # Try sorting before clip. N
+            
+            arcpy.AddSpatialIndex_management(outputClip)
+
+        elif operation == "INTERSECT":
+            #PrintMsg(" \nPerforming final intersection...", 0)
+            arcpy.Intersect_analysis([outputFC, aoiLayer], outputClip)
+
+        if arcpy.Exists(outputClip) and outputGDB == inputGDB and arcpy.Exists(os.path.join(outputGDB, "mapunit")):
+            # Create relationshipclass to mapunit table
+            relName = "zMapunit_" + os.path.basename(outputClip)
+
+            if not arcpy.Exists(os.path.join(outputGDB, relName)):
+                arcpy.AddIndex_management(outputClip, ["mukey"], "Indx_" + os.path.basename(outputClip))
+                #PrintMsg(" \n\tAdding relationship class...")
+                arcpy.CreateRelationshipClass_management(os.path.join(outputGDB, "mapunit"), outputClip, os.path.join(outputGDB, relName), "SIMPLE", "> Mapunit Polygon Layer", "< Mapunit Table", "NONE", "ONE_TO_MANY", "NONE", "mukey", "MUKEY", "","")
+
+            # Add alias to featureclass
+            arcpy.AlterAliasName(outputClip, "Map Unit Polygons - " + aoiField + ":" + str(aoiValue))
+
+        # Clean up temporary layers and featureclasses
+        #
+        cleanupList = [extentLayer, extentFC, outputFC]
+
+        for layer in cleanupList:
+            if arcpy.Exists(layer):
+                arcpy.Delete_management(layer)
+
+        # Clear selection on aoiLayer
+        arcpy.SelectLayerByAttribute_management(aoiLayer, "CLEAR_SELECTION", sql)
+
+        #PrintMsg(" \nClipping process complete for " + str(aoiValue) + " \n", 0)
+
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e) + " \n", 2)
+        return True
+
+    except:
+        errorMsg()
+        return False
+
+## ===================================================================================
 ## ===================================================================================
 ## MAIN
 ## ===================================================================================
@@ -156,7 +336,7 @@ from arcpy import env
 try:
 
     ssaFC = arcpy.GetParameterAsText(0)            # input Survey Area layer containing AREASYMBOL (featurelayer)
-    tileFC = arcpy.GetParameterAsText(1)           # input polygon layer containing tile value and CONUS attribute
+    tileFC = arcpy.GetParameterAsText(1)           # input polygon layer containing tile value
     tileField = arcpy.GetParameter(2)              # featureclass column that contains the tiling attribute (MO, MLRASYM, AREASYMBOL, etc)
     tileList = arcpy.GetParameterAsText(3)         # list of tile values to process (string or long, derived from tileField)
     tileName = arcpy.GetParameterAsText(4)         # string used to identify type of tile (MO, MLRA, SSA, etc) used in geodatabase name
@@ -165,10 +345,12 @@ try:
     #bExportLayers = arcpy.GetParameter(7)         # export SSURGO featureclasses (boolean)
     theAOI = arcpy.GetParameter(7)                 # geographic region for output GDB. Used to determine coordinate system.
     useTextFiles = arcpy.GetParameter(8)           # Unchecked: import tabular data from Access database. Checked: import text files
+    bClipSoils = arcpy.GetParameter(9)             # Create an additional clipped soil polygon featureclass
 
     # import python script that actually exports the SSURGO
     #import SDM_Export_GDB10
     import SSURGO_Convert_to_Geodatabase
+    import gSSURGO_Clip2
 
     # Set workspace environment to the folder containing the SSURGO downloads
     # Escape back-slashes in path
@@ -208,10 +390,14 @@ try:
     fldName = tileField.name
     exportList = list() # list of successfully exported gSSURGO databases
 
+    num = 0
+
     for theTile in tileList:
+        num += 1
 
         PrintMsg(" \n" + (50 * "*"), 0)
-        PrintMsg("Processing " + tileName + ": " + str(theTile), 0)
+        PrintMsg(Number_Format(num, 0, True) + ". Processing " + tileName + ": " + str(theTile), 0)
+        PrintMsg(" \n" + (50 * "*"), 0)
         #PrintMsg(" \nDataType for input field (" + fldName +  "): " + fldType, 0)
 
         if fldType != "STRING":
@@ -289,10 +475,18 @@ try:
 
         # Call SDM Export script
         aliasName = tileName + " " + str(theTile)
-        bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, (aliasName, aliasName), useTextFiles)
+        bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, (aliasName, aliasName), useTextFiles, bClipSoils)
 
         if bExported:
             exportList.append(os.path.basename(outputWS))
+
+            # Test to see if I can add the MUPOLYGON clip to this process
+            #PrintMsg(" \nClip using tile value: " + str(theTile), 1)
+            if bClipSoils:
+                bClipped = ClipMupolygon(outputWS, tileLayer, fldName, theTile)
+
+                if bClipped == False:
+                    raise MyError, ""
 
         else:
             err = "gSSURGO export failed for " + fldName + " value: " + str(theTile)

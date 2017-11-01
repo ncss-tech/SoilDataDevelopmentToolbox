@@ -58,152 +58,173 @@ def PrintMsg(msg, severity=0):
         pass
 
 ## ===================================================================================
-def GetFieldInfo(sdvLayer):
-    # Create a list of field properties for an SDV map layer's last column
-    # Field object properties
-    # ===================================================
-    # name - Returns the name
-    # aliasName - Returns the field alias name
-    # domain - Returns the name of the associated domain
-    # editable - Returns True if the field is editable
-    # hasIndex - Returns True if the field has an index
-    # isNullable - Returns True if the field is nullable
-    # isUnique - Returns True if the field is unique
-    # length - Returns the length
-    # precision - Returns the precision
-    # scale - Returns the scale
-    # type - Returns whether SmallInteger, Integer, Single, Double, String, Date, OID, Geometry, or BLOB
-
+def CreateMergedTable(sdvLayers, outputTbl):
+    # Merge rating tables from for the selected soilmap layers to create a single, mapunit-level table
+    #
     try:
-        # Get field object
-        flds = arcpy.ListFields(sdvLayer, "*")
-        fld = flds[len(flds) - 1]
-        #pName = fld.name
-        pName = GetRatingField(sdvLayer)  # at 10.1 the fld.name started returning qualified field name
-        pAliasName = fld.aliasName
-        pIsNullable = fld.isNullable
-        pLength = fld.length
-        pPrecision = fld.precision
-        pScale = fld.scale
-        pType = fld.type.lower()
+        # Get number of SDV layers selected for export
+        #sdvLayers = sdvLayers.split(";")  # switch from semi-colon-delimited string to list of layer names
+        #numLayers = len(sdvLayers)      # ArcGIS 10.1 returns count for list object
 
-        if pType == "string":
-            pType = "text"
 
-        elif pType == "integer":
-            pType = "long"
+        env.overwriteOutput = True # Overwrite existing output tables
 
-        elif pType == "smallinteger":
-            pType = "short"
+        # Tool validation code is supposed to prevent duplicate output tables
 
-        elif pType == "single":
-            pType = "float"
-
-        #PrintMsg(" \n\tField pName: " + pName, 0)
-
-        # AddField_management <in_table> <field_name> <LONG | TEXT | FLOAT | DOUBLE | SHORT | DATE | BLOB> {field_precision} {field_scale} {field_length} {field_alias} {NULLABLE | NON_NULLABLE} {NON_REQUIRED | REQUIRED} {field_domain}
-        #
-        fldInfo = [pName,pType,pPrecision,pScale,pLength,pAliasName,"NULLABLE","NON_REQUIRED"]
-
-        return fldInfo
-
-    except:
-        errorMsg()
-        return ""
-
-## ===================================================================================
-def CreateMergedTable(sdvLayers, outputTbl, lastShp):
-    # Perform all functions required to convert SDV text files into an ArcGIS table
-    try:
-        numLayers = len(sdvLayers)  # 10.1
+        # Get arcpy mapping objects
+        thisMXD = arcpy.mapping.MapDocument("CURRENT")
+        mLayers = arcpy.mapping.ListLayers(thisMXD)
 
         # Probably should make sure all of these input layers have the same featureclass
         #
         # first get path where input SDV shapefiles are located (using last one in list)
         # hopefully each layer is based upon the same set of polygons
         #
-
-
         # First check each input table to make sure there are no duplicate rating fields
         # Begin by getting adding fields from the input shapefile (lastShp). This is necessary
         # to avoid duplication such as MUNAME which may often exist in a county shapefile.
 
-        ratingFields = list()
-        chkFields = list()
+        chkFields = list()  # list of rating fields from SDV soil map layers (basenames). Use this to count dups.
+        #dFields = dict()
+        dLayerFields = dict()
 
-        # Next get the rating field from each of the input SDV tables joined to the shapefile
-        for i in range(numLayers):
-            sdvLayer = sdvLayers[i][1:-1]
+        # Iterate through each of the layers and get its rating field
+        for sdvLayer in sdvLayers:
+
+            if sdvLayer.startswith("'") and sdvLayer.endswith("'"):
+                sdvLayer = sdvLayers[i][1:-1]  # this is dropping first and last char in name for RUSLE2 maps..
+
             desc = arcpy.Describe(sdvLayer)
-            gdb = os.path.dirname(desc.featureclass.catalogPath)
-            fName = desc.fields[-1].name
-            bName = desc.fields[-1].baseName
-            sdvTbl = os.path.join(gdb, fName[:(-1 * (len(bName) + 1))])
-            #PrintMsg(" \n" + sdvTbl, 0)
-            tblFlds = arcpy.Describe(sdvTbl).fields
-            fldNames = [fld.name.upper() for fld in tblFlds]
-            ratingFld = fldNames[-1]
+            dataType = desc.dataType
 
-            if i == 0:
-                # Make outputTbl based upon first sdvTbl
-                PrintMsg(" \nCreating output table with " + ratingFld  + " column...", 0)
-                arcpy.CopyRows_management(sdvTbl, outputTbl)
+            if dataType == "FeatureLayer":
+                gdb = os.path.dirname(desc.featureclass.catalogPath)
 
-                if "COMPPCT_R" in fldNames:
-                    arcpy.DeleteField_management(outputTbl, "COMPPCT_R")
+            elif dataType == "RasterLayer":
+                gdb = os.path.dirname(desc.catalogPath)
 
             else:
-                # Append the rating column to the outputTbl
-                PrintMsg("\tAppending " + ratingFld + " column...", 0)
-                arcpy.JoinField_management(outputTbl, "MUKEY", sdvTbl, "MUKEY", [ratingFld])
+                raise MyError, "Soil map datatype (" + dataType + ") not valid"
 
+            allFields = desc.fields
+            ratingField = allFields[-1]  # rating field should be the last one in the table
+            fName = ratingField.name.encode('ascii')       # fully qualified name
+            bName = ratingField.baseName.encode('ascii')   # physical name
+            clipLen = (-1 * (len(bName))) - 1
+            sdvTblName = fName[0:clipLen]
+            sdvTbl = os.path.join(gdb, sdvTblName)
+            fldType = ratingField.type
+            fldLen = ratingField.length
+            fldAlias = bName + ", " + sdvTblName
+            mukeyField = [fld.name for fld in desc.fields if fld.basename.upper() == "MUKEY"][0]
+            dLayerFields[sdvLayer] = (sdvTblName, bName, fName, fldType, fldLen, fldAlias, mukeyField)
+            chkFields.append(bName)
 
+        # Iterate through each of the layers and get its rating field
+        i = 0
 
+        for sdvLayer in sdvLayers:
+            sdvLayer = sdvLayers[i]
 
+            if sdvLayer.startswith("'"):
+                sdvLayer = sdvLayers[i][1:-1]  # this is dropping first and last char in name for RUSLE2 maps..
+
+            PrintMsg(" \n\t" + str(i + 1) + ". Processing sdvLayer: " + sdvLayer, 0)
+            desc = arcpy.Describe(sdvLayer)
+            dataType = desc.dataType
+
+            if dataType == "FeatureLayer":
+                gdb = os.path.dirname(desc.featureclass.catalogPath)
+
+            elif dataType == "RasterLayer":
+                gdb = os.path.dirname(desc.catalogPath)
+
+            else:
+                raise MyError, "Soil map datatype (" + dataType + ") not valid"
+
+            sdvTblName, bName, fName, fldType, fldLen, fldAlias, mukeyField = dLayerFields[sdvLayer]
+            sdvTbl = os.path.join(gdb, sdvTblName)
+
+            if i == 0 and chkFields.count(bName) == 1:
+                # Make outputTbl based upon first sdvTbl
+                #PrintMsg(" \nCreating new output table using " + bName, 0)
+                #PrintMsg("\tAppending " + bName + " column...", 0)
+                arcpy.CopyRows_management(sdvTbl, outputTbl)
+
+            else:
+                # if the field name is a duplicate, use AddField instead of JoinField
+                #PrintMsg(" \nFound " + str(chkFields.count(bName)) + " " + bName + " columns", 1)
+                #PrintMsg(" \nchkFields: " + str(chkFields), 1)
+
+                if chkFields.count(bName) == 1:
+                    # unique field name
+                    # Append the just the rating column to the outputTbl
+                    #PrintMsg("\tAppending " + bName + " column...", 0)
+                    arcpy.JoinField_management(outputTbl, "MUKEY", sdvTbl, "MUKEY", [bName])
+
+                else:
+                    # duplicate field name
+                    if i == 0:
+                        # Also need to add mukey field
+                        #PrintMsg("\tAdding new mukey column...", 0)
+                        arcpy.CreateTable_management(os.path.dirname(outputTbl), os.path.basename(outputTbl))
+                        arcpy.AddField_management(outputTbl, "mukey", "string", "", "", 30, "mukey")
+
+                    dRatings = dict()
+
+                    with arcpy.da.SearchCursor(sdvLayer, [mukeyField, fName]) as cur:
+
+                        for rec in cur:
+                            dRatings[str(rec[0])] = rec[1]
+
+                    # Need to validate qualified field name
+                    #
+                    fName = arcpy.ValidateFieldName(bName + "_" + sdvTblName, gdb)  # reverse qualified field name
+                    #PrintMsg("\tAdding new " + fName + " column...", 0)
+                    arcpy.AddField_management(outputTbl, fName, fldType, "", "", fldLen, fldAlias)
+
+                    if i == 0:
+
+                        with arcpy.da.InsertCursor(outputTbl, ["mukey", fName]) as cur:
+                            for mukey, rating in dRatings.items():
+                                rec = (mukey, rating)
+                                cur.insertRow(rec)
+
+                    else:
+                        with arcpy.da.UpdateCursor(outputTbl, ["mukey", fName]) as cur:
+                            for rec in cur:
+                                try:
+                                    rec[1] = dRatings[rec[0]]
+                                    cur.updateRow(rec)
+
+                                except:
+                                    #PrintMsg("\tNo data for mukey: " + rec[0], 1)
+                                    pass
+
+            i += 1
+
+        # I could probably switch out the individual rating table joins with the merged table right here??
+        arcpy.AddIndex_management(outputTbl, ["mukey"], "Indx_RUSLE2_Mukey")
+
+        PrintMsg(" \nMerged ratings table: " + str(outputTbl) + " \n ", 0)
 
         return True
 
     except MyError, e:
         PrintMsg(str(e) + " \n", 2)
+        try:
+            del thisMXD
+        except:
+            pass
         return False
 
     except:
         errorMsg()
+        try:
+            del thisMXD
+        except:
+            pass
         return False
-
-## ===================================================================================
-def GetRatingField(layerName):
-    # Original function from SDV_Save
-    # Check SDV temporary layer table for the 'rating' field and return the name string
-
-    try:
-        if arcpy.Exists(layerName):
-            #PrintMsg("\nGetting fields for " + theInput, 0)
-            theFields = arcpy.ListFields(layerName)
-            chkField = "MUKEY"
-            mukeyCnt = 0
-
-            #for theField in theFields:
-
-            # Assume rating field is the last one in the layer
-            theField = theFields[len(theFields) - 1]
-            #PrintMsg("\tFound field " + theField.Name, 0)
-            # Get unqualified field name
-            theNameList = arcpy.ParseFieldName(theField.name).split(",")
-            theCnt = len(theNameList) - 1
-            theFieldName = theNameList[theCnt].strip()
-            PrintMsg("\tField name parsed: " + theFieldName, 0)
-
-            return theFieldName
-
-
-        else:
-            PrintMsg("\tInput layer not found (" + layerName + ")", 0)
-            return ""
-
-    except:
-        errorMsg()
-        return ""
 
 # ====================================================================================
 ## ====================================== Main Body ==================================
@@ -213,45 +234,14 @@ from arcpy import env
 
 try:
 
-    sdvLayers = arcpy.GetParameterAsText(0)           # 10.1 List of string values representing temporary SDV layers from ArcMap TOC
-    outputTbl = arcpy.GetParameter(1)      # Output featureclass (preferably in a geodatabase)
 
-    env.overwriteOutput = True # Overwrite existing output tables
-
-    # Get arcpy mapping objects
-    thisMXD = arcpy.mapping.MapDocument("CURRENT")
-    mLayers = arcpy.mapping.ListLayers(thisMXD)
-
-    # Get number of SDV layers selected for export
-    sdvLayers = sdvLayers.split(";")
-    numLayers = len(sdvLayers)      # ArcGIS 10.1 returns count for list object
-
-    if numLayers > 0:
-        # Relying upon validation code in Toolbox to screen the input sdvLayers
-        # sdvLoc should end in "USDA\Soil Data Viewer 6.x\temp" or "USDA\Soil Data Viewer 6\temp"
-
-        sdvLayer = sdvLayers[numLayers - 1]             # 10.1
-        if sdvLayer.startswith("'"):
-            sdvLayer = sdvLayer[1:-1]
-
-        inDesc = arcpy.Describe(sdvLayer)
-        lastShp = inDesc.catalogPath
-        sdvLoc = os.path.dirname(lastShp)
-
-        # Get the name of the output featureclass, assuming user entered fullpath
-        thePath = arcpy.Describe(outputTbl).catalogPath
-
-        #if not arcpy.Exists(thePath):
-        #    err = "Output geodatabase does not exist (" + thePath + ")"
-        #    raise MyError, err
-
-
-        # Process individual SDV layers, starting out in the SDV temp folder
-        env.workspace = sdvLoc
-
+    if __name__ == "__main__":
         # Create a single table that contains
-        bMerged = CreateMergedTable(sdvLayers, thePath, lastShp)
+        #sdvLayers = arcpy.GetParameterAsText(0)           # 10.1 List of string values representing temporary SDV layers from ArcMap TOC
+        sdvLayers = arcpy.GetParameter(0)           # 10.1 List of string values representing temporary SDV layers from ArcMap TOC
+        outputTbl = arcpy.GetParameterAsText(1)      # Output featureclass (preferably in a geodatabase)
 
+        bMerged = CreateMergedTable(sdvLayers, outputTbl)
 
 
 except arcpy.ExecuteError:

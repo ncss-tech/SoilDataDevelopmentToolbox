@@ -9,15 +9,20 @@
 # Fixed Bug: ClassBreaksJSON fails to create a legend when the numeric data values all fall
 # within a single class break. Edwin Muniz.
 #
-# Bug?: Unique value legend created by WSS-Thematic may include gray (#DCDCDC), duplicating the
-# gray for 'Not Rated'. This breaks the 'join' on color. Work around, skip 'Not rated' when reading
-# legend file.
+# I noticed on 2017-02-07 that the ArcMap soil layers with 'Unique Values' symbology does not
+# display the attribute field name in the TOC. I probably need to look at the JSON symbology code for Unique Values
+# Wasn't able to figure this out, but I did simplify the code a bunch. Guessing it is a bug in updateLayerFromJSON.
+#
+# Added soil map layer to top of group. Still need to look at map scale vs label visibility and add metadata to description.
+#
+# Would like to add an option for NATMUSYM
 #
 ## ===================================================================================
 class MyError(Exception):
     pass
 
 ## ===================================================================================
+
 def PrintMsg(msg, severity=0):
     # prints message to screen if run as a python script
     # Adds tool message to the geoprocessor
@@ -55,7 +60,8 @@ def errorMsg():
 def Number_Format(num, places=0, bCommas=True):
     try:
     # Format a number according to locality and given places
-        #locale.setlocale(locale.LC_ALL, "")
+        locale.setlocale(locale.LC_ALL, "")
+
         if bCommas:
             theNumber = locale.format("%.*f", (places, num), True)
 
@@ -69,7 +75,7 @@ def Number_Format(num, places=0, bCommas=True):
         return "???"
 
 ## ===================================================================================
-def AttributeRequest(theURL, sQuery):
+def GetSaveRest(sdaURL, sQuery, totalAcres):
     # Get SAVEREST date for each survey area within the AOI
     # Send Post Rest query to SDM Tabular Service, returning data in JSON format
     #
@@ -79,12 +85,15 @@ def AttributeRequest(theURL, sQuery):
         if sQuery == "":
             raise MyError, ""
 
+        #else:
+        #   PrintMsg(" \nsQuery: " + sQuery, 1)
+
         # Tabular service to append to SDA URL
-        url = theURL + "/Tabular/SDMTabularService/post.rest"
+        url = sdaURL + "/Tabular/SDMTabularService/post.rest"
 
         dRequest = dict()
-        dRequest["FORMAT"] = "JSON"
-        dRequest["QUERY"] = sQuery
+        dRequest["format"] = "JSON"
+        dRequest["query"] = sQuery
 
         # Create SDM connection to service using HTTP
         jData = json.dumps(dRequest)
@@ -109,6 +118,8 @@ def AttributeRequest(theURL, sQuery):
             for dateStamp in dataList:
                 dateStamps.append(dateStamp[2] + " (" + dateStamp[0] + ", " + dateStamp[1] + ")")
 
+        PrintMsg("Area of interest covers " + Number_Format(totalAcres, 1, True) + " acres in " + str(len(dateStamps)) + " survey area(s)", 0)
+
         surveysEstablished = "; ".join(dateStamps)
 
         return surveysEstablished
@@ -128,10 +139,15 @@ def AttributeRequest(theURL, sQuery):
         return ""
 
 ## ===================================================================================
-def FormAttributeQuery(versionList):
+def GetSurveyVersion(versionList):
+    #
+    #PrintMsg(" \nGetSurveyVersion parameter: " + str(versionList), 1)
+
+
     # Use list of areasymbols and spatialversion numbers to form the query for Soil Data Access
     # Return AREASYMBOL and SAVEREST date
     try:
+        #PrintMsg(" \nversionList: " + str(versionList), 1)
 
         sQuery = """SELECT sc.areasymbol, sc.saverest, sc.areaname from sacatalog sc INNER JOIN saspatialver sp ON sc.areasymbol = sp.areasymbol WHERE"""
         cnt = 0
@@ -201,6 +217,55 @@ def Units():
     except:
         errorMsg()
         return {}
+
+## ===================================================================================
+def GetKeys(theInput, keyField):
+    # Create bracketed list of MUKEY values from spatial layer for use in query
+    #
+    try:
+        # Tell user how many features are being processed
+        theDesc = arcpy.Describe(theInput)
+        theDataType = theDesc.dataType
+        PrintMsg("", 0)
+
+        #if theDataType.upper() == "FEATURELAYER":
+        # Get Featureclass and total count
+
+        if theDataType.lower() == "featurelayer":
+            theFC = theDesc.featureClass.catalogPath
+            theResult = arcpy.GetCount_management(theFC)
+
+        elif theDataType.lower() in ["featureclass", "shapefile"]:
+            theResult = arcpy.GetCount_management(theInput)
+
+        else:
+            raise MyError, "Unknown data type: " + theDataType.lower()
+
+        iTotal = int(theResult.getOutput(0))
+
+        if iTotal > 0:
+            sqlClause = ("DISTINCT " + keyField, "ORDER BY " + keyField)
+            keyList = list()
+
+            with arcpy.da.SearchCursor(theInput, [keyField], sql_clause=sqlClause) as cur:
+                for rec in cur:
+                    keyList.append(int(rec[0]))
+
+            #PrintMsg("\tmukey list: " + str(keyList), 1)
+            return keyList
+
+        else:
+            return []
+
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return []
+
+    except:
+        errorMsg()
+        return []
 
 ## ===================================================================================
 def MetadataDetails():
@@ -273,7 +338,7 @@ def MetadataDetails():
         in the form of SSURGO shapefiles along with all thematic map and rating information."""
 
         dMetadata["arcmap"] = """The soil polygon shapefile and associated thematic map information were imported
-        into an ESRI file geodatabase for display and analysis by a Python script (""" + os.path.basename(sys.argv[0]) + """) using ArcGIS """ + installInfo["ProductName"] + " " + installInfo["Version"] + "."
+        into an ESRI file geodatabase for display and analysis by a Python script (""" + scriptPath + """) using ArcGIS """ + installInfo["ProductName"] + " " + installInfo["Version"] + "."
 
         dMetadata["credits"] = """Web Soil Survey, USDA Natural Resources Conservation Service, National Cooperative Soil Survey"""
 
@@ -304,6 +369,9 @@ def ClassBreaksJSON(legendList, dParams, dValues):
 
         else:
             outLineColor = [110, 110, 110, 255]
+
+        #PrintMsg(" \nlegendList: \n" + str(legendList), 1)
+        #PrintMsg(" \ndValues: \n" + str(dValues), 1)
 
         # defaultSymbol is used to draw any polygon whose value is not within one of the defined ranges
         # Do I want to remove the defaultSymbol and defaultLabel if there are no null values in the data???
@@ -444,7 +512,7 @@ def ClassBreaksJSON(legendList, dParams, dValues):
         dRenderer["renderer"] = d
         dLayerDefinition["drawingInfo"] = dRenderer
 
-        #PrintMsg(" \n1. dLayerDefinition: " + '"' + str(dLayerDefinition) + '"', 0)
+        #PrintMsg(" \n1. dLayerDefinition: \n" + str(dLayerDefinition), 0)
 
         return dLayerDefinition
 
@@ -458,11 +526,38 @@ def ClassBreaksJSON(legendList, dParams, dValues):
         return dLayerDefinition
 
 ## ===================================================================================
+def SimpleFeaturesJSON():
+    # returns JSON string for soil lines and labels layer.
+    #
+    try:
+
+        outLineColor = [0, 0, 0, 255]  # black polygon outline
+
+        d = dict()
+        r = dict()
+
+        r["type"] = "simple"
+        s = {"type": "esriSFS", "style": "esriSFSNull", "color": [255,255,255,255], "outline": { "type": "esriSLS", "style": "esriSLSSolid", "color": [0, 0, 0,255], "width": 0.4 }}
+        r["symbol"] = s
+        d["drawingInfo"]= dict()
+        d["drawingInfo"]["renderer"] = r
+        return d
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return dict()
+
+    except:
+        errorMsg()
+        return dict()
+
+## ===================================================================================
 def UniqueValuesJSON(legendList, dParams):
     # returns JSON string for unique values template. Use this for text, choice, vtext.
     #
-    # I need to get rid of the non-Renderer parts of the JSON so that it matches the ClassBreaksJSON function.
-    #
+    # Done: I need to get rid of the non-Renderer parts of the JSON so that it matches the ClassBreaksJSON function.
+    # Need to implement this in the gSSURGO Mapping tools
     try:
 
         if drawOutlines == False:
@@ -471,105 +566,15 @@ def UniqueValuesJSON(legendList, dParams):
         else:
             outLineColor = [110, 110, 110, 255]
 
-        jsonString = """
-{
-  "currentVersion" : 10.01,
-  "id" : 0,
-  "name" : "Soil Map",
-  "type" : "Feature Layer",
-  "description" : "",
-  "definitionExpression" : "",
-  "geometryType" : "esriGeometryPolygon",
-  "parentLayer" : null,
-  "subLayers" : [],
-  "minScale" : 0,
-  "maxScale" : 0,
-  "defaultVisibility" : true,
-  "hasAttachments" : false,
-  "htmlPopupType" : "esriServerHTMLPopupTypeNone",
-  "drawingInfo" : {"renderer" :
-    {
-      "type" : "uniqueValue",
-      "field1" : null,
-      "field2" : null,
-      "field3" : null,
-      "fieldDelimiter" : ", ",
-      "defaultSymbol" : null,
-      "defaultLabel" : "All other values",
-      "uniqueValueInfos" : []
-    },
-    "transparency" : 0,
-    "labelingInfo" : null},
-  "displayField" : null,
-  "fields" : [
-    {
-      "name" : "FID",
-      "type" : "esriFieldTypeOID",
-      "alias" : "FID"},
-    {
-      "name" : "Shape",
-      "type" : "esriFieldTypeGeometry",
-      "alias" : "Shape"},
-    {
-      "name" : "AREASYMBOL",
-      "type" : "esriFieldTypeString",
-      "alias" : "AREASYMBOL",
-      "length" : 20},
-    {
-      "name" : "SPATIALVER",
-      "type" : "esriFieldTypeInteger",
-      "alias" : "SPATIALVER"},
-    {
-      "name" : "MUSYM",
-      "type" : "esriFieldTypeString",
-      "alias" : "MUSYM",
-      "length" : 6},
-    {
-      "name" : "MUKEY",
-      "type" : "esriFieldTypeString",
-      "alias" : "MUKEY",
-      "length" : 30}
-  ],
-  "typeIdField" : null,
-  "types" : null
-}"""
-
-        d = json.loads(jsonString)
-
-        d["currentVersion"] = 10.01
-        d["id"] = 1
-        d["name"] = dParams["SdvAttributeName"]
-        d["description"] = "Web Soil Survey Thematic Map"
-        d["definitionExpression"] = ""
-        d["geometryType"] = "esriGeometryPolygon"
-        d["parentLayer"] = None
-        d["subLayers"] = []
-        d["defaultVisibility"] = True
-        d["hasAttachments"] = False
-        d["htmlPopupType"] = "esriServerHTMLPopupTypeNone"
-        d["drawingInfo"]["renderer"]["type"] = "uniqueValue"
-        d["drawingInfo"]["renderer"]["field1"] = dParams["ResultColumnName"]
-        d["displayField"] = dParams["ResultColumnName"]
-
-        # Add new rating field to list of layer fields
-        dAtt = dict()
-        dAtt["name"] = dParams["ResultColumnName"]
-        dAtt["alias"] = dParams["ResultColumnName"]
-        dAtt["type"] = "esriFieldTypeString"
-        d["fields"].append(dAtt)
-
-        try:
-            length = dFieldTypes["ResultDataType"].upper()[1]
-
-        except:
-            length = 254
-
-        dAtt["length"] = length
+        d = dict()
+        r = dict()
+        v = dict()
 
         # Add each legend item to the list that will go in the uniqueValueInfos item
         cnt = 0
         legendItems = list()
         uniqueValueInfos = list()
+        #PrintMsg(" \nlegendList: " + str(legendList), 1)
 
         for cnt in range(0, len(legendList)):
             dSymbol = dict()
@@ -580,17 +585,18 @@ def UniqueValuesJSON(legendList, dParams):
             rgb.append(255)  # transparency doesn't seem to work
             #PrintMsg(" \nRGB: " + str(rgb), 1)
             symbol = {"type" : "esriSFS", "style" : "esriSFSSolid", "color" : rgb, "outline" : {"color": outLineColor, "width": 0.4, "style": "esriSLSSolid", "type": "esriSLS"}}
-
-            #
             legendItems = dict()
             legendItems["value"] = rating
             legendItems["description"] = ""  # This isn't really used unless I want to pull in a description of this individual rating
             legendItems["label"] = label
             legendItems["symbol"] = symbol
-            d["drawingInfo"]["renderer"] = {"type" : "uniqueValue", "field1" : dParams["ResultColumnName"], "field2" : None, "field3" : None}
             uniqueValueInfos.append(legendItems)
 
-        d["drawingInfo"]["renderer"]["uniqueValueInfos"] = uniqueValueInfos
+        v["uniqueValueInfos"] = uniqueValueInfos
+        v["type"] = "uniqueValue"
+        v["field1"] = dParams["ResultColumnName"]
+        r["renderer"] = v
+        d["drawingInfo"] = r
 
         return d
 
@@ -739,7 +745,7 @@ def ReadParameters(paramsFile):
         return dParams
 
 ## ===================================================================================
-def CreateGroupLayer():
+def CreateGroupLayer(grpLayerName):
     # create output table and read the rating file into it
     # header: MapUnitKey, MapUnitRatingString, MapUnitRatingNumeric, RgbString
     # SDV dataTypes: 'CHOICE', 'FLOAT','INTEGER', 'STRING', 'VTEXT'
@@ -750,12 +756,12 @@ def CreateGroupLayer():
         # Use template lyr file stored in current script directory to create new Group Layer
         # This SDVGroupLayer.lyr file must be part of the install package along with
         # any used for symbology. The name property will be changed later.
-        grpLayerFile = os.path.join(os.path.dirname(sys.argv[0]), "SDV_GroupLayer.lyr")
+        grpLayerFile = os.path.join(scriptPath, "SDV_GroupLayer.lyr")
 
         if not arcpy.Exists(grpLayerFile):
             raise MyError, "Missing group layer file (" + grpLayerFile + ")"
 
-        grpLayerName = "WSS Thematic Soil Maps"
+        #grpLayerName = "WSS Thematic Soil Maps"
         testLayers = arcpy.mapping.ListLayers(mxd, grpLayerName, df)
 
         if len(testLayers) > 0:
@@ -765,7 +771,7 @@ def CreateGroupLayer():
             arcpy.mapping.RemoveLayer(df, grpLayer)
 
         grpLayer = arcpy.mapping.Layer(grpLayerFile)
-        grpLayer.visible = False
+        grpLayer.visible = True
         grpLayer.name = grpLayerName
         grpLayer.description = "Group layer containing individual WSS thematic soil map layers described in " + thematicPath
         arcpy.mapping.AddLayer(df, grpLayer, "TOP")
@@ -969,7 +975,7 @@ def CreateDescription(dParams, surveysEstablished):
 
         # Update layer description
         description = dParams["SdvAttributeDescription"] + "\r\nMap ID: " + str(dMaps[dParams["SdvAttributeName"]]) + "\r\nSpatial archived: " + surveysEstablished
-        description = description + "\r\nImported to ArcGIS by " + dParams["User"] + "; " + datetime.date.today().isoformat() + " using " + os.path.basename(sys.argv[0])
+        description = description + "\r\nImported to ArcGIS by " + dParams["User"] + "; " + datetime.date.today().isoformat() + " using " + scriptPath
 
         for key in dList1:
             param = dParams[key]
@@ -1113,7 +1119,9 @@ def UpdateLayerwithStats(newLayer, dValues, dParams):
             for rec in cur:
                 mukey = rec[0]
                 acres = rec[2]
-                totalAcres += acres
+
+                if not acres is None:
+                    totalAcres += acres
                 #PrintMsg("\t" + mukey + " " + str(acres), 1)
 
                 if mukey in dValues:
@@ -1126,19 +1134,21 @@ def UpdateLayerwithStats(newLayer, dValues, dParams):
                 cur.updateRow(rec)
 
                 # Summary
-                if dataType.upper() in ['CHOICE', 'STRING', 'VTEXT', 'INTEGER']:
-                    #PrintMsg(" \nGetting unique values legend", 1)
-                    if rating in dRatingAcres:
-                        dRatingAcres[rating] += acres
+                if not acres is None:
+                    if dataType.upper() in ['CHOICE', 'STRING', 'VTEXT', 'INTEGER']:
+                        #PrintMsg(" \nGetting unique values legend", 1)
 
-                    else:
-                        dRatingAcres[rating] = acres
+                        if rating in dRatingAcres:
+                            dRatingAcres[rating] += acres
 
-                elif dataType.upper() in ['FLOAT']:
-                    #PrintMsg(" \nGetting class breaks legend", 1)
+                        else:
+                            dRatingAcres[rating] = acres
 
-                    if rating is not None:
-                        wtdAcres += acres * rating
+                    elif dataType.upper() in ['FLOAT']:
+                        #PrintMsg(" \nGetting class breaks legend", 1)
+
+                        if rating is not None:
+                            wtdAcres += acres * rating
 
         return dRatingAcres, wtdAcres, totalAcres
 
@@ -1150,6 +1160,287 @@ def UpdateLayerwithStats(newLayer, dValues, dParams):
     except:
         errorMsg()
         return dRatingAcres, wtdAcres, totalAcres
+
+## ===================================================================================
+def AddFirstSoilMap(outputFC, summary, surveyInfo):
+    # Create the top layer which will be simple black outline, no fill with MUSYM labels, visible
+    # Run SDA query to add NATMUSYM and MAPUNIT NAME to featureclass
+    try:
+
+        mapLayerName = "Soil Labels"
+
+        # Remove existing map layers with same name
+        existingLayers = arcpy.mapping.ListLayers(mxd, mapLayerName, df)
+
+        for soilMap in existingLayers:
+            if soilMap.longName == os.path.join(grpLayerName, mapLayerName):
+                arcpy.mapping.RemoveLayer(df, soilMap)
+
+        # 5. Update layerDefinition dictionary for this map layer
+        newLayer = arcpy.mapping.Layer(wssLayerFile)
+        newLayer.name = mapLayerName
+        newLayer.description = summary
+        newLayer.visible = True
+        newLayer.transparency = fillTransparency
+        newLayer.showLabels = True
+
+        # Update layer symbology using JSON dictionary
+        if version[0:4] in ["10.3", "10.4", "10.5"]:
+            #PrintMsg(" \nUpdating symbology using JSON string", 1)
+
+            # Update layer symbology using JSON
+            dLayerDefinition = SimpleFeaturesJSON()
+            newLayer.updateLayerFromJSON(dLayerDefinition)
+            #PrintMsg(" \n" + str(dLayerDefinition), 1)
+
+        # Try adding musym labels to each soil map and see how annoying that is
+        bZoomed = ZoomToExtent(newLayer)
+        bLabeled = AddLabels(newLayer, True)
+        #newLayer.showLabels = True
+
+        arcpy.mapping.AddLayerToGroup(df, grpLayer, newLayer, "TOP")  # add soil map layer to group layer
+
+        mapLayerFile = os.path.join(basePath, newLayer.name + ".lyr")
+        arcpy.SaveToLayerFile_management(newLayer, mapLayerFile, "RELATIVE", "10.1")
+
+        return True
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+## ===================================================================================
+def AttributeRequest(sdaURL, outputTable, sQuery, keyField):
+    # POST REST which uses urllib and JSON
+    #
+    # Uses an InsertCursor to populate the new outputTable
+    #
+    # Send query to SDM Tabular Service, returning data in JSON format,
+    # creates a new table and loads the data into a new Table in the geodatabase
+    # Returns a list of key values and if keyField = "mukey", returns a dictionary like the output table
+
+    try:
+        #outputValues = []  # initialize return values (min-max list)
+        dMapunitInfo = dict()
+
+        #PrintMsg(" \n2. Requesting tabular data for " + Number_Format(len(mukeyList), 0, True) + " map units...")
+        arcpy.SetProgressorLabel("Sending tabular request to Soil Data Access...")
+        #PrintMsg(" \n" + "Sending tabular request to Soil Data Access...", 0)
+
+
+        if sQuery == "":
+            raise MyError, "Missing query string"
+
+        # Tabular service to append to SDA URL
+        url = sdaURL + "/Tabular/SDMTabularService/post.rest"
+
+        #PrintMsg(" \nURL: " + url, 1)
+        #PrintMsg(" \n" + sQuery, 0)
+
+        dRequest = dict()
+        dRequest["format"] = "JSON+COLUMNNAME+METADATA"
+        dRequest["query"] = sQuery
+
+        #PrintMsg(" \nURL: " + url)
+        #PrintMsg("QUERY: " + sQuery)
+
+        # Create SDM connection to service using HTTP
+        jData = json.dumps(dRequest)
+
+        # Send request to SDA Tabular service
+        req = urllib2.Request(url, jData)
+        resp = urllib2.urlopen(req)
+        jsonString = resp.read()
+        data = json.loads(jsonString)
+        del jsonString, resp, req
+
+        if not "Table" in data:
+            raise MyError, "Query failed to select anything: \n " + sQuery
+
+        dataList = data["Table"]     # Data as a list of lists. Service returns everything as string.
+
+        # Get column metadata from first two records
+        columnNames = dataList.pop(0)
+        columnInfo = dataList.pop(0)
+
+        if outputTable == "":
+            raise MyError, ""
+
+        # Find the key field and set an index
+        keyIndx = columnNames.index(keyField)
+
+        with arcpy.da.SearchCursor(outputTable, columnNames) as cur:
+            for rec in dataList:
+                key = rec[keyIndx]
+                dMapunitInfo[key] = rec
+
+        arcpy.SetProgressorLabel("Finished importing attribute data")
+
+        return dMapunitInfo
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return dMapunitInfo
+
+    except urllib2.HTTPError:
+        errorMsg()
+        PrintMsg(" \n" + sQuery, 1)
+        return dMapunitInfo
+
+    except:
+        errorMsg()
+        return MapunitInfo
+
+## ===================================================================================
+def GetMapunitInformation(outputFC):
+    #
+    # Create 'Soil Labels' layer description string including map unit summaries from SDA
+    #
+    try:
+
+        # Polygon acres are already calculated by the UpdateLayerwithStats function. Just
+        # need to get a map unit total.
+        #
+        # Look for code containing 'Spatial archived:' to find list of Areasymbols for this dataset.
+        #
+        # Run SDA query to get NATMUSYM, AREASYMBOL, MUNAME for this dataset
+
+        # Using mapunit and legend table for the selected mapunits.
+
+        keyList = GetKeys(outputFC, "mukey")
+
+        mukeys = str(keyList)[1:-1]
+
+        sQuery = """SELECT M.mukey, M.nationalmusym as natmusym, M.muname
+        FROM mapunit M WITH (nolock)
+        INNER JOIN legend L ON L.lkey = M.lkey AND M.mukey in (""" + mukeys + """)
+        ORDER BY mukey"""
+
+        dMapunitInfo = AttributeRequest(sdaURL, outputFC, sQuery, "mukey")  # Need to get ratingField here
+        #PrintMsg(" \n" + str(dMapunitInfo), 1)
+
+        dMapunit = dict()  # key=mukey, acres, areasymbol, musym, muname
+        totalAcres = 0
+        fields = ["SHAPE@", "MUKEY", "MUSYM", "NATMUSYM", "MUNAME", "ACRES", "AREASYMBOL", "SPATIALVER"]
+        versionList = list()
+
+        with arcpy.da.UpdateCursor(outputFC, fields) as cur:
+            for rec in cur:
+            #for mukey in dMapunit:
+                mukey = rec[1]
+                musym = rec[2]
+                areasymbol = rec[6]
+                spatialver = rec[7]
+                muInfo = dMapunitInfo[mukey]
+                junk, natmusym, muname = muInfo
+                acres = rec[0].getArea("GEODESIC", "ACRES")
+                rec[3] = natmusym
+                rec[4] = muname
+                rec[5] = acres
+                cur.updateRow(rec)
+
+                if not acres is None:
+                    totalAcres += acres
+
+                    if mukey in dMapunit:
+                        dMapunit[mukey][0] += acres
+
+                    else:
+                        dMapunit[mukey] = [acres, areasymbol, musym, muname]
+
+                    version = (areasymbol, spatialver)
+
+                    if not version in versionList:
+                        versionList.append(version)
+
+
+            sQuery = GetSurveyVersion(versionList)  # Problem here??
+            PrintMsg(" \n")
+
+            surveyInfo = GetSaveRest(sdaURL, sQuery, totalAcres)
+
+            # version list is a list of tuples made up of areasymbol and spatialver
+            #
+            soilSummary = "Soil survey areas include: " + surveyInfo + "\r\n\r\nTotal acres within AOI: " + Number_Format(totalAcres, 1, True) + "\r\n\r\nAREASYMBOL| MUSYM| MUNAME| ACRES"
+
+            for mukey in sorted(dMapunit.keys()):
+                acres, areasymbol, musym, muname = dMapunit[mukey]
+                soilSummary = soilSummary + " \r\n" + areasymbol + "| " + musym + "| " + muname + "| " + Number_Format(acres, 1, True)
+
+        return soilSummary, surveyInfo
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return soilSummary
+
+    except:
+        errorMsg()
+        return soilSummary
+
+## ===================================================================================
+def AddNewFields(outputTable, columnNames, columnInfo):
+    # Create new table. Start with in-memory and then export to geodatabase table
+    #
+    # ColumnNames and columnInfo come from the Attribute query JSON string
+    # MUKEY would normally be included in the list, but it should already exist in the output featureclass
+    #
+    try:
+        # Dictionary: SQL Server to FGDB
+        dType = dict()
+
+        dType["int"] = "long"
+        dType["smallint"] = "short"
+        dType["bit"] = "short"
+        dType["varbinary"] = "blob"
+        dType["nvarchar"] = "text"
+        dType["varchar"] = "text"
+        dType["char"] = "text"
+        dType["datetime"] = "date"
+        dType["datetime2"] = "date"
+        dType["smalldatetime"] = "date"
+        dType["decimal"] = "double"
+        dType["numeric"] = "double"
+        dType["float"] ="double"
+
+        # numeric type conversion depends upon the precision and scale
+        dType["numeric"] = "float"  # 4 bytes
+        dType["real"] = "double" # 8 bytes
+
+        # Iterate through list of field names and add them to the output table
+        i = 0
+
+        # ColumnInfo contains:
+        # ColumnOrdinal, ColumnSize, NumericPrecision, NumericScale, ProviderType, IsLong, ProviderSpecificDataType, DataTypeName
+        #PrintMsg(" \nFieldName, Length, Precision, Scale, Type", 1)
+
+        #joinFields = list()
+
+        for i, fldName in enumerate(columnNames):
+            vals = columnInfo[i].split(",")
+            length = int(vals[1].split("=")[1])
+            precision = int(vals[2].split("=")[1])
+            scale = int(vals[3].split("=")[1])
+            dataType = dType[vals[4].lower().split("=")[1]]
+
+            if fldName.lower().endswith("key"):
+                # Per SSURGO standards, key fields should be string. They come from Soil Data Access as long integer.
+                dataType = 'text'
+                length = 30
+
+            arcpy.AddField_management(outputTable, fldName, dataType, precision, scale, length)
+
+        return outputTable
+
+    except:
+        errorMsg()
+        return ""
 
 ## ===================================================================================
 def AddSoilMap(mapID, surveysEstablished, dParams):
@@ -1169,21 +1460,25 @@ def AddSoilMap(mapID, surveysEstablished, dParams):
             mapLayerName = dParams["SdvAttributeName"]
 
         else:
-            mapLayerName = dParams["SdvAttributeName"]  + " " + aggMethod
+            mapLayerName = dParams["SdvAttributeName"] + " " + aggMethod
 
         if not dParams["DepthUnits"] is None:
             mapLayerName = mapLayerName + " " + dParams["TopDepth"] + "-" + dParams["BottomDepth"] + dParams["DepthUnits"]
 
         dataType = dParams["ResultDataType"]  # current domain: 'Choice', 'Float','Integer', 'string', 'VText'
         tblName = mapLayerName
-        title = "\t" + mapLayerName + " (Map ID: " + str(mapID) + ")"
+        title = mapLayerName + " (Map ID: " + str(mapID) + ")"
         PrintMsg(" \n" + title, 0)
 
         # Remove existing map layers with same name
+        # NOTE! Isn't this now done in the AddSoilLabels function???
+        #
+        #
+        #PrintMsg(" \nSee if the RemoveLayer section can be deleted from 'AddSoilMap' function", 1)
         existingLayers = arcpy.mapping.ListLayers(mxd, mapLayerName, df)
 
         for soilMap in existingLayers:
-            if soilMap.longName == os.path.join("WSS Thematic Soil Maps", mapLayerName):
+            if soilMap.longName == os.path.join(grpLayerName, mapLayerName):
                 arcpy.mapping.RemoveLayer(df, soilMap)
 
         #
@@ -1237,9 +1532,6 @@ def AddSoilMap(mapID, surveysEstablished, dParams):
         if dLayerDefinition is None or len(dLayerDefinition) == 0:
             raise MyError, ""
 
-        #else:
-        #    PrintMsg(" \n2. dLayerDefinition: " + '"' + str(dLayerDefinition) + '"', 1)
-
         # 5. Update layerDefinition dictionary for this map layer
         newLayer = arcpy.mapping.Layer(wssLayerFile)
         newLayer.name = mapLayerName
@@ -1264,7 +1556,7 @@ def AddSoilMap(mapID, surveysEstablished, dParams):
 
 
             if dataType.upper() in ['CHOICE', 'STRING', 'VTEXT', 'INTEGER']:
-                PrintMsg("\t" + ("-" * len(title)), 0)
+                PrintMsg(("-" * len(title)), 0)
                 PrintMsg(" \n" + dParams["ResultColumnName"] + "| Percent| Acres")
 
                 for rating, acres in sorted(dRatingAcres.items()):
@@ -1276,29 +1568,27 @@ def AddSoilMap(mapID, surveysEstablished, dParams):
                     PrintMsg(str(rating) + "| " + str(pct) + "| " + str(round(acres, 2)), 0)
 
             elif dataType.upper() in ['FLOAT']:
-                PrintMsg("\t" + ("-" * len(title)), 0)
+                PrintMsg(("-" * len(title)), 0)
                 wtdAvg = wtdAcres / totalAcres
 
                 if not dParams["UnitsofMeasure"] is None:
-                    PrintMsg("\tWeighted average: " + Number_Format(wtdAvg, int(dParams["ResultPrecision"]), True) + " " + dParams["UnitsofMeasure"] + " for " + Number_Format(totalAcres, 2, True) + " acres", 0)
+                    PrintMsg("Weighted average: " + Number_Format(wtdAvg, int(dParams["ResultPrecision"]), True) + " " + dParams["UnitsofMeasure"] + " for " + Number_Format(totalAcres, 2, True) + " acres", 0)
 
                 else:
-                    PrintMsg("\t\tWeighted average: " + Number_Format(wtdAvg, int(dParams["ResultPrecision"]), True)  + " for " + Number_Format(totalAcres, 2, True) + " acres", 0)
+                    PrintMsg("Weighted average: " + Number_Format(wtdAvg, int(dParams["ResultPrecision"]), True)  + " for " + Number_Format(totalAcres, 2, True) + " acres", 0)
 
         else:
             bUpdated = UpdateLayer(newLayer, dValues, dParams)
 
-        # Update layer symbology using JSON dictionary
+        # Update layer symbology using JSON dictionary. Only for ArcGIS Desktop 10.3 or later.
         if version >= 10.3:
-            #PrintMsg(" \nUpdating symbology using JSON string", 1)
 
-            # Originally loaded the entire dictionary. Try instead converting dictionary to string and using json.loads(jString)
+            # Update layer symbology using JSON
             newLayer.updateLayerFromJSON(dLayerDefinition)
 
 
-
         # Try adding musym labels to each soil map and see how annoying that is
-        bLabeled = AddLabels(newLayer)
+        bLabeled = AddLabels(newLayer, False)
 
         arcpy.mapping.AddLayerToGroup(df, grpLayer, newLayer, "BOTTOM")  # add soil map layer to group layer
 
@@ -1317,7 +1607,7 @@ def AddSoilMap(mapID, surveysEstablished, dParams):
         return False
 
 ## ===================================================================================
-def AddLabels(inputLayer):
+def ZoomToExtent(inputLayer):
     # Create layer description string
     try:
 
@@ -1348,18 +1638,43 @@ def AddLabels(inputLayer):
             # Leave labels turned off for thematic map layers
             dfScale = 30000
 
+        if dfScale <= 24000:
+            inputLayer.showLabels = True
+
+        else:
+            inputLayer.showLabels = False
+
+        return True
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+
+## ===================================================================================
+def AddLabels(inputLayer, bLabeled):
+    # Set layer label properties to use MUSYM
+    # Some layers we just want to set the label properties to use MUSYM, but
+    # we don't want to display the labels.
+
+    try:
+
         # Add mapunit symbol (MUSYM) labels
         if inputLayer.supports("LABELCLASSES"):
             labelCls = inputLayer.labelClasses[0]
             labelCls.expression = "[MUSYM]"
 
-        if dfScale <= 24000:
+        if df.scale <= 24000 and bLabeled:
             inputLayer.showLabels = True
-            drawOutlines = True
+            drawOutlines = True #??
 
         else:
             inputLayer.showLabels = False
-            drawOutlines = False
 
         return True
 
@@ -1427,11 +1742,14 @@ def UpdateMetadata(outputWS, target, surveyInfo, description, dParams, dColumns)
 
         # Define input and output XML files
         #mdExport = os.path.join(env.scratchFolder, "xxExport.xml")  # initial metadata exported from current MUPOLYGON featureclass
-        mdExport = os.path.join(os.path.dirname(sys.argv[0]), "WSS_ThematicMetadata.xml")
+        mdExport = os.path.join(scriptPath, "WSS_ThematicMetadata.xml")
         mdImport = os.path.join(env.scratchFolder, "xxImport.xml")  # the metadata xml that will provide the updated info
         out_xml = os.path.join(env.scratchFolder, "xxClean.xml")
 
         # Import the template metadata with the 'xx' keywords
+        if not arcpy.Exists(mdExport):
+            raise MyError, "XML file (" + mdExport + ") not found"
+
         arcpy.ImportMetadata_conversion(mdExport, "FROM_FGDC", target, "ENABLED")
 
         # Export metadata to an xml file that can be edited
@@ -1894,23 +2212,29 @@ try:
     drawOutlines = arcpy.GetParameter(3)                     # boolean to draw polygon outlines
     fillTransparency = arcpy.GetParameter(4)                 # percent transparency (integer, convert to 255 as opaque)
     bStatistics = arcpy.GetParameter(5)                      # boolean, generate layer statistics
+    bTabular = arcpy.GetParameter(6)                         # boolean, convert shapefiles and tabular data to gSSURGO database
+
+    scriptPath = os.path.dirname(sys.argv[0])
 
     env.overwriteOutput= True
     installInfo = arcpy.GetInstallInfo()
-    version = float(installInfo["Version"])
-    theURL = r"https://sdmdataaccess.sc.egov.usda.gov"
+    version = installInfo["Version"][0:4]                      # Need to fix this variable. Won't handle 10.4.1
+    sdaURL = r"https://sdmdataaccess.sc.egov.usda.gov"
+    # https://SDMDataAccess.sc.egov.usda.gov/Tabular/post.rest
 
     # Get data folders from input layer
     # probably should validate the inputShp as soil polygon
     desc = arcpy.Describe(inputShp)
     spatialFolder = os.path.dirname(desc.catalogPath)  # spatial folder
+    sr = desc.spatialReference
+    projType = sr.type
     basePath = os.path.dirname(spatialFolder)
     thematicPath = os.path.join(basePath, "thematic")
-    remove_gp_history_xslt = os.path.join(os.path.dirname(sys.argv[0]), "remove geoprocessing history.xslt")
+    remove_gp_history_xslt = os.path.join(scriptPath, "remove geoprocessing history.xslt")
 
     if os.path.basename(basePath).startswith("wss_aoi_"):
         # this is an original WSS AOI dataset folder
-        fcID = os.path.basename(basePath)[7:]
+        fcID = os.path.basename(basePath)[8:]
 
     else:
         fcID = ""
@@ -1945,18 +2269,31 @@ try:
     # Get dictionary of units of measure abbreviations
     dUnits = Units()
 
-    # Create file geodatabase in 'wss' folder
-    outputGDB = os.path.join(outputFolder, "WSS_ThematicMaps.gdb")
+    gdbName =  arcpy.ValidateTableName( "WSS_ThematicMaps_" + fcID) + ".gdb"
+    outputGDB = os.path.join(outputFolder, gdbName)
+    outputFC = os.path.join(outputGDB, "MUPOLYGON")
 
-    if not arcpy.Exists(outputGDB):
-        arcpy.CreateFileGDB_management(os.path.dirname(outputGDB), os.path.basename(outputGDB), "CURRENT")
+    if bTabular:
+        # Create a gSSURGO-styled geodatabase, importing all tabular and spatial data
+        desc = arcpy.Describe(inputShp)
+        inputFolder = os.path.dirname(os.path.dirname(desc.catalogPath))
+        aliasName = os.path.basename(inputFolder)[8:]
+        AOI = "World"
+        useTextFiles = True
+        import WSSThematic_gSSURGO
+        bGood = WSSThematic_gSSURGO.gSSURGO(inputFolder, outputGDB, AOI, aliasName, useTextFiles)
 
-    # Copy original shapefile to a filegeodatabase featureclass
-    outputFC = os.path.join(outputGDB, arcpy.ValidateTableName("Soils" + fcID, outputGDB))
-    #PrintMsg(" \nOutput featureclass: " + outputFC, 0)
+    else:
+        # Create a simple file geodatabase and import just the soil polygon shapefile
 
-    if arcpy.Exists(outputFC):
-        arcpy.Delete_management(outputFC)
+        if not arcpy.Exists(outputGDB):
+            arcpy.CreateFileGDB_management(os.path.dirname(outputGDB), os.path.basename(outputGDB), "CURRENT")
+
+        if arcpy.Exists(outputFC):
+            arcpy.Delete_management(outputFC)
+
+
+
 
     # Seem to be having problems copying polygons when 0 are selected
     # Try switching selection (unless there already is one)
@@ -1965,29 +2302,45 @@ try:
     if iSel == 0:
         arcpy.SelectLayerByAttribute_management(inputShp, "SWITCH_SELECTION")
 
-    arcpy.CopyFeatures_management(inputShp, outputFC)
+    if bTabular:
+        # Add fields to MUPOLYGON featureclass
+        fieldList = [fld.name.upper() for fld in arcpy.Describe(outputFC).fields]
+        if not "NATMUSYM" in fieldList:
+            arcpy.AddField_management(outputFC, "NATMUSYM", "TEXT", "", "", 6)
+
+        if not "MUNAME" in fieldList:
+            arcpy.AddField_management(outputFC, "MUNAME", "TEXT", "", "", 240)
+
+        if not "ACRES" in fieldList:
+            arcpy.AddField_management(outputFC, "ACRES", "DOUBLE")
+
+
+    else:
+        # Add fields to original soilmu shapefile. Doing this to ensure the best field order in the output featureclass
+        fieldList = [fld.name.upper() for fld in desc.fields]
+
+        if not "NATMUSYM" in fieldList:
+            arcpy.AddField_management(inputShp, "NATMUSYM", "TEXT", "", "", 6)
+
+        if not "MUNAME" in fieldList:
+            arcpy.AddField_management(inputShp, "MUNAME", "TEXT", "", "", 240)
+
+        if not "ACRES" in fieldList:
+            arcpy.AddField_management(inputShp, "ACRES", "DOUBLE")
+
+        arcpy.CopyFeatures_management(inputShp, outputFC)  # Seeing some issues with CopyFeatures. ObjectID is labeled FID and is out-of-order
+        arcpy.AlterField_management(outputFC, "OBJECTID", "#", "OBJECTID", "#", 4, "NON_NULLABLE", False)
+        arcpy.AlterAliasName(outputFC, "Soils - " + fcID)
 
     if iSel == 0:
         arcpy.SelectLayerByAttribute_management(inputShp, "CLEAR_SELECTION")
 
-    # Add Acres field to new featureclass and populate
+
+
+    description, surveyInfo = GetMapunitInformation(outputFC)
+
+    # Initialize list of rating column names and column definitions. Not sure what this is being used for
     #
-    arcpy.AddField_management(outputFC, "ACRES", "DOUBLE")
-    sr = desc.spatialReference
-    projType = sr.type
-    versionList = list()
-
-    with arcpy.da.UpdateCursor(outputFC, ["SHAPE@", "ACRES", "AREASYMBOL", "SPATIALVER"]) as cur:
-        for rec in cur:
-            acres = rec[0].getArea("GEODESIC", "ACRES")  # cheat with geodesic acres. Should use appropriate projection.
-            rec[1] = round(acres, 2)
-            version = (rec[2], rec[3])
-            if not version in versionList:
-                versionList.append(version)
-
-            cur.updateRow(rec)
-
-    # Initialize list of rating column names and column definitions
     dColumns = {"Acres":"acres calculated using geodesic area method", "natmusm":"The symbol used to uniquely identify the soil mapunit nationally.  The value is generated by NASIS, and is the based on the muiid from the Mapunit table, expressed in base 36.  It is a combination of numeric and lowercase alphabetic characters."}
 
     # Initialize dictionary with parameters for each map
@@ -2030,9 +2383,9 @@ try:
             PrintMsg(" \nColumn " + resultColumn + " already exists in output featureclass...", 1)
 
 
-    sQuery = FormAttributeQuery(versionList)
-    surveyInfo = AttributeRequest(theURL, sQuery)
-    description = "SSURGO data from WSS AOI download"
+
+
+    #description = "SSURGO data from WSS AOI download"
 
     # get creation date from last map and use it to populate featureclass metadata
     mapID = sorted(dMaps.values())[-1]
@@ -2041,7 +2394,9 @@ try:
     # Update featureclass metadata
     # Clear geoprocessing history for output featureclass
     bClear = ClearHistory(outputFC, remove_gp_history_xslt)
-    bMetadata = UpdateMetadata(outputGDB, outputFC, surveyInfo, description, dParams, dColumns)
+
+    if not bTabular:
+        bMetadata = UpdateMetadata(outputGDB, outputFC, surveyInfo, description, dParams, dColumns)
 
     # Create map layer object from inputShp and turn off labels so that the rest of the new map layers
     # aren't all showing labels
@@ -2057,10 +2412,14 @@ try:
     arcpy.SaveToLayerFile_management(baseLayer, wssLayerFile, "ABSOLUTE", 10.1)
 
     # Create group layer for organizing individual soil maps under
-    grpLayer = CreateGroupLayer()
+    grpLayerName = "WSS Thematic Soil Maps - " + fcID
+    grpLayer = CreateGroupLayer(grpLayerName)
 
     # Define new output group layer file (.lyr) to permanently save all map layers to
     grpFile = os.path.join(basePath, grpLayer.name) + ".lyr"
+
+    # Create first soil map layer (lines and labels, no fill).
+    bMapped = AddFirstSoilMap(outputFC, description, surveyInfo)
 
     for mapID in mapList:
         # for each soil map:
@@ -2077,7 +2436,7 @@ try:
         bMapped = AddSoilMap(mapID, surveyInfo, dParams)  # Add each thematic map layer to ArcMap
 
     if bMapped == False:
-        raise MyError, "Failed to map " + mapID
+        raise MyError, "Failed to map " + str(mapID)
 
     # Clear geoprocessing history for output featureclass
     # bClear = ClearHistory(outputFC, remove_gp_history_xslt)
@@ -2091,12 +2450,13 @@ try:
     inputLayer.visible = False
     arcpy.SaveToLayerFile_management(grpLayer, grpFile)
     #PrintMsg(" \nSaved group layer to " + grpFile, 0)
-    bLabeled = AddLabels(inputLayer)
+    bZoomed = ZoomToExtent(inputLayer)
     arcpy.RefreshTOC()
     arcpy.RefreshActiveView()
 
     PrintMsg(" \nFinished creating thematic soil map layers \n ", 0)
-    PrintMsg(" \nOutput featureclass: " + outputFC, 0)
+    #PrintMsg(" \nOutput featureclass: " + outputFC, 0)
+    del mxd
 
 
 except MyError, e:

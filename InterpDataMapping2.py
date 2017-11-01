@@ -322,6 +322,9 @@ def AddColumns(theMuTable, theCompTable, outputField, dRatingClasses):
         # create MapunitDC table in the geodatabase of the input layer
         #PrintMsg(" \nAdding new columns for rating reasons...", 0)
 
+        # Do I have field aliases available at this junction??
+        #PrintMsg(" \n" + str(dRatingClasses), 1)
+
         i = 1
         rcs = dRatingClasses.keys()
         rcs.sort()
@@ -338,9 +341,10 @@ def AddColumns(theMuTable, theCompTable, outputField, dRatingClasses):
             newField = outputField + v
             dRatingClasses[rc] = newField
             rc = rc.replace(",","")
-            #arcpy.AddField_management(theMuTable, newField, "SHORT", "", "", "", rc)  # Keep this for comppct only
-            arcpy.AddField_management(theMuTable, newField, "SHORT", "", "", "", newField)  # Keep this for comppct only
+            arcpy.AddField_management(theMuTable, newField, "SHORT", "", "", "", rc)  # Keep this for comppct only
+            #arcpy.AddField_management(theMuTable, newField, "SHORT", "", "", "", newField)  # Keep this for comppct only
             i += 1
+
 
         return True
 
@@ -355,8 +359,8 @@ def MapRatingReasons(theDB, theMapunitLayer, theCompTable, cFlds, outputField, d
     try:
 
         # First create Group Layer under which to store individual rating class map layers
-        mxd = arcpy.mapping.MapDocument("CURRENT")
-        df = mxd.activeDataFrame
+        # mxd = arcpy.mapping.MapDocument("CURRENT")
+        # df = mxd.activeDataFrame
 
         grpLayerName = sdvAtt + " - Rating Reasons"
         testLayers = arcpy.mapping.ListLayers(mxd, grpLayerName, df)
@@ -364,7 +368,7 @@ def MapRatingReasons(theDB, theMapunitLayer, theCompTable, cFlds, outputField, d
         if len(testLayers) > 0:
             # If it exists, remove an existing group layer from previous run
             grpLayer = testLayers[0]
-            PrintMsg(" \nRemoving old group layer", 1)
+            #PrintMsg(" \nRemoving old group layer", 1)
             arcpy.mapping.RemoveLayer(df, grpLayer)
 
         # Define new output group layer file (.lyr) to permanently save output
@@ -433,12 +437,12 @@ def MapRatingReasons(theDB, theMapunitLayer, theCompTable, cFlds, outputField, d
                 if not fuzzyRating is None:
                     try:
                         pct = dPct[key]
-                        #dPct[key] = pct + compPct # original method
-                        dPct[key] = pct + ( ( compPct / 100.0 ) * fuzzyRating)  # test method for weighting
+                        dPct[key] = pct + compPct # original method
+                        #dPct[key] = pct + ( ( compPct / 100.0 ) * fuzzyRating)  # test method for weighting
 
                     except:
-                        # dPct[key] = compPct  # original method
-                        dPct[key] = (compPct / 100.0 ) * fuzzyRating
+                        dPct[key] = compPct  # original method
+                        #dPct[key] = (compPct / 100.0 ) * fuzzyRating
 
         #
         # Create Pivot table using Rating Reasons
@@ -472,7 +476,7 @@ def MapRatingReasons(theDB, theMapunitLayer, theCompTable, cFlds, outputField, d
 
                 for theRating in dRatingClasses:
                     # Loop through each field
-                    PrintMsg("\t" + mukey + ", " + theRating, 1)
+                    #PrintMsg("\t" + mukey + ", " + theRating, 1)
                     fieldName = dRatingClasses[theRating]
                     fldIndx = pFlds.index(fieldName)
 
@@ -503,7 +507,7 @@ def MapRatingReasons(theDB, theMapunitLayer, theCompTable, cFlds, outputField, d
 
                 pCursor.updateRow(pRec)
 
-        PrintMsg(" \n", 0)
+        PrintMsg(" \nCreating map layers for each rating reason...", 0)
 
         # Try making query view
         inputTables = [theMapunitLayer,  os.path.join(theDB, theMuTable)]
@@ -529,8 +533,8 @@ def MapRatingReasons(theDB, theMapunitLayer, theCompTable, cFlds, outputField, d
 
             for theField in theFields:
                 #PrintMsg("\tField " + theField.name + " - " + theField.aliasName, 0)
-                if theField.type != "OID":
-                    mapunitFields.append((theFC + "." + theField.name, theField.aliasName))
+                #if theField.type != "OID":  # Unable to Union map layers without OID. Does this bring it back??
+                mapunitFields.append((theFC + "." + theField.name, theField.aliasName))
 
             theQueryFields = list()
             for fldinfo in mapunitFields:
@@ -546,7 +550,7 @@ def MapRatingReasons(theDB, theMapunitLayer, theCompTable, cFlds, outputField, d
 
             if layerCnt > 0:
                 layerDesc = arcpy.Describe(layerTitle)  # bug workaround to make the new featurelayer visible to arcpy.mapping
-                PrintMsg("\tCreated '" + layerTitle + "' with " + Number_Format(layerCnt, 0, True) + " features", 0)
+                PrintMsg("\tCreated '" + cleanRating + "' map with " + Number_Format(layerCnt, 0, True) + " features", 0)
                 lyr = arcpy.mapping.Layer(layerTitle)
                 lyr.visible = False
 
@@ -684,8 +688,8 @@ def MakeReport(tableView):
 
     try:
 
-        mxd = arcpy.mapping.MapDocument("CURRENT")
-        df = mxd.activeDataFrame
+        # mxd = arcpy.mapping.MapDocument("CURRENT")
+        # df = mxd.activeDataFrame
 
         tblName = "InterpQuery"  # table containing pre-aggregated data in gSSURGO database
         #legendTbl = os.path.join(gdb, "legend")    # table containing legend.areaname
@@ -818,9 +822,7 @@ try:
     mxd = arcpy.mapping.MapDocument("CURRENT")
     df = mxd.activeDataFrame
 
-
     env.workspace = theDB
-
 
     # Try to set output field parameters according to information in the SDVATTRIBUTE table
     # If the interp is not found in the SDVATTRIBUTE table, use the outputFieldName
@@ -857,6 +859,8 @@ try:
     # output table name for component information
     theCompTable = "Co_" + outputField + "_" + suffix
     theCompTable = theCompTable.replace(".","_")
+
+    #PrintMsg(" \nNeed to compare the Mu_ table contents with the Interp Rating Reasons Report. Suspect I have multiplied by comppct 2X \n ", 1)
 
     if CreateOutputTables(theDB,theMuTable, theCompTable, qTable, sdvAtt, outputField, aggregationMethod, dSDV) == False:
         # should be an error message generated by CreateOutputTables
@@ -906,6 +910,12 @@ try:
         #
         # At this point, qTable is a string
         #
+        #descFields = arcpy.Describe(qTable).fields
+        #for fld in descFields:
+        #    PrintMsg("\tqTable field: " + fld.name, 1)
+
+        #PrintMsg(" \nUsing sqlclause: " + str(sqlClause), 1)
+
         with arcpy.da.SearchCursor(qTable, qFields, sql_clause=sqlClause) as qCursor:
             cCursor = arcpy.da.InsertCursor(theCompTable, cFlds)
             #PrintMsg(" \nAdding rating information to " + theCompTable, 1)
@@ -939,8 +949,9 @@ try:
                 else:
                     # these are the reasons, write them to the component table
                     # the rating classes will NOT be written to the table
-                    if not fuzzyValue is None:
-                        fuzzyValue = int(round((fuzzyValue * compPct), 0))
+
+                    #if not fuzzyValue is None:
+                    #    fuzzyValue = int(round((fuzzyValue * compPct), 0))
 
                     cRec = theMukey, compPct, compName, localPhase, ratingClass, fuzzyValue
                     cCursor.insertRow(cRec)
@@ -954,7 +965,7 @@ try:
                         iRC += 1
 
 
-        # Dominant Condition Aggregation
+        # Still in Dominant Condition Aggregation
         #
         # Iterate through the dVals dictionary, find the Dominant rating class for each mukey
         # and add it to the dDCD dictionary
@@ -1011,6 +1022,7 @@ try:
         qFields = ["COMPONENT_MUKEY", "COMPONENT_COMPPCT_R", "COMPONENT_COMPNAME", "COMPONENT_LOCALPHASE", "COINTERP_RULEDEPTH", "COINTERP_INTERPHR", "COINTERP_INTERPHRC"]
 
         PrintMsg(" \nDominant component aggregation...", 0)
+        PrintMsg(" \nRemoved comppct-weighting in DCP", 1)
 
         with arcpy.da.Editor(theDB):
             sortFields = "ORDER BY COMPONENT_MUKEY ASC, COMPONENT_COMPPCT_R DESC"
@@ -1081,6 +1093,8 @@ try:
 
         #arcpy.mapping.RemoveTableView(tableView)
         #arcpy.Delete_management(qTable)
+
+    del mxd
 
     PrintMsg(" \n", 0)
 

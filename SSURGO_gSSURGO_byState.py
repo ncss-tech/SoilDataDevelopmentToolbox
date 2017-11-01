@@ -19,6 +19,14 @@
 #             longer work for PAC Basin.
 # 2014-09-27  sQuery modified to create a geodatabase with ALL surveys including the NOTCOM-only. Implemented
 #             with the FY2015 production.
+# 2017-09-21  Added option for state boundary clip of the MUPOLYGON featureclass. Only this one featureclass is
+#             clipped. NONE of the associated data is removed or altered in the attribute tables.
+#
+# 2017-09-21  To do: uppercase the statename query; compact the geodatabase?; add list of island states to exclude from clip?
+#             Test without setting clipping layer, or field. Update validation code for these 2 parameters; Test state clip using
+#             GCS WGS1984 state boundaries; test Alaska clip; JFF, compare Guam gSSURGO clip to Guam shapefile; test missing
+#             SSURGO downloads; test loss of S drive; make sure all temporary layers are cleaned up;
+#
 
 ## ===================================================================================
 class MyError(Exception):
@@ -98,6 +106,8 @@ def StateNames():
         stDict["Delaware"] = "DE"
         stDict["Florida"] = "FL"
         stDict["Georgia"] = "GA"
+        stDict["Territory of Guam"] = "GU"
+        stDict["Guam"] = "GU"
         stDict["Hawaii"] = "HI"
         stDict["Idaho"] = "ID"
         stDict["Illinois"] = "IL"
@@ -107,9 +117,11 @@ def StateNames():
         stDict["Kentucky"] = "KY"
         stDict["Louisiana"] = "LA"
         stDict["Maine"] = "ME"
+        stDict["Northern Mariana Islands"] = "MP"
         stDict["Maryland"] = "MD"
         stDict["Massachusetts"] = "MA"
         stDict["Michigan"] = "MI"
+        stDict["Federated States of Micronesia"] ="FM"
         stDict["Minnesota"] = "MN"
         stDict["Mississippi"] = "MS"
         stDict["Missouri"] = "MO"
@@ -125,6 +137,7 @@ def StateNames():
         stDict["Ohio"] = "OH"
         stDict["Oklahoma"] = "OK"
         stDict["Oregon"] = "OR"
+        stDict["Republic of Palau"] = "PW"
         stDict["Pacific Basin"] = "PB"
         stDict["Pennsylvania"] = "PA"
         stDict["Puerto Rico and U.S. Virgin Islands"] = "PRUSVI"
@@ -213,6 +226,10 @@ def StateAOI():
         dAOI['West Virginia'] = 'Lower 48 States'
         dAOI['Wisconsin'] = 'Lower 48 States'
         dAOI['Wyoming'] = 'Lower 48 States'
+        dAOI['Northern Mariana Islands'] = 'Pacific Islands Area'
+        dAOI['Federated States of Micronesia'] = 'Pacific Islands Area'
+        dAOI['Guam'] = 'Pacific Islands Area'
+
         return dAOI
 
     except:
@@ -263,16 +280,21 @@ def GetAreasymbols(attName, theTile):
     try:
 
         # Now using this query to retrieve All surve areas including NOTCOM-only
-        sQuery = "SELECT legend.areasymbol FROM (legend INNER JOIN laoverlap ON legend.lkey = laoverlap.lkey) " + \
-        "INNER JOIN sastatusmap ON legend.areasymbol = sastatusmap.areasymbol " + \
-        "WHERE (((laoverlap.areatypename)='State or Territory') AND ((laoverlap.areaname) Like '" + theTile + "%') AND " + \
-        "((legend.areatypename)='Non-MLRA Soil Survey Area')) ;"
+        #sQuery = "SELECT legend.areasymbol FROM (legend INNER JOIN laoverlap ON legend.lkey = laoverlap.lkey) " + \
+        #"INNER JOIN sastatusmap ON legend.areasymbol = sastatusmap.areasymbol " + \
+        #"WHERE (((laoverlap.areatypename)='State or Territory') AND ((laoverlap.areaname) Like '" + theTile + "%') AND " + \
+        #"((legend.areatypename)='Non-MLRA Soil Survey Area')) ;"
+
+        sQuery = "SELECT legend.areasymbol FROM (legend INNER JOIN laoverlap ON legend.lkey = laoverlap.lkey) \
+        INNER JOIN sastatusmap ON legend.areasymbol = sastatusmap.areasymbol \
+        WHERE laoverlap.areatypename = 'State or Territory' AND laoverlap.areaname = '" + theTile + "' AND \
+        legend.areatypename = 'Non-MLRA Soil Survey Area'"
 
         # Create empty value list to contain the count
         # Normally the list should only contain one item
         valList = list()
 
-        #PrintMsg("\t" + sQuery + " \n", 0)
+        # PrintMsg("\tQuery for " + theTile + ":  " + sQuery + " \n", 0)
 
 	    # NEW POST REST REQUEST BEGINS HERE
 	    #
@@ -283,8 +305,8 @@ def GetAreasymbols(attName, theTile):
 
         # Create request using JSON, return data as JSON
         dRequest = dict()
-        dRequest["FORMAT"] = "JSON"
-        dRequest["QUERY"] = sQuery
+        dRequest["format"] = "JSON"
+        dRequest["query"] = sQuery
         jData = json.dumps(dRequest)
 
         # Send request to SDA Tabular service using urllib2 library
@@ -320,19 +342,20 @@ def GetAreasymbols(attName, theTile):
     except MyError, e:
         # Example: raise MyError, "This is an error message"
         PrintMsg(str(e), 2)
-        return 0
+        return []
 
     except httplib.HTTPException, e:
         PrintMsg("HTTP Error: " + str(e), 2)
+        return []
 
     except socket.error, e:
         raise MyError, "Soil Data Access problem: " + str(e)
-        return -1
+        return []
 
     except:
         #PrintMsg(" \nSDA query failed: " + sQuery, 1)
         errorMsg()
-        return -1
+        return []
 
 ## ===================================================================================
 def GetFolders(inputFolder, valList, bRequired, theTile):
@@ -341,8 +364,9 @@ def GetFolders(inputFolder, valList, bRequired, theTile):
     try:
         env.workspace = inputFolder
         surveyList = list()
-        folderList = arcpy.ListWorkspaces("soil_*", "Folder")
+        #folderList = arcpy.ListWorkspaces("soil_*", "Folder") # fullpath of all soil_* folders
         missingList = list()
+        #PrintMsg(" \nFound "+ Number_Format(len(folderList), 0, True) + " soil folders", 1)
 
         # check each subfolder to make sure it is a valid SSURGO dataset
         # validation: has 'soil_' prefix and contains a spatial folder and a soilsmu_a shapefile
@@ -353,14 +377,15 @@ def GetFolders(inputFolder, valList, bRequired, theTile):
             # this should be one of the target SSURGO dataset folder
             # add it to the choice list
             subFolder = "soil_" + shpAS.lower()
-            shpName = "soilmu_a_" + shpAS + ".shp"
+            shpName = "soilmu_a_" + shpAS.lower() + ".shp"
             shpPath = os.path.join( os.path.join( inputFolder, os.path.join(subFolder, "spatial")), shpName)
 
             if arcpy.Exists(shpPath):
-                surveyList.append(os.path.basename(subFolder))
+                surveyList.append(subFolder)
 
             else:
                 # Missing soil polygon shapefile for a required SSURGO dataset
+                PrintMsg("\t" + shpPath, 1)
                 missingList.append(shpAS)
 
         if len(missingList) > 0 and bRequired:
@@ -375,6 +400,156 @@ def GetFolders(inputFolder, valList, bRequired, theTile):
     except:
         errorMsg()
         return []
+
+## ===================================================================================
+def ClipMuPolygons(targetLayer, aoiLayer, outputClip, theTile):
+
+    try:
+        PrintMsg("Clipping MUPOLYGON featureclass to the " + theTile + " state boundary", 0)
+
+        arcpy.OverwriteOutput = True
+
+        # Allow for NAD1983 to WGS1984 datum transformation if needed
+        #
+        tm = "WGS_1984_(ITRF00)_To_NAD_1983"
+        arcpy.env.geographicTransformations = tm
+
+        # Clean up temporary layers and featureclasses
+        #
+        selectedPolygons = "Selected_Polygons"
+        extentLayer = "AOI_Extent"
+        extentFC = os.path.join(env.scratchGDB, extentLayer)
+        outputFC = os.path.join(env.scratchGDB, selectedPolygons)
+        sortedFC = os.path.join(env.scratchGDB, "SortedPolygons")
+        cleanupList = [extentLayer, extentFC, outputFC]
+
+        for layer in cleanupList:
+            if arcpy.Exists(layer):
+                arcpy.Delete_management(layer)
+
+        # Find extents of the AOI
+        #
+        #PrintMsg(" \nGetting extent for AOI", 0)
+        xMin = 9999999999999
+        yMin = 9999999999999
+        xMax = -9999999999999
+        yMax = -9999999999999
+
+        # targetLayer is being used here to supply output coordinate system
+        with arcpy.da.SearchCursor(aoiLayer, ["SHAPE@"], "", targetLayer) as cur:
+
+            for rec in cur:
+                ext = rec[0].extent
+                xMin = min(xMin, ext.XMin)
+                yMin = min(yMin, ext.YMin)
+                xMax = max(xMax, ext.XMax)
+                yMax = max(yMax, ext.YMax)
+
+        # Create temporary AOI extents featureclass
+        #
+        point = arcpy.Point()
+        array = arcpy.Array()
+        featureList = list()
+        coordList = [[[xMin, yMin],[xMin, yMax],[xMax, yMax], [xMax, yMin],[xMin, yMin]]]
+
+        for feature in coordList:
+            for coordPair in feature:
+                point.X = coordPair[0]
+                point.Y = coordPair[1]
+                array.add(point)
+
+        polygon = arcpy.Polygon(array)
+        featureList.append(polygon)
+
+        arcpy.CopyFeatures_management([polygon], extentFC)
+        arcpy.DefineProjection_management(extentFC, targetLayer)
+        #PrintMsg(" \nExtent:  " + str(xMin) + "; " + str(yMin) + "; " + str(xMax) + "; " + str(yMax), 0)
+
+        # Select target layer polygons within the AOI extent
+        # in a script, the featurelayer (extentLayer) may not exist
+        #
+        #PrintMsg(" \nSelecting target layer polygons within AOI", 0)
+        arcpy.MakeFeatureLayer_management(extentFC, extentLayer)
+
+        inputDesc = arcpy.Describe(targetLayer)
+        inputGDB = os.path.dirname(inputDesc.catalogPath)  # assuming gSSURGO, no featuredataset
+        outputGDB = os.path.dirname(outputClip)
+
+        if not inputDesc.hasSpatialIndex:
+            arcpy.AddSpatialIndex_management(targetLayer)
+
+        if inputDesc.dataType.upper() == "FEATURECLASS":
+            # swap the input featureclass with a featurelayer.
+            fcPath = inputDesc.catalogPath
+            targetLayer = inputDesc.aliasName
+            arcpy.MakeFeatureLayer_management(fcPath, targetLayer)
+
+        arcpy.SelectLayerByLocation_management(targetLayer, "INTERSECT", extentLayer, "", "NEW_SELECTION")
+
+        # Create temporary featureclass using selected target polygons
+        #
+
+        arcpy.CopyFeatures_management(targetLayer, outputFC)
+
+        #arcpy.MakeFeatureLayer_management(outputFC, selectedPolygons)
+        arcpy.SelectLayerByAttribute_management(targetLayer, "CLEAR_SELECTION")
+
+        # Create spatial index on temporary featureclass to see if that speeds up the clip
+        #arcpy.AddSpatialIndex_management(outputFC)
+
+        # Clipping process
+        #if operation == "CLIP":
+        #PrintMsg(" \nClipping " + outputFC + " to create final layer " + os.path.basename(outputClip) + "...", 1)
+        arcpy.Clip_analysis(outputFC, aoiLayer, sortedFC)
+        #PrintMsg(" \n\tCreating temporary featureclass", 0)
+        fields = arcpy.Describe(sortedFC).fields
+        shpField = [f.name for f in fields if f.type.upper() == "GEOMETRY"][0]
+        PrintMsg(" \nUpdating spatial index for clipped polygon featureclass... ", 0)
+
+        # resort polygons after clip to get rid of tile artifact
+        arcpy.Sort_management(sortedFC, outputClip, [[shpField, "ASCENDING"]], "UL")  # Try sorting before clip. Not sure if this well help right here.
+
+        arcpy.AddSpatialIndex_management(outputClip)
+
+        # Delete original MUPOLYGON featureclass and rename outputCLip to MUPOLYGON
+        if arcpy.Exists(fcPath):
+            arcpy.Delete_management(fcPath)
+            if arcpy.Exists(fcPath):
+                raise MyError, "Failed to delete " + fcPath
+
+            time.sleep(1)
+            arcpy.Rename_management(outputClip, fcPath)  # error here 'table already exists
+            #outputClip = oldFC
+
+
+        if arcpy.Exists(fcPath) and outputGDB == inputGDB and arcpy.Exists(os.path.join(outputGDB, "mapunit")):
+            # Create relationshipclass to mapunit table
+            relName = "zMapunit_" + os.path.basename(fcPath)
+
+            if not arcpy.Exists(os.path.join(outputGDB, relName)):
+                arcpy.AddIndex_management(fcPath, ["mukey"], "Indx_" + os.path.basename(fcPath))
+                #PrintMsg(" \n\tAdding relationship class...")
+                arcpy.CreateRelationshipClass_management(os.path.join(outputGDB, "mapunit"), fcPath, os.path.join(outputGDB, relName), "SIMPLE", "> Mapunit Polygon Layer", "< Mapunit Table", "NONE", "ONE_TO_MANY", "NONE", "mukey", "MUKEY", "","")
+
+        # Clean up temporary layers and featureclasses
+        #
+        cleanupList = [extentLayer, extentFC, outputFC, sortedFC]
+
+        for layer in cleanupList:
+            if arcpy.Exists(layer):
+                arcpy.Delete_management(layer)
+
+        arcpy.SetParameter(2, outputClip)
+        #PrintMsg(" \nFinished \n", 0)
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e) + " \n", 2)
+
+    except:
+        errorMsg()
+
+
 
 ## ===================================================================================
 ## ===================================================================================
@@ -393,6 +568,9 @@ try:
     bOverwriteOutput = arcpy.GetParameter(3)       # overwrite existing geodatabases
     bRequired = arcpy.GetParameter(4)              # require that all available SSURGO be present in the input folder
     useTextFiles = arcpy.GetParameter(5)           # checked: use text files for attributes; unchecked: use Access database for attributes
+    aoiLayer = arcpy.GetParameterAsText(6)               # state layer used for clipping
+    aoiField = arcpy.GetParameterAsText(7)               # state name field used to query for AOI
+
 
     #import SSURGO_MergeSoilShapefilesbyAreasymbol_GDB
     import SSURGO_Convert_to_Geodatabase
@@ -418,6 +596,9 @@ try:
         PrintMsg(" \n***************************************************************", 0)
         PrintMsg("Processing state: " + theTile, 0)
         PrintMsg("***************************************************************", 0)
+
+        if not arcpy.Exists(inputFolder):
+            raise MyError, "Unable to connect to folder containing SSURGO downloads (" + inputFolder + ")"
 
         # Get list of AREASYMBOLs for this state tile from LAOVERLAP table in Soil Data Mart DB
         if theTile == "Puerto Rico and U.S. Virgin Islands":
@@ -466,7 +647,7 @@ try:
             # Call SDM Export script
             # 12-25-2013 try passing more info through the stAbbrev parameter
             #
-            bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, tileInfo, useTextFiles)
+            bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, tileInfo, useTextFiles, False)
 
             if bExported == False:
                 PrintMsg("\tAdding " + theTile + " to list if failed conversions", 0)
@@ -481,6 +662,17 @@ try:
             else:
                 # Successful export of the current tile
                 #PrintMsg("\tAdding " + theTile + " to good list", 0)
+
+                # Perhaps add the state-clip here???
+                #
+                if aoiLayer != "" and aoiField != "" and not theTile in ['Pacific Basin', 'Puerto Rico and U.S. Virgin Islands', 'Northern Mariana Islands', 'Federated States of Micronesia', 'Guam','Hawaii']:
+                    # Apply selection to AOI layer
+                    sql = "UPPER(" + aoiField + ") = '" + theTile.upper() + "'"
+                    arcpy.SelectLayerByAttribute_management(aoiLayer, "NEW_SELECTION", sql)
+                    bClipped = ClipMuPolygons(os.path.join(outputWS, "MUPOLYGON"), aoiLayer, os.path.join(outputWS, "MUPOLYGON_" + stAbbrev), theTile)
+
+                # End of state clip
+
                 goodExports.append(theTile)
 
         else:

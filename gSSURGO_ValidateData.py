@@ -6,7 +6,19 @@
 # Adapted from gSSURGO_ValuTable.py
 #
 # Checks for some basic data population problems at the mapunit, component and horizon levels
+# 2017-02-03  Ran into MEMORY limit with CONUS. Split the last function up to get
+# memory usage back down.
 
+"""
+SELECT l.areasymbol, m.musym, m.mukey, m.muname, sum(c.comppct_r) as sum_pct
+FROM mapunit m
+INNER JOIN legend l ON m.lkey = l.lkey
+INNER JOIN component c ON m.mukey = c.mukey
+WHERE m.MUKEY IN (xxMUKEYSxx)
+GROUP BY l.areasymbol, m.mukey, m.musym, m.muname
+ORDER BY l.areasymbol, m.musym
+"""
+#
 
 ## ===================================================================================
 class MyError(Exception):
@@ -189,6 +201,7 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
                 muList.append(mukey)
 
         muList.sort()
+        del muTbl
 
         # Component query
         PrintMsg(" \nReading COMPONENT table...", 0)
@@ -216,6 +229,8 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
                 except:
                     # initialize list of records
                     dCo[mukey] = [rec]
+
+        del coTbl
 
         # HORIZON TABLE
         PrintMsg(" \nReading HORIZON table...", 0)
@@ -246,6 +261,8 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
                 except:
                     # initialize list of horizon records
                     dHz[cokey] = [rec]
+
+        del hzTbl
 
             # HORIZON TEXTURE QUERY
             #
@@ -314,6 +331,8 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
 
                 except:
                     dCr[cokey] = [crrec[1]]
+
+        del crTbl
 
         PrintMsg(" \nCreating QueryTable_HZ in " + outputDB, 0)
         fldCo.pop(0)
@@ -479,14 +498,46 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
                         dNoCo[mukey] = [mrec[0], mrec[1]] # Save map unit name for the report
                         #PrintMsg(" \n\n** No component data for " + str(mrec[1]), 2)
 
+
+        arcpy.ResetProgressor()
+        env.workspace = outputDB
+
+        return outputTable, dCr, muList, muNoCo, dNoCo, muNotCom, coNoHz, dNoHz
+
+    except MyError, e:
+        # Example: raise MyError("this is an error message")
+        PrintMsg(str(e) + " \n", 2)
+        return None * 8
+
+    except:
+        errorMsg()
+        return None* 8
+
+## ===================================================================================
+def RunReport(outputTable, dCr, muList, muNoCo, dNoCo, muNotCom, coNoHz, dNoHz):
+    # Generate reports from outputTable and component restriction depths dictionary
+    #
+    #
+    try:
+
         # Run through QueryTbl_HZ table, checking for inconsistencies in horizon depths
         # Create a dictionary containing a list of top and bottom of each horizon in each component
         # dictionary key = cokey
         # list contains tuples of hzdept_r, hzdepb_r, hzname, mukey, compname, localphase
 
         # What about components that have no horizon data?
+        # For this final report section we need dCR and outputTable
 
         dHZ = dict()
+
+        # Save information on mapunits or components with bad or missing data
+        #badMu = list()   # list of mapunits with no components
+        muNoCo = list()
+        dNoCo = dict()
+        muNotCom = list()
+
+        coNoHz = list()  # list of components with no horizons
+        dNoHz = dict() # component data for those components in coNoHz
 
         # Exclude horizon data with null hzdep with whereclause
         wc = "hzdept_r is not null and hzdepb_r is not null"
@@ -496,7 +547,6 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
         with arcpy.da.SearchCursor(outputTable, ['mukey', 'cokey','hzdept_r','hzdepb_r', 'hzname', 'compname', 'localphase', 'majcompflag'], where_clause=wc) as cur:
             for rec in cur:
                 mukey, cokey, top, bot, hzname, compname, localphase, majcomp = rec
-                #cokey = int(cokey)
 
                 if cokey in dHZ:
                     vals = dHZ[cokey]
@@ -510,7 +560,6 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
                     if top in dCr[cokey]:
                         # remove top horizon depth from list of component restriction depths
                         # in the end, those left in the dictionary should be ones that don't match the CHORIZON table hzdept_r values
-                        #dCr[cokey].remove(top)
                         dCr[cokey] = [t for t in dCr[cokey] if t != top]
 
                 except:
@@ -563,11 +612,6 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
         for cokey, crDepths in dCr.items():
             if len(crDepths) == 0:
                 dCr.pop(cokey, None)
-                #if cokey in coNoHz:
-                #    PrintMsg("\tcokey " + cokey + " has restriction but no horizon data", 1)
-
-            #else:
-            #    PrintMsg(" \n" + str(cokey) + ": " + str(crDepths), 1)
 
         # Check for sum of comppct_r > 100 or missing
         muBadPct = list()
@@ -582,6 +626,8 @@ def CreateQueryTables(inputDB, outputDB, maxD, dPct):
             except KeyError:
                 if not str(mukey) in muNotCom:
                     muBadPct.append(mukey)
+
+        del muList
 
         # Report data validation failures...
         #
@@ -732,11 +778,15 @@ try:
         raise MyError, ""
 
     # Create initial set of query tables used for RZAWS, AWS and SOC
-    if CreateQueryTables(inputDB, outputDB, 150.0, dPct) == False:
+    outputTable, dCr, muList, muNoCo, dNoCo, muNotCom, coNoHz, dNoHz = CreateQueryTables(inputDB, outputDB, 150.0, dPct)
+
+    if outputTable is None:
         raise MyError, ""
 
+    bReport = RunReport(outputTable, dCr, muList, muNoCo, dNoCo, muNotCom, coNoHz, dNoHz)
 
-    PrintMsg(" \nValidation process complete for " + inputDB, 0)
+    if bReport:
+        PrintMsg(" \nValidation process complete for " + inputDB, 0)
 
 except MyError, e:
     # Example: raise MyError("this is an error message")

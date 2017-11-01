@@ -246,6 +246,8 @@ try:
             gdb = tableView.workspacePath
             bReport = MakeReport(tableView)
 
+    del mxd
+
 except MyError, e:
     PrintMsg(str(e), 2)
 

@@ -44,7 +44,8 @@ def PrintMsg(msg, severity=0):
 def Number_Format(num, places=0, bCommas=True):
     try:
     # Format a number according to locality and given places
-        #locale.setlocale(locale.LC_ALL, "")
+        locale.setlocale(locale.LC_ALL, "")
+
         if bCommas:
             theNumber = locale.format("%.*f", (places, num), True)
 
@@ -91,15 +92,34 @@ def GetSDVAtts(gdb, resultField):
         dSDV = dict()  # dictionary that will store all sdvattribute data using column name as key
         sdvattTable = os.path.join(gdb, "sdvattribute")
         flds = [fld.name for fld in arcpy.ListFields(sdvattTable)]
-        sql1 = "upper(resultcolumnname) = '" + resultField + "'"
 
-        with arcpy.da.SearchCursor(sdvattTable, "*", where_clause=sql1) as cur:
-            rec = cur.next()  # just reading first record
-            i = 0
-            for val in rec:
-                dSDV[flds[i].lower()] = val
-                # PrintMsg(str(i) + ". " + flds[i] + ": " + str(val), 0)
-                i += 1
+        # resultField will probably have an '_DCP', '_DCD', '_WTA' or '_PP' appended
+        resultField = resultField.split("_")[0]
+        sql1 = "upper(resultcolumnname) = '" + resultField[:-4] + "'"
+
+        try:
+            # Assuming that last 4 characters in the field name have been altered to reflect aggregation method
+            with arcpy.da.SearchCursor(sdvattTable, "*", where_clause=sql1) as cur:
+                rec = cur.next()  # just reading first record
+                i = 0
+                for val in rec:
+                    dSDV[flds[i].lower()] = val
+                    # PrintMsg(str(i) + ". " + flds[i] + ": " + str(val), 0)
+                    i += 1
+
+        except:
+            # Assuming that the cursor failed because the field name has not been altered (no aggregation neccessary)
+            # Try again using the original field name
+            sql1 = "upper(resultcolumnname) = '" + resultField + "'"
+
+            with arcpy.da.SearchCursor(sdvattTable, "*", where_clause=sql1) as cur:
+                rec = cur.next()  # just reading first record
+                i = 0
+                for val in rec:
+                    dSDV[flds[i].lower()] = val
+                    # PrintMsg(str(i) + ". " + flds[i] + ": " + str(val), 0)
+                    i += 1
+
 
         # Revise some attributes to accomodate fuzzy number mapping code
         #
@@ -256,11 +276,12 @@ def CreateOutputTable(dAcres, domainValues):
                 #PrintMsg(" \nCreating graph using domain values", 1)
                 for rating in domainValues:
                     if rating is None:
-                        cur.insertRow(["Not rated", dAcres[rating]])
+                        cur.insertRow(["Not rated", round(dAcres[rating], 0)])
+                        PrintMsg("Not rated: " + str(round(dAcres[rating])), 1)
 
                     else:
                         try:
-                            cur.insertRow([rating, dAcres[rating]])
+                            cur.insertRow([rating, round(dAcres[rating], 0)])
 
                         except:
                             pass
@@ -271,11 +292,11 @@ def CreateOutputTable(dAcres, domainValues):
 
                 for rating in iterValues:
                     if rating is None:
-                        cur.insertRow(["Not rated", dAcres[rating]])
+                        cur.insertRow(["Not rated", round(dAcres[rating], 0)])
                         domainValues.append("Not rated")
 
                     else:
-                        cur.insertRow([rating, dAcres[rating]])
+                        cur.insertRow([rating, round(dAcres[rating], 0)])
                         domainValues.append(rating)
 
 
@@ -298,7 +319,7 @@ def CreateOutputTable(dAcres, domainValues):
         return outputTbl, domainValues
 
 ## ===================================================================================
-def CreateGraph(outputTbl, domainValues, valWidth, totalAcres, outputFile):
+def CreateGraph(outputTbl, domainValues, valWidth, sAcres, outputFile):
     # Use in-memory summary table to create graph
     #
     # Graph is based upon domain values. Some attributes such as the integer Percent Hydric,
@@ -321,9 +342,11 @@ def CreateGraph(outputTbl, domainValues, valWidth, totalAcres, outputFile):
 
         graph.graphPropsGeneral.title = layerName  # This works but is lowercased
         graph.graphPropsGeneral.footer = "Input layer: " + os.path.join(os.path.basename(gdb), os.path.basename(fc))        # This works but is lowercased
-        graph.graphPropsGeneral.subtitle = "Total Acres: " + Number_Format(totalAcres, 0, True) # This works but is lowercased
-        graph.graphAxis[0] = "Axis 0 ACRES"  # this is being ignored
-        graph.graphAxis[2] = "Axis 2 " + layerName  # this is being ignored
+        subTitle = "Total Acres: " + sAcres
+        #PrintMsg(" \nTotal Acres used in graph subtitle = " + sAcres, 1)
+        graph.graphPropsGeneral.subtitle = subTitle #
+        #graph.graphAxis[0] = "Axis 0 ACRES"  # this is being ignored
+        #graph.graphAxis[2] = "Axis 2 " + layerName  # this is being ignored
         outputGraph = "SDVGraph"
         graphTemplate = os.path.join(os.path.dirname(sys.argv[0]), "BarGraph_Classic.grf")
 
@@ -378,9 +401,9 @@ def CreateReport(outputTbl, template, reportPDF):
         #PrintMsg(" \nCreating table view using '" + outputTbl + "'", 1)
         sdvTbl = arcpy.mapping.TableView(outputTbl)
 
-        PrintMsg(" \nInput summary table: " + outputTbl, 0)
-        PrintMsg(" \nUsing report template: " + template, 0)
-        PrintMsg(" \nRating data type: " + fieldType, 0)
+        #PrintMsg(" \nInput summary table: " + outputTbl, 0)
+        #PrintMsg(" \nUsing report template: " + template, 0)
+        #PrintMsg(" \nRating data type: " + fieldType, 0)
 
         arcpy.mapping.AddTableView(df, sdvTbl)
 
@@ -438,6 +461,9 @@ try:
     # Get information from sdvattribute table
     dSDV = GetSDVAtts(gdb, resultField)
 
+    if len(dSDV) == 0:
+        raise MyError, ""
+
     # Get domain tiebreak values for this attribute
     domainValues = GetRatingDomain(gdb)
 
@@ -478,7 +504,9 @@ try:
         #totalArea += area
         #dAcres[rating] = acres
         valWidth += len(str(acres))
-        #PrintMsg("\t" + str(rating) + ": " + Number_Format(acres, 0, True) + " acres", 1)
+        PrintMsg("\tSubtotal for " + str(rating) + ": " + Number_Format(acres, 0, True) + " acres", 0)
+
+    PrintMsg("\t" + ("-" * 40) + " \n\tTotal Acres: " + Number_Format(totalAcres, 0, True), 0)
 
     #totalAcres = int(round(convAcres * totalArea, 0))
 
@@ -486,6 +514,8 @@ try:
 
     # Create summary table
     outputTbl, domainValues = CreateOutputTable(dAcres, domainValues)
+
+    #PrintMsg(" \nOutput table created", 1)
 
     # Get the path for the template MXD being used to create the cover page
 
@@ -501,14 +531,16 @@ try:
     textMXD.title = layerName
     textBox.text = layerDesc
     textPDF = os.path.join(os.path.dirname(gdb), layerName + "_AcreageSummary.pdf")
+    #PrintMsg(" \nCreating text PDF", 1)
     arcpy.mapping.ExportToPDF(textMXD, textPDF)
+    #PrintMsg(" \nText PDF created", 1)
 
     if len(domainValues) <= 12:
         # Small number of rating values, make a graph
         #
         outputGraphic = os.path.join(env.scratchFolder, "BarGraph.emf")  # output graphic file
 
-        graphWidth, graphHeight = CreateGraph(outputTbl, domainValues, valWidth, totalAcres, outputGraphic)
+        graphWidth, graphHeight = CreateGraph(outputTbl, domainValues, valWidth, Number_Format(totalAcres, 0, True), outputGraphic)
 
         #
         # PROBABLY NEED TO MOVE SOME OF THE CODE DIRECTLY BELOW INTO THE CreateGraph FUNCTION
@@ -540,7 +572,12 @@ try:
         graphElement.elementPositionX = originX
         graphElement.elementPositionY = originY
         graphPDF = os.path.join(env.scratchFolder, "graph.pdf")
+        #PrintMsg(" \nCreating graph", 1)
         arcpy.mapping.ExportToPDF(graphMXD, graphPDF)
+        #PrintMsg(" \nGraph created", 1)
+
+    else:
+        PrintMsg
 
     # Get report template file fullpath (.rlf) and import current SDV_Data table into it
     if fieldType == "smallinteger":
@@ -551,7 +588,9 @@ try:
 
     template = os.path.join(os.path.dirname(sys.argv[0]), templateName)
     reportPDF = os.path.join(os.path.dirname(gdb), layerName + ".pdf")
+    #PrintMsg(" \nCreating report", 1)
     bReport = CreateReport(outputTbl, template, reportPDF)
+    #PrintMsg(" \nReport created", 1)
 
     # Open the report PDF for final editing
 
@@ -580,6 +619,8 @@ try:
 
     else:
         raise MyError, "Failed to create " + textPDF
+
+    del mxd
 
 except MyError, e:
     PrintMsg(str(e), 2)

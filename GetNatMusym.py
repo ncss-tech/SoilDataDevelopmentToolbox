@@ -1,6 +1,7 @@
 # Code copied from SDA_CustomQuery script and modified to get NationalMusym from Soil Data Access
 # Steve Peaslee 10-18-2016
 
+
 ## ===================================================================================
 class MyError(Exception):
     pass
@@ -57,70 +58,17 @@ def Number_Format(num, places=0, bCommas=True):
         return "???"
 
 ## ===================================================================================
-def AddNewFields0(outputShp, columnNames, columnInfo):
-    # Add new fields from SDA data to the output featureclass
-    #
-    # ColumnNames and columnInfo come from the Attribute query JSON string
-    # MUKEY would normally be included in the list, but it should already exist in the output featureclass
-    #
-    try:
-        # Dictionary: SQL Server to FGDB
-        dType = dict()
-
-        dType["int"] = "long"
-        dType["smallint"] = "short"
-        dType["bit"] = "short"
-        dType["varbinary"] = "blob"
-        dType["nvarchar"] = "text"
-        dType["varchar"] = "text"
-        dType["char"] = "text"
-        dType["datetime"] = "date"
-        dType["datetime2"] = "date"
-        dType["smalldatetime"] = "date"
-        dType["decimal"] = "double"
-        dType["numeric"] = "double"
-        dType["float"] ="double"
-
-        # numeric type conversion depends upon the precision and scale
-        dType["numeric"] = "float"  # 4 bytes
-        dType["real"] = "double" # 8 bytes
-
-        # ColumnInfo contains:
-        # ColumnOrdinal, ColumnSize, NumericPrecision, NumericScale, ProviderType, IsLong, ProviderSpecificDataType, DataTypeName
-        # PrintMsg(" \nFieldName, Length, Precision, Scale, Type", 1)
-        #joinFields = list()
-
-        for i, fldName in enumerate(columnNames):
-            vals = columnInfo[i].split(",")
-            length = int(vals[1].split("=")[1])
-            precision = int(vals[2].split("=")[1])
-            scale = int(vals[3].split("=")[1])
-            dataType = dType[vals[4].lower().split("=")[1]]
-
-            if not fldName.lower() == "mukey":
-                arcpy.AddField_management(outputShp, fldName, dataType, precision, scale, length)
-                #PrintMsg("\tAdding field " + fldName + " to output featureclass", 1)
-
-        return columnNames
-
-        #else:
-        #    return []
-
-    except:
-        errorMsg()
-        return []
-
-
-## ===================================================================================
 def AddNewFields(outputShp, columnNames, columnInfo):
     # Create the empty output table that will contain the map unit AWS
     #
     # ColumnNames and columnInfo come from the Attribute query JSON string
     # MUKEY would normally be included in the list, but it should already exist in the output featureclass
     #
-    # Problem using temporary, IN_MEMORY table and JoinField with shapefiles to add new columns. Really slow performance
+    # Problem using temporary, IN_MEMORY table and JoinField with shapefiles to add new columns. Really slow performance.
+
     try:
         # Dictionary: SQL Server to FGDB
+        #PrintMsg(" \nAddNewFields function begins", 1)
         dType = dict()
 
         dType["int"] = "long"
@@ -148,10 +96,18 @@ def AddNewFields(outputShp, columnNames, columnInfo):
         # ColumnOrdinal, ColumnSize, NumericPrecision, NumericScale, ProviderType, IsLong, ProviderSpecificDataType, DataTypeName
         #PrintMsg(" \nFieldName, Length, Precision, Scale, Type", 1)
 
-        joinFields = list()
+        joinedFields = list() # new fields that need to be added to the output table
+        dataFields = list()   # fields that need to be updated in the AttributeRequest function
         outputTbl = os.path.join("IN_MEMORY", "Template")
         arcpy.CreateTable_management(os.path.dirname(outputTbl), os.path.basename(outputTbl))
 
+        # Get a list of fields that already exist in outputShp
+        outFields = arcpy.Describe(outputShp).fields
+        existingFields = [fld.name.lower() for fld in outFields]
+
+
+        # Using JoinField to add the NATMUSYM column to the outputTbl (but not the data)
+        #
         for i, fldName in enumerate(columnNames):
             # Get new field definition from columnInfo dictionary
             vals = columnInfo[i].split(",")
@@ -160,35 +116,49 @@ def AddNewFields(outputShp, columnNames, columnInfo):
             scale = int(vals[3].split("=")[1])
             dataType = dType[vals[4].lower().split("=")[1]]
 
-            if not fldName.lower() == "mukey":
-                joinFields.append(fldName)
+            #if not fldName.lower() == "mukey":
+            #    joinedFields.append(fldName)
 
-            PrintMsg("\tAdded field '" + fldName + "'", 1)
-            arcpy.AddField_management(outputTbl, fldName, dataType, precision, scale, length)
+            if not fldName.lower() in existingFields:
+                # This is a new data field that needs to be added to the output table.
+                #arcpy.AddField_management(outputTbl, fldName, dataType, precision, scale, length) # add to IN_MEMORY table
+                arcpy.AddField_management(outputShp, fldName, dataType, precision, scale, length) # add direct to featureclass
+                joinedFields.append(fldName)
+                dataFields.append(fldName)
 
-        if arcpy.Exists(outputTbl):
-            PrintMsg(" \nBegin JoinField using " + outputTbl, 1)
-            arcpy.JoinField_management(outputShp, "mukey", outputTbl, "mukey", joinFields)
-            PrintMsg(" \nCompleted JoinField", 1)
+            elif fldName.lower() in existingFields and fldName.lower() != "mukey":
+                # This is an existing data field in the output table.
+                dataFields.append(fldName)
+
+            elif fldName.lower() == "mukey":
+                #arcpy.AddField_management(outputTbl, fldName, dataType, precision, scale, length)
+                pass
+
+        if arcpy.Exists(outputTbl) and len(joinedFields) > 0:
+            #PrintMsg(" \nAdded these new fields to " + os.path.basename(outputShp) + ": " + ", ".join(joinedFields), 1)
+            #arcpy.JoinField_management(outputShp, "mukey", outputTbl, "mukey", joinedFields) # instead add directly to output featureclass
             arcpy.Delete_management(outputTbl)
-            return joinFields
+            return dataFields
 
         else:
-            return []
+            #PrintMsg(" \nThese fields already exist in the output table: " + ", ".join(dataFields), 1)
+            arcpy.Delete_management(outputTbl)
+            return dataFields
 
     except:
         errorMsg()
-        return []
+        return ["Error"]
 
 ## ===================================================================================
-def GetMukeys(theInput):
-    # Create bracketed list of MUKEY values from spatial layer for use in query
+def GetKeys(theInput, keyField):
+    # Create bracketed list of AREASYMBOL values from spatial layer for use in query
     #
     try:
         # Tell user how many features are being processed
         theDesc = arcpy.Describe(theInput)
         theDataType = theDesc.dataType
         PrintMsg("", 0)
+        PrintMsg(" \nGetting AREASYMBOL values from spatial layer... \n ", 0)
 
         #if theDataType.upper() == "FEATURELAYER":
         # Get Featureclass and total count
@@ -205,40 +175,45 @@ def GetMukeys(theInput):
         iTotal = int(theResult.getOutput(0))
 
         if iTotal > 0:
-            sqlClause = (None, "ORDER BY MUKEY")
-            mukeyList = list()
+            sqlClause = ("DISTINCT " + keyField, "ORDER BY " + keyField)
+            keyList = list()
 
-            with arcpy.da.SearchCursor(theInput, ["MUKEY"], sql_clause=sqlClause) as cur:
+            with arcpy.da.SearchCursor(theInput, [keyField], sql_clause=sqlClause) as cur:
                 for rec in cur:
-                    if not rec[0] in mukeyList:
-                        mukeyList.append(rec[0])
+                    keyList.append(rec[0].encode('ascii'))
 
-            #PrintMsg("\tmukey list: " + str(mukeyList), 1)
-            return mukeyList
+            keySet = set(keyList)
+            keyList = list(keySet)
+
+            # Make sure list of keys isn't too long for Soil Data Access
+            if len(keyList) > 250:
+                keyLists = [keyList[x:x+250] for x in range(0, len(keyList), 250)]
+                return keyLists
+
+            else:
+                return [keyList]
 
         else:
-            return []
-
+            return [[]]
 
     except MyError, e:
         # Example: raise MyError, "This is an error message"
         PrintMsg(str(e), 2)
-        return []
+        return [[]]
 
     except:
         errorMsg()
-        return []
-
+        return [[]]
 
 ## ===================================================================================
-def FormAttributeQuery(sQuery, mukeys):
+def FormAttributeQuery(sQuery, keyList):
     #
     # Given a simplified polygon layer, use vertices to form the spatial query for a Tabular request
     # Coordinates are GCS WGS1984 and format is WKT.
     # Returns spatial query (string) and clipPolygon (geometry)
     #
-    # input parameter 'mukeys' is a comma-delimited and single quoted list of mukey values
-    #
+    # input parameter 'keyList' is a comma-delimited and single quoted list of key values
+
     try:
 
         aQuery = sQuery.split(r"\n")
@@ -247,10 +222,8 @@ def FormAttributeQuery(sQuery, mukeys):
             if not s.strip().startswith("--"):
                 bQuery = bQuery + " " + s
 
-        #PrintMsg(" \nSplit query into " + str(len(aQuery)) + " lines", 1)
-        #bQuery = " ".join(aQuery)
-        #PrintMsg(" \n" + bQuery, 1)
-        sQuery = bQuery.replace("xxMUKEYSxx", mukeys)
+        sKeys = str(keyList)[1:-1]
+        sQuery = bQuery.replace("xxKEYSxx", sKeys)
         #PrintMsg(" \n" + sQuery, 1)
 
         return sQuery
@@ -269,119 +242,146 @@ def AttributeRequest(theURL, outputShp):
     # POST REST which uses urllib and JSON
     #
     # Send query to SDM Tabular Service, returning data in JSON format
+    # Requires MUKEY column
 
     try:
         if theURL == "":
-            theURL = "http://sdmdataaccess.sc.egov.usda.gov"
+            theURL = "https://sdmdataaccess.sc.egov.usda.gov"
 
+        keyField = "areasymbol"
     	# Get list of mukeys for use in tabular request
-        mukeyList = GetMukeys(outputShp)
-
-        sQuery = "SELECT m.mukey, m.nationalmusym as natmusym from mapunit m where mukey in (xxMUKEYSxx)"
-
-        outputValues = []  # initialize return values (min-max list)
-
-        PrintMsg(" \nRequesting tabular data for " + Number_Format(len(mukeyList), 0, True) + " map units...")
-        arcpy.SetProgressorLabel("Sending tabular request to Soil Data Access...")
-
-        mukeys = ",".join(mukeyList)
-
-
-        # Determine whether the source is a shapefile or geodatabase featureclass
-        desc = arcpy.Describe(outputShp)
-
-        if dataType.upper() == "FEATURECLASS":
-
-        sQuery = FormAttributeQuery(sQuery, mukeys)  # Combine user query with list of mukeys from spatial layer.
-        if sQuery == "":
-            raise MyError, ""
-
-        # Tabular service to append to SDA URL
-        url = theURL + "/Tabular/SDMTabularService/post.rest"
-
-        #PrintMsg(" \nURL: " + url, 1)
-        #PrintMsg(" \n" + sQuery, 0)
-
-        dRequest = dict()
-        dRequest["FORMAT"] = "JSON+COLUMNNAME+METADATA"
-        dRequest["QUERY"] = sQuery
-
-        PrintMsg(" \nURL: " + url)
-        PrintMsg("FORMAT: " + dRequest["FORMAT"])
-        PrintMsg("QUERY: " + sQuery)
-
-        # Create SDM connection to service using HTTP
-        jData = json.dumps(dRequest)
-
-        # Send request to SDA Tabular service
-        req = urllib2.Request(url, jData)
-        resp = urllib2.urlopen(req)
-
-        # Read the response from SDA into a string
-        jsonString = resp.read()
-
-        #PrintMsg(" \njsonString: " + str(jsonString), 1)
-        data = json.loads(jsonString)
-        del jsonString, resp, req
-
-        if not "Table" in data:
-            raise MyError, "Query failed to select anything: \n " + sQuery
-
-        dataList = data["Table"]     # Data as a list of lists. Service returns everything as string.
-
-        # Get column metadata from first two records
-        columnNames = dataList.pop(0)
-        columnInfo = dataList.pop(0)
-
-        if len(mukeyList) != len(dataList):
-            PrintMsg(" \nWarning! Only returned data for " + str(len(dataList)) + " mapunits", 1)
-
-        newFields = AddNewFields(outputShp, columnNames, columnInfo)   # Here's where I'm seeing a slow down (JoinField)
-
-        if len(newFields) == 0:
-            raise MyError, ""
-
-        ratingField = newFields[-1]  # last field in query will be used to symbolize output layer
-
-        if len(newFields) == 0:
-            raise MyError, ""
-
-        # Reading the attribute information returned from SDA Tabular service
         #
-        arcpy.SetProgressorLabel("Importing attribute data...")
-        PrintMsg(" \nImporting attribute data...", 0)
+        # Check to see if there is an associated SAPOLYGON featureclass in the geodatabase.
+        shpDesc = arcpy.Describe(outputShp)
+        fullPath = shpDesc.catalogPath
+        gdb = os.path.dirname(fullPath)
+        gdbDesc = arcpy.Describe(gdb)
+        
+        if gdbDesc.workspaceFactoryProgID.startswith("esriDataSourcesGDB.FileGDBWorkspaceFactory"):
+            # might be gSSURGO, look for SAPOLYGON featureclass. Faster way to get list.
+            keyLists = GetKeys(os.path.join(gdb, "SAPOLYGON"), keyField)
 
+        else:   
+            keyLists = GetKeys(outputShp, keyField)
+
+        if len(keyLists[0]) == 0:
+            # No areasymbols returned by GetKeys
+            raise MyError, ""
+
+        polyCnt = int(arcpy.GetCount_management(outputShp).getOutput(0))
         dMapunitInfo = dict()
-        mukeyIndx = -1
-        for i, fld in enumerate(columnNames):
-            if fld.upper() == "MUKEY":
-                mukeyIndx = i
-                break
 
-        if mukeyIndx == -1:
-            raise MyError, "MUKEY column not found in query data"
+        keyCntr = 0
+        
+        for keyList in keyLists:
 
-        #PrintMsg(" \nColumnNames (" + str(mukeyIndx) + ") : " + ", ".join(columnNames))
-        #PrintMsg(" \n" + str(fieldList), 1)
-        noMatch = list()
-        cnt = 0
+            keyCntr += 1
 
-        for rec in dataList:
-            try:
-                mukey = rec[mukeyIndx]
-                dMapunitInfo[mukey] = rec
-                #PrintMsg("\t" + mukey + ":  " + str(rec), 1)
+            sQuery = """SELECT M.mukey, M.nationalmusym AS natmusym FROM mapunit M WITH (nolock)
+            INNER JOIN legend L ON M.lkey = L.lkey AND L.areasymbol IN (xxKEYSxx)"""
 
-            except:
-                errorMsg()
-                PrintMsg(" \n" + ", ".join(columnNames), 1)
-                PrintMsg(" \n" + str(rec) + " \n ", 1)
-                raise MyError, "Failed to save " + str(columnNames[i]) + " (" + str(i) + ") : " + str(rec[i])
+            outputValues = []  # initialize return values (min-max list)
+
+            #PrintMsg(" \nRequesting tabular data for " + Number_Format(len(keyList), 0, True) + " soil survey areas...")
+            arcpy.SetProgressorLabel("Sending tabular request " + str(keyCntr) + " to Soil Data Access...")
+
+            sQuery = FormAttributeQuery(sQuery, keyList)  # Combine user query with list of mukeys from spatial layer.
+
+            if sQuery == "":
+                raise MyError, ""
+
+            # Tabular service to append to SDA URL
+            url = theURL + "/Tabular/SDMTabularService/post.rest"
+            dRequest = dict()
+            dRequest["format"] = "JSON+COLUMNNAME+METADATA"
+            dRequest["query"] = sQuery
+
+            #PrintMsg(" \nURL: " + url)
+            #PrintMsg("FORMAT: " + dRequest["FORMAT"])
+            #PrintMsg("QUERY: " + sQuery)
+
+
+            # Create SDM connection to service using HTTP
+            jData = json.dumps(dRequest)
+
+            # Send request to SDA Tabular service
+            req = urllib2.Request(url, jData)
+            resp = urllib2.urlopen(req)
+
+            #PrintMsg(" \nImporting attribute data...", 0)
+            #PrintMsg(" \nGot back requested data...", 0)
+
+            # Read the response from SDA into a string
+            jsonString = resp.read()
+
+            #PrintMsg(" \njsonString: " + str(jsonString), 1)
+            data = json.loads(jsonString)
+            del jsonString, resp, req
+
+            if not "Table" in data:
+                raise MyError, "Query failed to select anything: \n " + sQuery
+
+            dataList = data["Table"]     # Data as a list of lists. Service returns everything as string.
+            arcpy.SetProgressorLabel("Adding new fields to output table...")
+            PrintMsg(" \nRequested data consists of " + Number_Format(len(dataList), 0, True) + " records", 0)
+
+            # Get column metadata from first two records
+            columnNames = dataList.pop(0)
+            columnInfo = dataList.pop(0)
+
+            if keyCntr == 1:
+                PrintMsg(" \nAdding new fields...", 0)
+                newFields = AddNewFields(outputShp, columnNames, columnInfo)   # Here's where I'm seeing a slow down (JoinField)
+
+                if newFields[0] == "Error":
+                    raise MyError, "Error from AddNewFields"
+
+                #ratingField = newFields[-1]  # last field in query will be used to symbolize output layer
+
+                if len(newFields) == 0:
+                    raise MyError, ""
+
+            # Reading the attribute information returned from SDA Tabular service
+            #
+            arcpy.SetProgressor("step", "Importing attribute data for " + Number_Format(len(keyList), 0, True) + " soil survey areas...", 1, polyCnt, 1)
+            
+            mukeyIndx = -1
+            for i, fld in enumerate(columnNames):
+                if fld.upper() == "MUKEY":
+                    mukeyIndx = i
+                    break
+
+            if mukeyIndx == -1:
+                raise MyError, "MUKEY column not found in query data"
+
+            #PrintMsg(" \nUpdating information for " + ", ".join(newFields))
+
+            noMatch = list()
+            cnt = 0
+
+            for rec in dataList:
+                try:
+                    mukey = rec[mukeyIndx]
+                    dMapunitInfo[mukey] = rec
+                    #PrintMsg("\t" + mukey + ":  " + str(rec), 1)
+
+                except:
+                    errorMsg()
+                    PrintMsg(" \n" + ", ".join(columnNames), 1)
+                    PrintMsg(" \n" + str(rec) + " \n ", 1)
+                    raise MyError, "Failed to save " + str(columnNames[i]) + " (" + str(i) + ") : " + str(rec[i])
+
+
 
         # Write the attribute data to the featureclass table
         #
+        PrintMsg(" \nAdding natmusym labels to " + outputShp + "...", 0)
+        arcpy.SetProgressorLabel("Adding natmusym labels to target layer...")
+
         with arcpy.da.UpdateCursor(outputShp, columnNames) as cur:
             for rec in cur:
+                arcpy.SetProgressorPosition()
+
                 try:
                     mukey = rec[mukeyIndx]
                     newrec = dMapunitInfo[mukey]
@@ -396,6 +396,7 @@ def AttributeRequest(theURL, outputShp):
             PrintMsg(" \nNo attribute data for mukeys: " + str(noMatch), 1)
 
         arcpy.SetProgressorLabel("Finished importing attribute data")
+        PrintMsg(" \nImport complete... \n ", 0)
 
         return True
 

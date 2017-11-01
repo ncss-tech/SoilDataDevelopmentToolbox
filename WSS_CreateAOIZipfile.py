@@ -65,34 +65,336 @@ def Number_Format(num, places=0, bCommas=True):
         return "???"
 
 ## ===================================================================================
-def CleanShapefile(inputAOI, bDissolve):
+def CheckBrowser(BrowserList):
+    # Given a list of compatible browsers, return the executable path for the first one found.
+    # Return empty string if none are found in HKLM
+    # registry keys were only tested on a Windows 10 computer
+
+    try:
+        # Check for compatible browsers Chrome or FireFox
+
+        try:
+            import winreg
+
+        except ImportError:
+            import _winreg as winreg
+
+
+        chromeKey = r"Software\Microsoft\Windows\CurrentVersion\App Paths\Chrome.exe"
+        foxKey = r"Software\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe"
+        dKeys = dict()
+        dKeys ["chrome"] = chromeKey
+        dKeys["firefox"] = foxKey
+
+        exePath = ""
+        myBrowser = ""
+
+        for browser in ["chrome", "firefox"]:
+            try:
+                appKey = dKeys[browser]
+                handle = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, appKey)
+                exePath = winreg.EnumValue(handle, 0)[1].encode('ascii')
+                #PrintMsg("\t" + exePath, 1)
+                if exePath != "":
+                    myBrowser = browser
+                    break
+
+            except:
+                errorMsg()
+
+        if exePath == "":
+            raise MyError, "No compatible browser found on this system"
+
+        # Try registering the selected browser # this does not seem to work on my computer. Possible
+        # os.environ["PATH"] problem?
+        #PrintMsg(" \nTrying webbrowser method again for ", 1)
+        #webbrowser.register(browser, exePath)
+
+        #dBrowser = webbrowser._browsers
+        #PrintMsg(" \n" + str(dBrowser), 1)
+        #wb = webbrowser.get(exePath)
+        #time.sleep(7)
+
+        return exePath
+
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return ""
+
+    except:
+        errorMsg()
+        return ""
+
+## ===================================================================================
+def CleanShapefile(inputAOI, bDissolve, bClean):
     # Export the selected featurelayer to shapefile format used as a shapefile name
     #
     # This version of the CleanShapefile function uses the FeatureclassToCoverage_conversion tool
     # It buffers and erases the edge of polygon boundaries only where there is a neighbor. This
     # means that we also need use the RemoveIntersections function to get rid of self-intersecting points.
 
+    # 2017-02-02
+    # When testing a shapefile with gaps and overlaps, I see that buffering the lines BEFORE dissolving
+    # tends to result in slivers. These can look rather messy upon closer examination. It passes the WSS test,
+    # but perhaps I should run the dissolve first (if option allows) before converting to a line coverage?
+    #
+    # For now I have made Dissolve the first step unless there are CLU or PARTNAME attribute fields in the AOI.
+    # Please note that this method does not preserve the original single part polygons as WSS normally does.
+    #
+    # Alternate thought. Clip polygons from large to small.
+
     try:
-
-        # temporary shapefiles. Some may not be used.
-        outputFolder = os.path.dirname(outputZipfile)
-        #tmpFolder = env.scratchGDB
-        tmpFolder = "IN_MEMORY"
-
-        simpleShp = os.path.join(tmpFolder, "aoi_simple")
-        dissShp = os.path.join(tmpFolder, "aoi_diss")
-        lineShp = os.path.join(tmpFolder, "aoi_line")
-        labelShp = os.path.join(tmpFolder, "aoi_label")
-        polyShp = os.path.join(tmpFolder, "aoi_poly")
-        pointShp = os.path.join(tmpFolder, "aoi_point")
-        joinShp = os.path.join(tmpFolder, "aoi_join")
-        cleanShp = os.path.join(tmpFolder, "aoi_clean")
-        aoiCov = os.path.join(env.scratchFolder, "aoi_cov")
-
         outputShp = os.path.join(env.scratchFolder, "wss_aoi.shp")
 
         if arcpy.Exists(outputShp):
             arcpy.Delete_management(outputShp, "FEATURECLASS")
+
+        # If the user wants to skip the cleaning process, copy the input AOI directly to the outputShp
+        # As of Jan 31, 2017 WSS has incorporated its own geometry cleaning process
+        #
+        if bClean == False:
+            PrintMsg(" \nUsing original polygon geometry to create AOI", 0)
+            env.workspace = env.scratchFolder
+
+            # Do I need to set output coordinate system and transformation for the outputShp?
+            epsgWGS = 4326 # GCS WGS 1984
+            outputSR = arcpy.SpatialReference(epsgWGS)
+            env.outputCoordinateSystem = outputSR
+            env.geographicTransformations =  "WGS_1984_(ITRF00)_To_NAD_1983"
+
+            arcpy.CopyFeatures_management(inputAOI, outputShp)
+
+            return True
+
+        else:
+            PrintMsg(" \nCleaning polygon geometry to create AOI", 0)
+
+            # temporary shapefiles. Some may not be used.
+            outputFolder = os.path.dirname(outputZipfile)
+            #tmpFolder = env.scratchGDB
+            tmpFolder = "IN_MEMORY"
+
+            simpleShp = os.path.join(tmpFolder, "aoi_simple")
+            dissShp = os.path.join(tmpFolder, "aoi_diss")
+            lineShp = os.path.join(tmpFolder, "aoi_line")
+            labelShp = os.path.join(tmpFolder, "aoi_label")
+            polyShp = os.path.join(tmpFolder, "aoi_poly")
+            pointShp = os.path.join(tmpFolder, "aoi_point")
+            joinShp = os.path.join(tmpFolder, "aoi_join")
+            cleanShp = os.path.join(tmpFolder, "aoi_clean")
+            aoiCov = os.path.join(env.scratchFolder, "aoi_cov")
+
+            # Create a new featureclass with just the selected polygons
+            if arcpy.Exists(simpleShp):
+                arcpy.Delete_management(simpleShp)
+
+            if not arcpy.Exists(inputAOI):
+                raise MyError, "Unable to find AOI layer: " + inputAOI
+
+            arcpy.MultipartToSinglepart_management(inputAOI, simpleShp)
+            #arcpy.CopyFeatures_management(inputAOI, simpleShp)
+
+            cnt = int(arcpy.GetCount_management(simpleShp).getOutput(0))
+            if cnt == 0:
+                raise MyError, "No polygon features in " + simpleShp
+
+            # Try to eliminate small slivers using Integrate function.
+            # Integrate should also add vertices so both shared boundaries are the same.
+            arcpy.Integrate_management(simpleShp, "0.05 Meters")  # was 0.1 Meters. Trying to figure out why my lines snapped and caused buffer problems
+
+            # Describe the input layer
+            desc = arcpy.Describe(simpleShp)
+            #dataType = desc.featureclass.dataType.upper()
+            fields = desc.fields
+            fldNames = [f.baseName.upper() for f in fields]
+            #PrintMsg(" \nsimpleShp field names: " + ", ".join(fldNames), 1)
+
+            if bDissolve:
+                # Always use dissolve unless there are CLU or PartName attribute fields
+                PrintMsg(" \nDissolving unneccessary polygon boundaries for Web Soil Survey AOI...", 0)
+                #arcpy.Dissolve_management(simpleShp, dissShp, "", "", "SINGLE_PART") # this is the original that works
+                arcpy.Dissolve_management(simpleShp, dissShp, "", "", "MULTI_PART") # this is the one to test for common points
+
+                # Let's get a count to see how many polygons remain after the dissolve
+                dissCnt = int(arcpy.GetCount_management(dissShp).getOutput(0))
+                PrintMsg(" \nAfter dissolve, " + Number_Format(dissCnt, 0, True) + " polygons remain", 1)
+
+            else:
+                # Keep original boundaries, but if attribute table contains PARTNAME or LANDUNIT attributes, dissolve on that
+                #
+
+                if ("LAND_UNIT_TRACT_NUMBER" in fldNames and "LAND_UNIT_LAND_UNIT_NUMBER" in fldNames):
+                    # Planned land Unit featureclass
+                    # Go ahead and dissolve using PartName which will be added next
+                    PrintMsg(" \nUsing Planned Land Unit polygons to build AOI for Web Soil Survey", 0)
+                    arcpy.AddField_management(simpleShp, "partName", "TEXT", "", "", 20)
+                    curFields = ["PARTNAME", "LAND_UNIT_TRACT_NUMBER", "LAND_UNIT_LAND_UNIT_NUMBER"]
+
+                    with arcpy.da.UpdateCursor(simpleShp, curFields) as cur:
+                        for rec in cur:
+                            # create stacked label for tract and field
+                            partName = "T" + str(rec[1]) + "\nF" + str(rec[2])
+                            rec[0] = partName
+                            cur.updateRow(rec)
+
+                    #arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "SINGLE_PART")
+                    arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "MULTI_PART")
+
+                    # Let's get a count to see how many polygons remain after the dissolve
+                    dissCnt = int(arcpy.GetCount_management(dissShp).getOutput(0))
+                    PrintMsg(" \nAfter dissolve, " + Number_Format(dissCnt, 0, True) + " polygons remain", 1)
+
+
+                elif "PARTNAME" in fldNames:
+                    # User has created a featureclass with PartName attribute.
+                    # Regardless, dissolve any polygons on PartName
+                    PrintMsg(" \nUsing PartName polygon attributes to build AOI for Web Soil Survey", 0)
+                    #arcpy.Dissolve_management(simpleShp, dissShp, "PartName", "", "SINGLE_PART")
+                    arcpy.Dissolve_management(simpleShp, dissShp, "PartName", "", "MULTI_PART")
+
+                    # Let's get a count to see how many polygons remain after the dissolve
+                    dissCnt = int(arcpy.GetCount_management(dissShp).getOutput(0))
+                    PrintMsg(" \nAfter dissolve, " + Number_Format(dissCnt, 0, True) + " polygons remain", 1)
+
+
+                elif ("CLU_NUMBER" in fldNames and "TRACT_NUMB" in fldNames and "FARM_NUMBE" in fldNames):
+                    # This must be a shapefile copy of CLU. Field names are truncated.
+                    # Keep original boundaries, but if attribute table contains LANDUNIT attributes, dissolve on that
+                    #
+                    # Go ahead and dissolve using PartName which was previously added
+                    PrintMsg(" \nUsing CLU shapefile to build AOI for Web Soil Survey", 0)
+                    arcpy.AddField_management(simpleShp, "partName", "TEXT", "", "", 20)
+                    curFields = ["PARTNAME", "FARM_NUMBE", "TRACT_NUMB", "CLU_NUMBER"]
+
+                    with arcpy.da.UpdateCursor(simpleShp, curFields) as cur:
+                        for rec in cur:
+                            # create stacked label for tract and field
+                            partName = "F" + str(rec[1]) + "T" + str(rec[2]) + "\nF" + str(rec[3])
+                            rec[0] = partName
+                            cur.updateRow(rec)
+
+                    #arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "SINGLE_PART")
+                    arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "MULTI_PART")
+
+                    # Let's get a count to see how many polygons remain after the dissolve
+                    dissCnt = int(arcpy.GetCount_management(dissShp).getOutput(0))
+                    PrintMsg(" \nAfter dissolve, " + Number_Format(dissCnt, 0, True) + " polygons remain", 1)
+
+
+                elif ("TRACT_NUMBER" in fldNames and "FARM_NUMBER" in fldNames and "CLU_NUMBER" in fldNames):
+                    # This must be a shapefile copy of CLU. Field names are truncated.
+                    # Keep original boundaries, but if attribute table contains LANDUNIT attributes, dissolve on that
+                    #
+                    # Go ahead and dissolve using PartName which was previously added
+                    PrintMsg(" \nUsing CLU shapefile to build AOI for Web Soil Survey", 0)
+                    arcpy.AddField_management(simpleShp, "partName", "TEXT", "", "", 20)
+                    curFields = ["PARTNAME", "FARM_NUMBE", "TRACT_NUMB", "CLU_NUMBER"]
+
+                    with arcpy.da.UpdateCursor(simpleShp, curFields) as cur:
+                        for rec in cur:
+                            # create stacked label for tract and field
+                            partName = "F" + str(rec[1]) + "T" + str(rec[2]) + "\nF" + str(rec[3])
+                            rec[0] = partName
+                            cur.updateRow(rec)
+
+                    #arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "SINGLE_PART")
+                    arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "MULTI_PART")
+
+                    # Let's get a count to see how many polygons remain after the dissolve
+                    dissCnt = int(arcpy.GetCount_management(dissShp).getOutput(0))
+                    PrintMsg(" \nAfter dissolve, " + Number_Format(dissCnt, 0, True) + " polygons remain", 1)
+
+
+                else:
+                    dissShp = simpleShp
+                    PrintMsg(" \nUsing original polygons to build AOI for Web Soil Survey...", 0)
+
+            env.workspace = env.scratchFolder
+
+            if not arcpy.Exists(dissShp):
+                raise MyError, "Missing " + dissShp
+
+            if not bClean:
+                #PrintMsg(" \nSkipping RemoveCommonBoundaries function and Repair Geometry", 1)
+                arcpy.CopyFeatures_management(simpleShp, outputShp)
+                arcpy.Integrate_management(outputShp, "0.05 Meters")
+
+            elif RemoveCommonBoundaries(dissShp, aoiCov, lineShp, pointShp, outputShp) == False:
+                raise MyError, ""
+
+
+            #arcpy.RepairGeometry_management(outputShp, "DELETE_NULL")  # Need to make sure this isn't doing bad things.
+
+            # Not sure if all these fields are present and whether the lack would cause an error.
+            #arcpy.DeleteField_management(outputShp, ['Join_Count', 'TARGET_FID', 'ORIG_FID', 'PartName_1', 'ORIG_FID_1'])
+
+            # END OF CLEAN
+
+            return True
+
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return False
+
+
+    except:
+        errorMsg()
+        return False
+
+
+## ===================================================================================
+def NoCleanShapefile(inputAOI, bDissolve, bClean):
+    # Export the selected featurelayer to shapefile format used as a shapefile name
+    #
+    # This version of the CleanShapefile function uses the FeatureclassToCoverage_conversion tool
+    # It buffers and erases the edge of polygon boundaries only where there is a neighbor. This
+    # means that we also need use the RemoveIntersections function to get rid of self-intersecting points.
+
+    # 2017-02-02
+    # When testing a shapefile with gaps and overlaps, I see that buffering the lines BEFORE dissolving
+    # tends to result in slivers. These can look rather messy upon closer examination. It passes the WSS test,
+    # but perhaps I should run the dissolve first (if option allows) before converting to a line coverage?
+    #
+    # For now I have made Dissolve the first step unless there are CLU or PARTNAME attribute fields in the AOI.
+    # Please note that this method does not preserve the original single part polygons as WSS normally does.
+    #
+    # Alternate thought. Clip polygons from large to small.
+
+    try:
+        outputShp = os.path.join(env.scratchFolder, "wss_aoi.shp")
+
+        if arcpy.Exists(outputShp):
+            arcpy.Delete_management(outputShp, "FEATURECLASS")
+
+        # If the user wants to skip the cleaning process, copy the input AOI directly to the outputShp
+        # As of Jan 31, 2017 WSS has incorporated its own geometry cleaning process
+        #
+        #if bClean == False:
+        #    PrintMsg(" \nUsing original polygon geometry to create AOI", 0)
+        #    env.workspace = env.scratchFolder
+
+            # Do I need to set output coordinate system and transformation for the outputShp?
+        #    epsgWGS = 4326 # GCS WGS 1984
+        #    outputSR = arcpy.SpatialReference(epsgWGS)
+        #    env.outputCoordinateSystem = outputSR
+        #    env.geographicTransformations =  "WGS_1984_(ITRF00)_To_NAD_1983"
+
+        #    arcpy.CopyFeatures_management(inputAOI, outputShp)
+
+        #    return True
+
+        PrintMsg(" \nUsing original polygon geometry to create AOI", 0)
+
+        # temporary shapefiles. Some may not be used.
+        outputFolder = os.path.dirname(outputZipfile)
+        tmpFolder = "IN_MEMORY"
+
+        simpleShp = os.path.join(tmpFolder, "aoi_simple")
+        dissShp = os.path.join(tmpFolder, "aoi_diss")
 
         # Create a new featureclass with just the selected polygons
         arcpy.MultipartToSinglepart_management(inputAOI, simpleShp)
@@ -104,7 +406,7 @@ def CleanShapefile(inputAOI, bDissolve):
 
         # Try to eliminate small slivers using Integrate function.
         # Integrate should also add vertices so both shared boundaries are the same.
-        arcpy.Integrate_management(simpleShp, "0.05 Meters")  # was 0.1 Meters. Trying to figure out why my lines snapped and caused buffer problems
+        #arcpy.Integrate_management(simpleShp, "0.05 Meters")  # was 0.1 Meters. Trying to figure out why my lines snapped and caused buffer problems
 
         # Describe the input layer
         desc = arcpy.Describe(simpleShp)
@@ -114,36 +416,85 @@ def CleanShapefile(inputAOI, bDissolve):
         #PrintMsg(" \nsimpleShp field names: " + ", ".join(fldNames), 1)
 
         if bDissolve:
-            # User wants remove boundaries between adjacent polygons
+            # Always use dissolve unless there are CLU or PartName attribute fields
             PrintMsg(" \nDissolving unneccessary polygon boundaries for Web Soil Survey AOI...", 0)
             #arcpy.Dissolve_management(simpleShp, dissShp, "", "", "SINGLE_PART") # this is the original that works
-            arcpy.Dissolve_management(simpleShp, dissShp, "", "", "MULTI_PART") # this is the one to test for common points
+            arcpy.Dissolve_management(simpleShp, outputShp, "", "", "SINGLE_PART") # this is the one to test for common points
+            #outputShp = dissShp
+
+            # Let's get a count to see how many polygons remain after the dissolve
+            dissCnt = int(arcpy.GetCount_management(outputShp).getOutput(0))
+            PrintMsg(" \nAfter dissolve, " + Number_Format(dissCnt, 0, True) + " polygons remain", 1)
 
         else:
             # Keep original boundaries, but if attribute table contains PARTNAME or LANDUNIT attributes, dissolve on that
             #
 
-            if "LAND_UNIT_TRACT_NUMBER" in fldNames and "LAND_UNIT_LAND_UNIT_NUMBER" in fldNames:
-                # Go ahead and dissolve using PartName which was previously added
+            if ("LAND_UNIT_TRACT_NUMBER" in fldNames and "LAND_UNIT_LAND_UNIT_NUMBER" in fldNames):
+                # Planned land Unit featureclass
+                # Go ahead and dissolve using PartName which will be added next
                 PrintMsg(" \nUsing Planned Land Unit polygons to build AOI for Web Soil Survey", 0)
-                arcpy.AddField_management(simpleShp, "PARTNAME", "TEXT", "", "", 20)
+                arcpy.AddField_management(simpleShp, "partName", "TEXT", "", "", 20)
                 curFields = ["PARTNAME", "LAND_UNIT_TRACT_NUMBER", "LAND_UNIT_LAND_UNIT_NUMBER"]
 
                 with arcpy.da.UpdateCursor(simpleShp, curFields) as cur:
                     for rec in cur:
                         # create stacked label for tract and field
-                        partName = "T" + str(rec[1]) + "\nF" + str(rec[2])
+                        partName = "T" + str(rec[1]) + "\n" + str(rec[2])
                         rec[0] = partName
                         cur.updateRow(rec)
 
                 #arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "SINGLE_PART")
-                arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "MULTI_PART")
+                arcpy.Dissolve_management(simpleShp, outputShp, ["PARTNAME"], "", "MULTI_PART")
 
             elif "PARTNAME" in fldNames:
+                # User has created a featureclass with PartName attribute.
                 # Regardless, dissolve any polygons on PartName
                 PrintMsg(" \nUsing PartName polygon attributes to build AOI for Web Soil Survey", 0)
                 #arcpy.Dissolve_management(simpleShp, dissShp, "PartName", "", "SINGLE_PART")
-                arcpy.Dissolve_management(simpleShp, dissShp, "PartName", "", "MULTI_PART")
+                arcpy.Dissolve_management(simpleShp, outputShp, "PartName", "", "MULTI_PART")
+                #outputShp = dissShp
+
+            elif ("CLU_NUMBER" in fldNames and "TRACT_NUMB" in fldNames and "FARM_NUMBE" in fldNames):
+                # This must be a shapefile copy of CLU. Field names are truncated.
+                # Keep original boundaries, but if attribute table contains LANDUNIT attributes, dissolve on that
+                #
+                # Go ahead and dissolve using PartName which was previously added
+                PrintMsg(" \nUsing CLU shapefile to build AOI for Web Soil Survey", 0)
+                arcpy.AddField_management(simpleShp, "partName", "TEXT", "", "", 20)
+                curFields = ["PARTNAME", "FARM_NUMBE", "TRACT_NUMB", "CLU_NUMBER"]
+
+                with arcpy.da.UpdateCursor(simpleShp, curFields) as cur:
+                    for rec in cur:
+                        # create stacked label for tract and field
+                        partName = "F" + str(rec[1]) + "T" + str(rec[2]) + "\n" + str(rec[3])
+                        rec[0] = partName
+                        cur.updateRow(rec)
+
+                #arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "SINGLE_PART")
+                arcpy.Dissolve_management(simpleShp, outputShp, ["PARTNAME"], "", "MULTI_PART")
+                #outputShp = dissShp
+
+            elif ("TRACT_NUMBER" in fldNames and "FARM_NUMBER" in fldNames and "CLU_NUMBER" in fldNames):
+                # This must be a shapefile copy of CLU. Field names are truncated.
+                # Keep original boundaries, but if attribute table contains LANDUNIT attributes, dissolve on that
+                #
+                # Go ahead and dissolve using PartName which was previously added
+                PrintMsg(" \nUsing CLU shapefile to build AOI for Web Soil Survey", 0)
+                arcpy.AddField_management(simpleShp, "partName", "TEXT", "", "", 20)
+                curFields = ["PARTNAME", "FARM_NUMBER", "TRACT_NUMBER", "CLU_NUMBER"]
+
+                with arcpy.da.UpdateCursor(simpleShp, curFields) as cur:
+                    for rec in cur:
+                        # create stacked label for tract and field
+                        partName = "F" + str(rec[1]) + "T" + str(rec[2]) + "\n" + str(rec[3])
+                        rec[0] = partName
+                        cur.updateRow(rec)
+
+                #arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "SINGLE_PART")
+                arcpy.Dissolve_management(simpleShp, outputShp, ["PARTNAME"], "", "MULTI_PART")
+                #outputShp = dissShp
+
 
             else:
                 dissShp = simpleShp
@@ -151,18 +502,10 @@ def CleanShapefile(inputAOI, bDissolve):
 
         env.workspace = env.scratchFolder
 
-        if not arcpy.Exists(dissShp):
-            raise MyError, "Missing " + dissShp
-
-        if RemoveCommonBoundaries(dissShp, aoiCov, lineShp, pointShp, outputShp) == False:
-            raise MyError, ""
+        if not arcpy.Exists(outputShp):
+            raise MyError, "Missing " + outputShp
 
         arcpy.RepairGeometry_management(outputShp, "DELETE_NULL")  # Need to make sure this isn't doing bad things.
-
-        # Not sure if all these fields are present and whether the lack would cause an error.
-        #arcpy.DeleteField_management(outputShp, ['Join_Count', 'TARGET_FID', 'ORIG_FID', 'PartName_1', 'ORIG_FID_1'])
-
-        # END OF CLEAN
 
         return True
 
@@ -178,7 +521,7 @@ def CleanShapefile(inputAOI, bDissolve):
         return False
 
 ## ===================================================================================
-def MakeZipFile(outputZipfile):
+def MakeZipFile(outputZipfile, timeOut):
     # Export the selected featurelayer to shapefile format used as a shapefile name
     import zipfile
 
@@ -192,6 +535,7 @@ def MakeZipFile(outputZipfile):
             arcpy.Delete_management(outputZipfile, "FILE")
 
         shpFiles = arcpy.ListFiles("wss_aoi.*")
+
         if len(shpFiles) == 0:
             raise MyError, "Output shapefile wss_aoi.shp not found"
 
@@ -210,7 +554,8 @@ def MakeZipFile(outputZipfile):
 
         PrintMsg(" \nSaved final Web Soil Survey AOI shapefile to: \n" + outputZipfile + " \n ", 0 )
 
-        bWSS = OpenWSS(os.path.join(env.workspace, "wss_aoi.shp"))
+        #bWSS = OpenWSS3(os.path.join(env.workspace, "wss_aoi.shp"), timeOut)  # encoded shapefile works well
+        bWSS = OpenWSS4(os.path.join(env.workspace, "wss_aoi.shp"), timeOut)
 
 
         return True
@@ -468,8 +813,216 @@ def RemoveCommonBoundaries(inLayer, aoiCov, lineShp, pointShp, outputShp):
         errorMsg()
         return False
 
+
 ## ===================================================================================
-def FormSpatialQuery(theAOI):
+def FormSpatialQueryJSON(theAOI):
+    #
+    # Create a simplified polygon from the input polygon using convex-hull.
+    # Coordinates are GCS WGS1984 and format is WKT.
+    # Returns spatial query (string) and clipPolygon (geometry)
+    # The clipPolygon will be used to clip the soil polygons back to the original AOI polygon
+    #
+    # Note. SDA will accept WKT requests for MULTIPOLYGON if you make these changes:
+    #     Need to switch the initial query AOI to use STGeomFromText and remove the
+    #     WKT search and replace for "MULTIPOLYGON" --> "POLYGON".
+    #
+    # I tried using the MULTIPOLYGON option for the original AOI polygons but SDA would
+    # fail when submitting AOI requests with large numbers of vertices. Easiest just to
+    # using convex hull polygons and clip the results on the client side.
+
+    try:
+        import json
+
+        aoicoords = dict()
+        i = 0
+        # Commonly used EPSG numbers
+        epsgWM = 3857 # Web Mercatur
+        epsgWGS = 4326 # GCS WGS 1984
+        epsgNAD83 = 4269 # GCS NAD 1983
+        epsgAlbers = 102039 # USA_Contiguous_Albers_Equal_Area_Conic_USGS_version
+        #tm = "WGS_1984_(ITRF00)_To_NAD_1983"  # datum transformation supported by this script
+
+        #gcs = arcpy.SpatialReference(epsgWGS)
+
+        # Compare AOI coordinate system with that returned by Soil Data Access. The queries are
+        # currently all set to return WGS 1984, geographic.
+
+        # Get geographic coordinate system information for input and output layers
+        validDatums = ["D_WGS_1984", "D_North_American_1983"]
+        aoiCS = arcpy.Describe(theAOI).spatialReference
+
+        if not aoiCS.GCS.datumName in validDatums:
+            raise MyError, "AOI coordinate system not supported: " + aoiCS.name + ", " + aoiCS.GCS.datumName
+
+        if aoiCS.GCS.datumName == "D_WGS_1984":
+            tm = ""  # no datum transformation required
+
+        elif aoiCS.GCS.datumName == "D_North_American_1983":
+            tm = "WGS_1984_(ITRF00)_To_NAD_1983"
+
+        else:
+            raise MyError, "AOI CS datum name: " + aoiCS.GCS.datumName
+
+        env.geographicTransformations = tm
+        sdaCS = arcpy.SpatialReference(epsgWGS)
+
+        # Determine whether
+        if aoiCS.PCSName != "":
+            # AOI layer has a projected coordinate system, so geometry will always have to be projected
+            bProjected = True
+
+        elif aoiCS.GCS.name != sdaCS.GCS.name:
+            # AOI must be NAD 1983
+            bProjected = True
+
+        else:
+            bProjected = False
+
+
+        # Get list of field names
+        desc = arcpy.Describe(theAOI)
+        fields = desc.fields
+        fldNames = [f.baseName.upper() for f in fields]
+        i = 0
+
+        features = list()
+
+        aoicoords["type"] = 'FeatureCollection'
+        aoicoords['features'] = list()
+
+
+        if "PARTNAME" in fldNames:
+            curFlds = ["SHAPE@", "partName"]
+
+            if bProjected:
+                # UnProject geometry from AOI to GCS WGS1984
+
+                with arcpy.da.SearchCursor(theAOI, curFlds) as cur:
+                    for rec in cur:
+                        dFeat = {'type':'Feature', 'properties': {'partName': rec[1].encode('ascii')}, 'geometry': {'type':'Polygon'}}
+                        polygon = rec[0].projectAs(sdaCS, tm)        # simplified geometry, projected to WGS 1984
+                        sJSON = polygon.JSON
+                        dJSON = json.loads(sJSON)
+
+                        coordList = dJSON['rings']
+                        newCoords = list()
+
+                        for features in coordList:
+                            newfeatures = list()
+
+                            for ring in features:
+                                x = round(ring[0], 6)
+                                y = round(ring[1], 6)
+                                newfeatures.append([x, y])
+
+                            newCoords.append(newfeatures)
+
+                        dFeat['geometry']['coordinates'] = newCoords
+                        aoicoords['features'].append(dFeat)
+                        i += 1
+
+            else:
+                # No projection required. AOI must be GCS WGS 1984
+
+                with arcpy.da.SearchCursor(theAOI, curFlds) as cur:
+                    for rec in cur:
+                        # original geometry
+                        dFeat = {'type':'Feature', 'properties': {'partName': rec[1].encode('ascii')}, 'geometry': {'type':'Polygon' }}
+                        sJSON = rec[0].JSON
+                        dJSON = json.loads(sJSON)
+                        coordList = dJSON['rings']
+                        newCoords = list()
+
+                        for features in coordList:
+                            newfeatures = list()
+
+                            for ring in features:
+                                x = round(ring[0], 6)
+                                y = round(ring[1], 6)
+                                newfeatures.append([x, y])
+
+                            newCoords.append(newfeatures)
+
+                        dFeat['geometry']['coordinates'] = newCoords
+                        aoicoords['features'].append(dFeat)
+                        i += 1
+
+        else:
+            # No PartName attribute
+
+            curFlds = ["SHAPE@"]
+
+            if bProjected:
+                # UnProject geometry from AOI to GCS WGS1984
+
+                with arcpy.da.SearchCursor(theAOI, curFlds) as cur:
+                    for rec in cur:
+                        dFeat = {'type':'Feature', 'geometry': {'type':'Polygon' }}
+                        polygon = rec[0].projectAs(sdaCS, tm)        # simplified geometry, projected to WGS 1984
+                        sJSON = polygon.JSON
+                        dJSON = json.loads(sJSON)
+
+                        coordList = dJSON['rings']
+                        newCoords = list()
+
+                        for features in coordList:
+                            newfeatures = list()
+
+                            for ring in features:
+                                x = round(ring[0], 6)
+                                y = round(ring[1], 6)
+                                newfeatures.append([x, y])
+
+                            newCoords.append(newfeatures)
+
+                        dFeat['geometry']['coordinates'] = newCoords
+                        aoicoords['features'].append(dFeat)
+                        i += 1
+
+            else:
+                # No projection required. AOI must be GCS WGS 1984
+
+                with arcpy.da.SearchCursor(theAOI, curFlds) as cur:
+                    for rec in cur:
+                        # original geometry
+                        dFeat = {'type':'Feature', 'geometry': {'type':'Polygon' }}
+                        sJSON = rec[0].JSON
+                        dJSON = json.loads(sJSON)
+                        coordList = dJSON['rings']
+                        newCoords = list()
+
+                        for features in coordList:
+                            newfeatures = list()
+
+                            for ring in features:
+                                #PrintMsg("\nring: " + str(ring), 1)
+                                x = round(ring[0], 6)
+                                y = round(ring[1], 6)
+                                newfeatures.append([x, y])
+
+                            newCoords.append(newfeatures)
+
+                        dFeat['geometry']['coordinates'] = newCoords
+                        aoicoords['features'].append(dFeat)
+                        i += 1
+
+        sAOI = json.dumps(aoicoords)
+
+        #PrintMsg(" \naoicoords: " + str(aoicoords), 1)
+        return aoicoords
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return aoicoords
+
+    except:
+        errorMsg()
+        return aoicoords
+
+
+## ===================================================================================
+def FormSpatialQueryWKT(theAOI):
     #
     # Create a simplified WKT version of the AOI with coordinates rounded off to 6 places.
     # This function will not work with WSS 3.2.1 because it allows multiple polygons and interior rings.
@@ -621,7 +1174,7 @@ def OpenWSS(outputShp):
 
         #wkt = FormSpatialQuery(outputShp)
         #sExtent = wkt  # try using actual polygon AOI coordinates. This will not work with multiple polygons or interior rings. Also very limited number of coordinates allowed.
-        #aoiURL = "http://websoilsurvey.sc.egov.usda.gov/App/WebSoilSurvey.aspx?aoicoords=" + wkt
+        #aoiURL = "https://websoilsurvey.sc.egov.usda.gov/App/WebSoilSurvey.aspx?aoicoords=" + wkt
 
         # LOCATION: Sets overall extent of the AOI (plus 10%) without creating an AOI polygon in WSS
         xDiff = (x.XMax - x.XMin) / 10.0
@@ -633,7 +1186,7 @@ def OpenWSS(outputShp):
         aoiURL = "https://websoilsurvey.sc.egov.usda.gov/App/WebSoilSurvey.aspx?location=(" + sExtent + ")"
 
         # Dev WSS
-        #aoiURL = "http://websoilsurvey-dev.dev.sc.egov.usda.gov/App//WebSoilSurvey.aspx?location=(" + sExtent + ")"
+        #aoiURL = "https://websoilsurvey-dev.dev.sc.egov.usda.gov/App//WebSoilSurvey.aspx?location=(" + sExtent + ")"
 
         #PrintMsg(" \n" + aoiURL, 1)
         #PrintMsg(" \n" + sExtent, 1)
@@ -649,6 +1202,312 @@ def OpenWSS(outputShp):
         errorMsg()
         return False
 
+
+## ===================================================================================
+def OpenWSS2(outputShp):
+
+    # Try to open WSS to the extent of the AOI and create box AOI using POST instead of just the URL (code from Phil)
+
+    try:
+        # Get extent for the output shapefile and try to open WSS to that location
+        # The output shapefile will be GCS WGS 1984
+
+        import webbrowser
+
+        aoiCnt = int(arcpy.GetCount_management(outputShp).getOutput(0))
+        if aoiCnt > 32:
+            raise MyError, "AOI shapefile has " + Number_Format(aoiCnt, 0, True) + " polygons, exceeding the WSS limit of 32"
+
+        x = arcpy.Describe(arcpy.Describe(outputShp).catalogPath).extent
+
+
+        # Defines box coordinates using the input layer's extent (or the selected polygon extent)
+        xDiff = (x.XMax - x.XMin) / 10.0
+        yDiff = (x.YMax - x.YMin) / 10.0
+        aoiCoords = "((" + str(x.XMin) + "%20" + str(x.YMin) + "," + str(x.XMin) + "%20" + str(x.YMax) + "," + str(x.XMax) + "%20" + str(x.YMax) + \
+        "," + str(x.XMax) + "%20" + str(x.YMin) + "," + str(x.XMin) + "%20" + str(x.YMin) + "))"
+
+
+        # 2017-02-02 only works in Dev WSS right now.
+        #wssUrl = 'https://websoilsurvey-dev.dev.sc.egov.usda.gov/App/WebSoilSurvey.aspx'
+        wssUrl = 'https://websoilsurvey.sc.egov.usda.gov/App/WebSoilSurvey.aspx?'
+        temporaryFile = os.path.normpath('c:/temp/temp_file.html')
+
+        # For the default browser specify   browserType = ''  and  browserPath = ''
+        # Note that Internet Explorer (and possibly also Edge) may ask the user to
+        # allow scripts. If that is a headache use Chrome or Firefox.
+        # On my computer, for Chrome:
+        #	browserType = 'chrome'
+        #	browserPath = os.path.normpath('C:/Program Files (x86)/Google/Chrome/Application/chrome.exe')
+        # and for Firefox,
+        #	browserType = 'firefox'
+        #	browserPath = os.path.normpath('C:/Program Files (x86)/Mozilla Firefox/firefox.exe')
+        # The webbrowser library is documented at https://docs.python.org/2/library/webbrowser.html
+        #browserType = 'firefox'
+        browserType = False  # try using default browser SDP
+        browserPath = os.path.normpath('C:/Program Files (x86)/Mozilla Firefox/firefox.exe')
+
+        # Allow a few seconds for the Web browser to start before removing
+        # the temporary HTML file.
+        browserStartupAllowanceSeconds = 10
+
+        # Set up form elements - these will become the input elements in the form
+        input_value = { 'aoicoords' : aoiCoords, 'continue': wssUrl }
+        action= wssUrl
+        method='post'
+
+        #Set up javascript form submission function.
+        # I am using the 'format' function on a string, and it doesn't like the { and } of the js function
+        # so I brought it out to be inserted later
+        js_submit = '$(document).ready(function() {$("#form").submit(); });'
+
+        # Set up file content elements
+        input_field = '<input type="hidden" name="{0}" value="{1}" />'
+
+        base_file_contents = """
+        <script src='http://www.google.com/jsapi'></script>
+        <script>google.load('jquery', '1.3.2');</script>
+        <script>{0}</script>
+        <form id='form' action='{1}' method='{2}' />{3}</form>
+        """
+
+        # Build input fields
+        input_fields = ""
+        for key, value in input_value.items():
+            input_fields += input_field.format(key, value)
+
+        # Open web page using default browser.
+        #if browserType:
+        #	webbrowser.register(browserType, None, webbrowser.BackgroundBrowser(browserPath), 1)
+        #	browserController = webbrowser.get(browserType)
+        #else:
+        #	browserController = webbrowser
+
+        #browserController = webbrowser
+
+        with open(temporaryFile, "w") as file:
+            # Write the html file that WSS will open
+            file.write(base_file_contents.format(js_submit, action, method, input_fields))
+            file.close()
+            # open the web browser using the html file
+            webbrowser.open(os.path.abspath(file.name))
+        	#browserController.open(os.path.abspath(file.name))
+
+            # Pause before deleting html tile being read by browser
+            time.sleep(browserStartupAllowanceSeconds)
+            os.remove(os.path.abspath(file.name))
+
+        return True
+
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+
+## ===================================================================================
+def OpenWSS3(shpPath, browserStartupAllowanceSeconds):
+
+    # Try to open WSS to the extent of the AOI shapefile and create polygon AOI using POST instead of just the URL (code from Phil)
+
+    try:
+        # Get extent for the output shapefile and try to open WSS to that location
+        # The output shapefile will be GCS WGS 1984
+        PrintMsg(" \nOpening Web Soil Survey using AOI shapefile...", 1)
+
+        import webbrowser, base64
+
+        aoiCnt = int(arcpy.GetCount_management(shpPath).getOutput(0))
+
+        if aoiCnt > 32:
+            raise MyError, "AOI shapefile has " + Number_Format(aoiCnt, 0, True) + " polygons, exceeding the WSS limit of 32"
+
+
+
+        # 2017-02-02 only works in Dev WSS right now.
+        wssUrl = 'https://websoilsurvey-dev.dev.sc.egov.usda.gov/App/WebSoilSurvey.aspx'
+        #wssUrl = 'https://websoilsurvey.sc.egov.usda.gov/App/WebSoilSurvey.aspx?'
+        #temporaryFile = os.path.normpath('c:/temp/temp_file.html')
+        temporaryFile = os.path.join(env.scratchFolder, "xxWSS_AOI.html")
+        PrintMsg(" \nUsing temporary file: " + temporaryFile, 1)
+
+        #browserStartupAllowanceSeconds = 10
+
+        shxPath = shpPath.replace(".shp", ".shx")
+        prjPath = shpPath.replace(".shp", ".prj")
+        dbfPath = shpPath.replace(".shp", ".dbf")
+
+        shpContent = open(shpPath, "rb").read()
+        shxContent = open(shxPath, "rb").read()
+        prjContent = open(prjPath, "rb").read()
+        dbfContent = open(dbfPath, "rb").read()
+
+        shpBase64 = base64.standard_b64encode(shpContent)
+        shxBase64 = base64.standard_b64encode(shxContent)
+        prjBase64 = base64.standard_b64encode(prjContent)
+        dbfBase64 = base64.standard_b64encode(dbfContent)
+
+        aoicoords = "shapefile" + "," + shpBase64 + "," + shxBase64 + "," + prjBase64 + "," + dbfBase64
+
+        # A "form" will be used in the temporary web page.
+        # This allows us to send, via "POST", data well in excess of that allowed
+        # via a URL "GET" submission.
+        input_value = {
+        	'aoicoords' : aoicoords,
+        	'command' : 'aoi_wkt',
+        	'mapmode' : 'Area of Interest',
+        	'continue': wssUrl
+        }
+        action= wssUrl
+        method='post'
+
+        #Set up javascript form submission function.
+        js_submit = '$(document).ready(function() {$("#form").submit(); });'
+
+        # Set up file content elements
+        input_field = '<input type="hidden" name="{0}" value="{1}" />'
+
+        base_file_contents = """
+        <script src='http://www.google.com/jsapi'></script>
+        <script>google.load('jquery', '1.3.2');</script>
+        <script>{0}</script>
+        <form id='form' action='{1}' method='{2}' />{3}</form>
+        """
+
+        # Build input fields
+        input_fields = ""
+        for key, value in input_value.items():
+            input_fields += input_field.format(key, value)
+
+        with open(temporaryFile, "w") as file:
+            # Write the html file that WSS will open
+            file.write(base_file_contents.format(js_submit, action, method, input_fields))
+            file.close()
+            # open the default web browser using the html file
+            webbrowser.open(os.path.abspath(file.name))
+        	#browserController.open(os.path.abspath(file.name))
+
+            # Pause before deleting html tile being read by browser
+            time.sleep(browserStartupAllowanceSeconds)
+            os.remove(os.path.abspath(file.name))
+
+        return True
+
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+
+## ===================================================================================
+def OpenWSS4(shpPath, wssURL, browserStartupAllowanceSeconds):
+
+    # Try to open WSS to the extent of the AOI shapefile and create GeoJSON AOI using POST
+    # instead of just the URL or shapefile (code from Phil)
+
+    try:
+        # Get extent for the output shapefile and try to open WSS to that location
+        # The output shapefile will be GCS WGS 1984
+
+        import webbrowser, base64
+
+        aoiCnt = int(arcpy.GetCount_management(shpPath).getOutput(0))
+
+        if aoiCnt > 32:
+            PrintMsg(" \n" + shpPath, 1)
+            raise MyError, "AOI shapefile has " + Number_Format(aoiCnt, 0, True) + " polygons, exceeding the WSS limit of 32"
+
+        # 2017-02-02 only works in Dev WSS right now.
+        #wssUrl = 'https://websoilsurvey-dev.dev.sc.egov.usda.gov/App/WebSoilSurvey.aspx'
+        #wssUrl = 'https://websoilsurvey.sc.egov.usda.gov/App/WebSoilSurvey.aspx?'
+
+        #temporaryFile = os.path.normpath('c:/temp/temp_file.html')
+        temporaryFile = os.path.join(env.scratchFolder, "xxWSS_AOI.html")
+
+        #browserStartupAllowanceSeconds = 5
+
+        aoicoords = FormSpatialQueryJSON(shpPath)
+        #raise MyError, "EARLY OUT"
+        if len(aoicoords) == 0:
+            raise MyError, ""
+
+        # A "form" will be used in the temporary web page.
+        # This allows us to send, via "POST", data well in excess of that allowed
+        # via a URL "GET" submission.
+        input_value = {
+        	'aoicoords' : aoicoords,
+        	'command' : 'aoi_wkt',
+        	'mapmode' : 'Area of Interest',
+        	'continue': wssURL
+        }
+        action= wssURL
+        method='post'
+
+        #Set up javascript form submission function.
+        js_submit = '$(document).ready(function() {$("#form").submit(); });'
+
+        # Set up file content elements
+        input_field = '<input type="hidden" name="{0}" value="{1}" />'
+
+        base_file_contents = """
+        <script src='http://www.google.com/jsapi'></script>
+        <script>google.load('jquery', '1.3.2');</script>
+        <script>{0}</script>
+        <form id='form' action='{1}' method='{2}' />{3}</form>
+        """
+
+        # Build input fields
+        input_fields = ""
+        for key, value in input_value.items():
+            input_fields += input_field.format(key, value)
+
+        with open(temporaryFile, "w") as file:
+            # Write the html file that WSS will open
+            file.write(base_file_contents.format(js_submit, action, method, input_fields))
+            file.close()
+
+
+            # open the default web browser using the html file
+            # webbrowser.open(os.path.abspath(file.name))
+        	#browserController.open(os.path.abspath(file.name))
+
+            browserPath = CheckBrowser(["chrome", "firefox"])
+
+            if browserPath == "":
+                raise MyError, "No compatible browser available"
+
+            else:
+                sCmd = browserPath + " " + temporaryFile
+                subprocess.Popen(sCmd)
+
+            # Pause before deleting html tile being read by browser
+            #time.sleep(browserStartupAllowanceSeconds)
+            #os.remove(os.path.abspath(file.name))
+            PrintMsg(" \nAOI import complete \n ", 0)
+
+        return True
+
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+
 ## ===================================================================================
 ## main
 ##
@@ -660,17 +1519,23 @@ import os, sys, traceback, collections
 ## ===================================================================================
 
 # Import system modules
-import sys, string, os, arcpy, locale, traceback, json, csv,  urllib2, httplib
+import sys, string, os, arcpy, locale, traceback, urllib2, httplib, webbrowser, subprocess
+
 from arcpy import env
 from copy import deepcopy
-import xml.etree.cElementTree as ET
 
 try:
     # Read input parameters
     inputAOI = arcpy.GetParameterAsText(0)                   # input AOI feature layer
     featureCnt = arcpy.GetParameter(1)                        # String. Number of polygons selected of total features in the AOI featureclass.
-    outputZipfile = arcpy.GetParameterAsText(2)               # AOI zip file for WSS
-    bDissolve = arcpy.GetParameter(3)                         # User does not want to keep individual polygon or field boundaries
+    bDissolve = arcpy.GetParameter(2)                         # User does not want to keep individual polygon or field boundaries
+    wssURL = arcpy.GetParameter(3)                            # user's choice of production or Dev Soil Data Access URL
+    # temporarily set default values for old paraameters
+    # delete them once they for sure aren't needed.
+    #
+    outputZipfile = r"c:\temp"
+    bClean = False
+    timeOut = 0
 
     env.overwriteOutput= True
 
@@ -678,13 +1543,15 @@ try:
     if licenseLevel != "ARCINFO":
         raise MyError, "License level must be Advanced to run this tool"
 
-
-    bClean = CleanShapefile(inputAOI, bDissolve)
-
     if bClean:
-        bZipped = MakeZipFile(outputZipfile)
+        bCleaned = CleanShapefile(inputAOI, bDissolve, bClean)
 
+    else:
+        bCleaned = NoCleanShapefile(inputAOI, bDissolve, bClean)
 
+    if bCleaned:
+        bWSS = OpenWSS4(os.path.join(env.workspace, "wss_aoi.shp"), wssURL, timeOut)
+        #bZipped = MakeZipFile(outputZipfile, timeOut) # zipping is not required when OpenWSS4 or OpenWSS3 functions are called
 
 
 except MyError, e:

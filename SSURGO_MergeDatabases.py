@@ -1,13 +1,12 @@
 # SSURGO_MergeDatabases.py
 #
 # Based directly upon SSURGO_MergeDatabases.py. Only change is parameter order.
-#
-# Purpose: allow batch importing of SSURGO data into a custom Template database
-# The custom Template database will need to have the AutoExec macro removed and
-# a BatchImport macro created so that it can be used to import multiple datasets.
-#
+
 # Naming convention of the SSURGO datasets must follow the NRCS Geospatial Standard
 # where each survey has it's own folder 'soil_ne109' with spatial and tabular subfolders.
+#
+# Third parameter is the input Template database. Need to test, but I believe that this
+# script is written so that prepopulated input databases will be appended to.
 #
 # 09-30-2013
 # Beta version 10-31-2013
