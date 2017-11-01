@@ -43,10 +43,10 @@
 <a href="https://www.nrcs.usda.gov/wps/portal/nrcs/detail/soils/survey/geo/?cid=nrcs142p2_053628">Description of Gridded Soil Survey Geographic (gSSURGO) Database</a></li>
 </ul>
  <ul><li>
-<a href="https://www.youtube.com/watch?v=iJyv71M85WE&t=1s">gSSURGO for Dissaster Recovery Planning</a></li>
+<a href="https://www.youtube.com/watch?v=iJyv71M85WE&t=1s">Webinar: gSSURGO for Disaster Recovery Planning (2/2016)</a></li>
 </ul>
 <ul><li>
-<a href="https://www.youtube.com/watch?v=5liZL2WLoIw">Working with the New FY2015 SSURGO and gSSURGO (10/2014)</a></li>
+<a href="https://www.youtube.com/watch?v=5liZL2WLoIw">Webinar: Working with the New FY2015 SSURGO and gSSURGO (10/2014)</a></li>
 </ul>
  
  
