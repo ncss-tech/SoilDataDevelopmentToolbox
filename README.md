@@ -4,7 +4,7 @@
 Soil Data Development Toolbox
 <ul>
   <li>Download SSURGO Toolset</li>
-    <li>Download SSURGO by AreaSymbol ~ Use Soil Data Access and Web Soil Survey download page to get SSURGO datasets. User can a wildcard to query the database by Areasymbol or by age.</li>
+    <li><ul>Download SSURGO by AreaSymbol ~ Use Soil Data Access and Web Soil Survey download page to get SSURGO datasets. User can a wildcard to query the database by Areasymbol or by age.</li></ul>
     <li>Download SSURGO by Map ~ Use Soil Data Access and Web Soil Survey download page to get SSURGO datasets. A soil survey boundary layer is used to define spatially which surveys will be downloaded.</li>
     <li>Download SSURGO by Survey Name ~ Use Soil Data Access and Web Soil Survey download page to get SSURGO datasets. User enters a wildcard to query the database by Areaname.</li>
     <li>Process WSS Downloads ~ Unzips WSS cache files to a new location and renames them to soil_[areasymbol].
