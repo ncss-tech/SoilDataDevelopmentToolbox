@@ -1,13 +1,6 @@
 # SoilDataDevelopmentToolbox
-<html>
-<head>
-<style>
- h1 {color:Black;}
-p {color:purple;}
-</style>
-</head>
 
-<p><strong> <h1>Soil Data Development Toolbox</strong></h1></p>
+<p><strong>Soil Data Development Toolbox</strong></p>
 <ul>
   <li>Download SSURGO Toolset</li>
     <ul><li>Download SSURGO by AreaSymbol ~ Use Soil Data Access and Web Soil Survey download page to get SSURGO datasets. User can a wildcard to query the database by Areasymbol or by age.</li></ul>
