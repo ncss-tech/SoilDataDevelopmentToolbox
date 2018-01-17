@@ -52,5 +52,11 @@
 <ul><li>
 <a href="https://www.youtube.com/watch?v=5liZL2WLoIw">Webinar: Working with the New FY2015 SSURGO and gSSURGO (10/2014)</a></li>
 </ul>
+<ul><li>
+<a href="https://www.youtube.com/watch?v=D6ChFNqosk8">Webinar-dSSURGO: Spatial Disaggregation and Harmonization of gSSURGO (12/2014)</a></li>
+</ul>
+<ul><li>
+<a href="https://www.youtube.com/watch?v=rC8qfIdi9zY">gSSURGO OnDemand</a></li>
+</ul>
  
  
