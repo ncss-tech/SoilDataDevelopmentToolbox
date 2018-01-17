@@ -7,7 +7,11 @@
     <ul><li>Download SSURGO by Survey Name ~ Use Soil Data Access and Web Soil Survey download page to get SSURGO datasets. User enters a wildcard to query the database by Areaname.</li></ul>
     <ul><li>Process WSS Downloads ~ Unzips WSS cache files to a new location and renames them to soil_[areasymbol].</ul>
     <li>gSSURGO Database Toolset</li>
-   <ul> <li>Clip Soils by Polygon ~ Designed to facilitate clipping of large polygon layers</li></ul>
+    <ul> <li>Check gSSURGO ~ Given a list of file geodatabases, compare the schemas to make sure they are all the same.</li></ul>
+    <ul> <li>Check gSSURGO Attribute Data ~ Looks for discrepancies in component percent, horizon depths, etc and reports.</li></ul>
+    <ul> <li>Check gSSURGO Inventory ~ Get size of folders and file count. Useful for recording size of gsSSURGO databases or SSURGO downloads.</li></ul>
+    <ul> <li>Check Status Map Layer ~ Look for problems in status map layers</li></ul>
+    <ul> <li>Clip Soils by Polygon ~ Designed to facilitate clipping of large polygon layers</li></ul>
     <ul><li>Create gSSURGO DB - Custom Tiled ~ Driver for SSURGO Export to GDB. Uses MO and SSA layers to automatically export SSURGO by MO.</li></ul>
     <ul><li>Create gSSUROG DB - State Tiled ~ Driver script for creating gSSURGO by state tile using overlap tables (no clipping to state boundary)</li></ul>
     <ul><li>Create gSSURGO DB by Map ~ Tool used to append spatial and tabular data from multiple soil surveys into a single file geodatabase. Based upon map layer selection.</li></ul>
