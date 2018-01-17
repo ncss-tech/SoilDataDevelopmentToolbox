@@ -297,7 +297,7 @@ def GetTabularDate(newFolder):
             recDate = vals[3]
             wssDate = "%m/%d/%Y %H:%M:%S"  # string date format used for SAVEREST in text file
             intDate = "%Y%m%d"             # YYYYMMDD format for comparison
-            dateObj = datetime.strptime(recDate, wssDate)
+            dateObj = datetime.datetime.strptime(recDate, wssDate)
             tabDate = int(dateObj.strftime(intDate))
 
         else:
@@ -308,7 +308,6 @@ def GetTabularDate(newFolder):
     except:
         errorMsg()
         return tabDate
-
 
 ## ===================================================================================
 def GetReason(responseCode):
@@ -525,7 +524,7 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
 
             else:
                 # Missing database even though a path was given by the user
-                PrintMsg("\tMissing database (" + newDB + ")", 1)
+                PrintMsg(" \nMissing database (" + newDB + ")", 1)
                 dbDate = 0
 
             if dbDate == 0:
@@ -558,7 +557,7 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
                     sleep(3)
 
                     if arcpy.Exists(newFolder):
-                        raise MyError, "2. Failed to delete old dataset (" + newFolder + ")"
+                        raise MyError, "Failed to delete old dataset (" + newFolder + ")"
 
                 else:
                     # according to the filename-date, the WSS version is the same or older
@@ -1237,6 +1236,10 @@ def AddMuName(newFolder, bLast):
                     # Determine whether this script is running in 32 or 64 bit mode
                     pythonVersion = sys.version
 
+                    
+                    #PrintMsg("\tPython version: " + str(pythonVersion), 1)
+                    
+
                     if pythonVersion.find("32 bit") == -1:
                         # Print a non-fatal warning to the user that the metadata will not be updated in 64 bit mode
                         PrintMsg(" \nWarning! Unable to update metadata when using background-mode geoprocessing", 1)
@@ -1246,15 +1249,21 @@ def AddMuName(newFolder, bLast):
                             raise MyError, "SSURGO metadata file (" + metaData + ") not found"
 
                         # This ImportMetadata_conversion is leaving a lock file behind
+                        #PrintMsg("\tImporting metadata2 for " + muShp, 0)
                         arcpy.ImportMetadata_conversion(metaData, "FROM_FGDC", os.path.join(spatialFolder, muShp), "ENABLED")
 
                         if bLast:
                             try:
                                 # Trying to use another shapefile as a decoy for the lock file
-
+                                
                                 dummyMetadata = os.path.join(os.path.dirname(sys.argv[0]),"dummymetadata.xml")
                                 dummyShp = os.path.join(os.path.dirname(sys.argv[0]),"dummy.shp")
+                                #PrintMsg("\tCopying  dummy shapefile", 1)
+                                
                                 arcpy.Copy_management(dummyShp, os.path.join(env.scratchFolder, "dummy.shp"))
+                                
+                                #PrintMsg("\tImporting dummy metadata", 1)
+                                
                                 arcpy.ImportMetadata_conversion(dummyMetadata, "FROM_FGDC", os.path.join(env.scratchFolder, "dummy.shp"), "ENABLED")
 
                             except:

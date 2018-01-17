@@ -58,6 +58,23 @@ def PrintMsg(msg, severity=0):
         pass
 
 ## ===================================================================================
+def Number_Format(num, places=0, bCommas=True):
+    try:
+    # Format a number according to locality and given places
+        locale.setlocale(locale.LC_ALL, "")
+        if bCommas:
+            theNumber = locale.format("%.*f", (places, num), True)
+
+        else:
+            theNumber = locale.format("%.*f", (places, num), False)
+        return theNumber
+
+    except:
+        errorMsg()
+
+        return "???"
+
+## ===================================================================================
 def CreateMergedTable(sdvLayers, outputTbl):
     # Merge rating tables from for the selected soilmap layers to create a single, mapunit-level table
     #
@@ -65,7 +82,6 @@ def CreateMergedTable(sdvLayers, outputTbl):
         # Get number of SDV layers selected for export
         #sdvLayers = sdvLayers.split(";")  # switch from semi-colon-delimited string to list of layer names
         #numLayers = len(sdvLayers)      # ArcGIS 10.1 returns count for list object
-
 
         env.overwriteOutput = True # Overwrite existing output tables
 
@@ -87,6 +103,8 @@ def CreateMergedTable(sdvLayers, outputTbl):
         chkFields = list()  # list of rating fields from SDV soil map layers (basenames). Use this to count dups.
         #dFields = dict()
         dLayerFields = dict()
+        maxRecords = 0  # use this to determine which table has the most records and put it first
+        maxTable = ""
 
         # Iterate through each of the layers and get its rating field
         for sdvLayer in sdvLayers:
@@ -120,7 +138,21 @@ def CreateMergedTable(sdvLayers, outputTbl):
             dLayerFields[sdvLayer] = (sdvTblName, bName, fName, fldType, fldLen, fldAlias, mukeyField)
             chkFields.append(bName)
 
-        # Iterate through each of the layers and get its rating field
+            # get record count for sdvTbl
+            recCnt = int(arcpy.GetCount_management(sdvTbl).getOutput(0))
+            #PrintMsg("\tTable " + sdvTblName + " has " + Number_Format(recCnt, 0, True) + " records", 1)
+
+            if recCnt > maxRecords or (recCnt == maxRecords and sdvLayer == "Map Unit Name"):
+                maxRecords = recCnt
+                maxTable = str(sdvLayer)
+
+        # Put the biggest table (assuming this one is the most complete) in front
+        if not sdvLayers[0] == maxTable:
+            PrintMsg(" \nPutting " + maxTable + " at the front", 0)
+            sdvLayers.remove(maxTable)
+            sdvLayers.insert(0, maxTable)
+        
+        # Iterate through each of the layers and merge the associated rating table columns
         i = 0
 
         for sdvLayer in sdvLayers:
@@ -144,6 +176,7 @@ def CreateMergedTable(sdvLayers, outputTbl):
 
             sdvTblName, bName, fName, fldType, fldLen, fldAlias, mukeyField = dLayerFields[sdvLayer]
             sdvTbl = os.path.join(gdb, sdvTblName)
+            dMissingData = dict()
 
             if i == 0 and chkFields.count(bName) == 1:
                 # Make outputTbl based upon first sdvTbl
@@ -198,10 +231,19 @@ def CreateMergedTable(sdvLayers, outputTbl):
                                     cur.updateRow(rec)
 
                                 except:
-                                    #PrintMsg("\tNo data for mukey: " + rec[0], 1)
-                                    pass
+                                    #PrintMsg("\tMissing " + fName + " data for " + mukey, 1)
+                                    if fName in dMissingData:
+                                        dMissingData[fName] += 1
+
+                                    else:
+                                        dMissingData[fName] = 1
 
             i += 1
+
+        # Print results of error trapping
+        if len(dMissingData) > 0:
+            for fName, errCnt in dMissingData.items():
+                PrintMsg("\t" + fName + " is missing " + Number_Format(errCnt, 0, True) + " map units", 1)
 
         # I could probably switch out the individual rating table joins with the merged table right here??
         arcpy.AddIndex_management(outputTbl, ["mukey"], "Indx_RUSLE2_Mukey")

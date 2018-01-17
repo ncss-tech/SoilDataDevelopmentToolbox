@@ -125,7 +125,49 @@ def errorMsg():
         pass
 
 ## ===================================================================================
-def SnapToNLCD(inputFC, iRaster, theSnapRaster):
+def SetScratch():
+    # try to set scratchWorkspace and scratchGDB if null
+    #        SYSTEMDRIVE
+    #        APPDATA C:\Users\adolfo.diaz\AppData\Roaming
+    #        USERPROFILE C:\Users\adolfo.diaz
+    try:
+        #envVariables = os.environ
+
+        #for var, val in envVariables.items():
+        #    PrintMsg("\t" + str(var) + ": " + str(val), 1)
+
+        if env.scratchWorkspace is None:
+            #PrintMsg("\tWarning. Scratchworkspace has not been set for the geoprocessing environment", 1)
+            env.scratchWorkspace = env.scratchFolder
+            #PrintMsg("\nThe scratch geodatabase has been set to: " + str(env.scratchGDB), 1)
+
+        elif str(env.scratchWorkspace).lower().endswith("default.gdb"):
+            #PrintMsg("\tChanging scratch geodatabase from Default.gdb", 1)
+            env.scratchWorkspace = env.scratchFolder
+            #PrintMsg("\tTo: " + str(env.scratchGDB), 1)
+
+        #else:
+        #    PrintMsg(" \nOriginal Scratch Geodatabase is OK: " + env.scratchGDB, 1)
+
+        if env.scratchGDB:
+            return True
+        
+        else:
+            return False
+
+    
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e) + " \n ", 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+        
+## ===================================================================================
+def SnapToNLCD(inputFC, iRaster):
     # This function will set an output extent that matches the NLCD or a specified snapraster layer.
     # In effect this is like using NLCD as a snapraster as long as the projections are the same,
     # which is USA_Contiguous_Albers_Equal_Area_Conic_USGS_version
@@ -155,48 +197,48 @@ def SnapToNLCD(inputFC, iRaster, theSnapRaster):
         elif theUnits.lower() == "meter":
             theUnits = "meters"
 
-        if theSnapRaster == "":
-            # Use fixed NLCD raster coordinates for different regions. These are all integer values.
-            #
-            # PrintMsg(" \nUsing NLCD snapraster: " + theSnapRaster, 1)
-            # Hawaii_Albers_Equal_Area_Conic  -345945, 1753875
-            # Western_Pacific_Albers_Equal_Area_Conic  -2390975, -703265 est.
-            # NAD_1983_Alaska_Albers  -2232345, 344805
-            # WGS_1984_Alaska_Albers  Upper Left Corner:  -366405.000000 meters(X),  2380125.000000 meters(Y)
-            # WGS_1984_Alaska_Albers  Lower Right Corner: 517425.000000 meters(X),  2032455.000000 meters(Y)
-            # Puerto Rico 3092415, -78975 (CONUS works for both)
+        #if theSnapRaster == "":
+        # Use fixed NLCD raster coordinates for different regions. These are all integer values.
+        #
+        # PrintMsg(" \nUsing NLCD snapraster: " + theSnapRaster, 1)
+        # Hawaii_Albers_Equal_Area_Conic  -345945, 1753875
+        # Western_Pacific_Albers_Equal_Area_Conic  -2390975, -703265 est.
+        # NAD_1983_Alaska_Albers  -2232345, 344805
+        # WGS_1984_Alaska_Albers  Upper Left Corner:  -366405.000000 meters(X),  2380125.000000 meters(Y)
+        # WGS_1984_Alaska_Albers  Lower Right Corner: 517425.000000 meters(X),  2032455.000000 meters(Y)
+        # Puerto Rico 3092415, -78975 (CONUS works for both)
 
-            if theUnits != "meters":
-                PrintMsg("Projected coordinate system is " + inputSRName + "; units = '" + theUnits + "'", 0)
-                raise MyError, "Unable to align raster output with this coordinate system"
+        if theUnits != "meters":
+            PrintMsg("Projected coordinate system is " + inputSRName + "; units = '" + theUnits + "'", 0)
+            raise MyError, "Unable to align raster output with this coordinate system"
 
-            elif inputSRName == "USA_Contiguous_Albers_Equal_Area_Conic_USGS_version":
-                xNLCD = 532695
-                yNLCD = 1550295
+        elif inputSRName == "USA_Contiguous_Albers_Equal_Area_Conic_USGS_version":
+            xNLCD = 532695
+            yNLCD = 1550295
 
-            elif inputSRName == "Hawaii_Albers_Equal_Area_Conic":
-                xNLCD = -29805
-                yNLCD = 839235
+        elif inputSRName == "Hawaii_Albers_Equal_Area_Conic":
+            xNLCD = -29805
+            yNLCD = 839235
 
-            elif inputSRName == "NAD_1983_Alaska_Albers":
-                xNLCD = -368805
-                yNLCD = 1362465
+        elif inputSRName == "NAD_1983_Alaska_Albers":
+            xNLCD = -368805
+            yNLCD = 1362465
 
-            elif inputSRName == "WGS_1984_Albers":
-                # New WGS 1984 based coordinate system matching USGS 2001 NLCD for Alaska
-                xNLCD = -366405
-                yNLCD = 2032455
+        elif inputSRName == "WGS_1984_Albers":
+            # New WGS 1984 based coordinate system matching USGS 2001 NLCD for Alaska
+            xNLCD = -366405
+            yNLCD = 2032455
 
-            elif inputSRName == "Western_Pacific_Albers_Equal_Area_Conic":
-                # WGS 1984 Albers for PAC Basin area
-                xNLCD = -2390975
-                yNLCD = -703265
-
-            else:
-                PrintMsg("Projected coordinate system is " + inputSRName + "; units = '" + theUnits + "'", 0)
-                raise MyError, "Unable to align raster output with this coordinate system"
+        elif inputSRName == "Western_Pacific_Albers_Equal_Area_Conic":
+            # WGS 1984 Albers for PAC Basin area
+            xNLCD = -2390975
+            yNLCD = -703265
 
         else:
+            PrintMsg("Projected coordinate system is " + inputSRName + "; units = '" + theUnits + "'", 0)
+            raise MyError, "Unable to align raster output with this coordinate system"
+
+        if 1 == 2:  # old code for using snap raster
             # Need to calculate a pair of Albers coordinates based upon the snapraster
             #PrintMsg(" \nUsing snapraster: " + theSnapRaster, 1)
             rDesc = arcpy.Describe(theSnapRaster)
@@ -815,11 +857,15 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
     #     3. Write new file xxImport.xml
     #     4. Import xxImport.xml to raster
     #
-    # Search words:  xxSTATExx, xxSURVEYSxx, xxTODAYxx, xxFYxx
+    # Problem with ImportMetadata_conversion command. Started failing with an error.
+    # Possible Windows 10 or ArcGIS 10.5 problem?? Later had to switch back because the
+    # alternative ImportMetadata_conversion started for failing with the FY2018 rasters without any error.
+    #
+    # Search for keywords:  xxSTATExx, xxSURVEYSxx, xxTODAYxx, xxFYxx
     #
     try:
-        PrintMsg("\tUpdating metadata...")
-        arcpy.SetProgressor("default", "Updating metadata")
+        PrintMsg("\tUpdating raster metadata...")
+        arcpy.SetProgressor("default", "Updating raster metadata")
 
         # Set metadata translator file
         dInstall = arcpy.GetInstallInfo()
@@ -850,6 +896,8 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
             # Leave state name blank. In the future it would be nice to include a tile name when appropriate
             mdState = ""
 
+        #PrintMsg(" \nUsing this string as a substitute for xxSTATExx: '" + mdState + "'", 1)
+        
         # Set date strings for metadata, based upon today's date
         #
         d = datetime.date.today()
@@ -864,7 +912,7 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
         else:
             fy = "FY" + str(d.year)
 
-        # Convert XML to tree format
+        # Process gSSURGO_MapunitRaster.xml from script directory
         tree = ET.parse(mdExport)
         root = tree.getroot()
 
@@ -877,8 +925,10 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
             #
             for child in citeInfo:
                 PrintMsg("\t\t" + str(child.tag), 0)
+                
                 if child.tag == "title":
                     if child.text.find('xxSTATExx') >= 0:
+                        #PrintMsg("\t\tReplacing xxSTATExx", 1)
                         child.text = child.text.replace('xxSTATExx', mdState)
 
                     elif mdState != "":
@@ -886,11 +936,13 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
 
                 elif child.tag == "edition":
                     if child.text == 'xxFYxx':
+                        #PrintMsg("\t\tReplacing xxFYxx", 1)
                         child.text = fy
 
                 elif child.tag == "serinfo":
                     for subchild in child.iter('issue'):
                         if subchild.text == "xxFYxx":
+                            #PrintMsg("\t\tReplacing xxFYxx", 1)
                             subchild.text = fy
 
         # Update place keywords
@@ -901,9 +953,11 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
 
             for child in ePlace.iter('placekey'):
                 if child.text == "xxSTATExx":
+                    #PrintMsg("\t\tReplacing xxSTATExx", 1)
                     child.text = mdState
 
                 elif child.text == "xxSURVEYSxx":
+                    #PrintMsg("\t\tReplacing xxSURVEYSxx", 1)
                     child.text = surveyInfo
 
         # Update credits
@@ -917,24 +971,31 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
                 if sCreds.find("xxSTATExx") >= 0:
                     #PrintMsg("\t\tcredits " + mdState, 0)
                     child.text = child.text.replace("xxSTATExx", mdState)
+                    #PrintMsg("\t\tReplacing xxSTATExx", 1)
 
                 if sCreds.find("xxFYxx") >= 0:
                     #PrintMsg("\t\tcredits " + fy, 0)
                     child.text = child.text.replace("xxFYxx", fy)
+                    #PrintMsg("\t\tReplacing xxFYxx", 1)
 
                 if sCreds.find("xxTODAYxx") >= 0:
                     #PrintMsg("\t\tcredits " + today, 0)
                     child.text = child.text.replace("xxTODAYxx", today)
+                    #PrintMsg("\t\tReplacing xxTODAYxx", 1)
 
         idPurpose = root.find('idinfo/descript/purpose')
+        
         if not idPurpose is None:
+            PrintMsg("\t\tpurpose", 0)
+            
             ip = idPurpose.text
 
             if ip.find("xxFYxx") >= 0:
                 idPurpose.text = ip.replace("xxFYxx", fy)
-                PrintMsg("\t\tpurpose", 0)
+                #PrintMsg("\t\tReplacing xxFYxx", 1)
+                
 
-        # PrintMsg(" \nSaving template metadata to " + mdImport, 1)
+        #PrintMsg(" \nSaving template metadata to " + mdImport, 1)
 
         #  create new xml file which will be imported, thereby updating the table's metadata
         tree.write(mdImport, encoding="utf-8", xml_declaration=None, default_namespace=None, method="xml")
@@ -942,12 +1003,12 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
         # import updated metadata to the geodatabase table
         # Using three different methods with the same XML file works for ArcGIS 10.1
         #
-        # PrintMsg(" \nImporting metadata " + mdImport + " to " + target, 1)
+        #PrintMsg(" \nImporting metadata " + mdImport + " to " + target, 1)
         arcpy.MetadataImporter_conversion(mdImport, target)  # This works. Raster now has metadata with 'XX keywords'. Is this step neccessary to update the source information?
 
         #PrintMsg(" \nUpdating metadata for " + target + " using file " + mdImport, 1)
-        #arcpy.ImportMetadata_conversion(mdImport, "FROM_FGDC", target, "DISABLED")  # Tool Validate problem here
-        arcpy.MetadataImporter_conversion(target, mdImport) # Try this alternate tool with Windows 10.
+        arcpy.ImportMetadata_conversion(mdImport, "FROM_FGDC", target, "DISABLED")  # Tool Validate problem here
+        #arcpy.MetadataImporter_conversion(target, mdImport) # Try this alternate tool with Windows 10.
 
         # delete the temporary xml metadata file
         if os.path.isfile(mdImport):
@@ -1001,7 +1062,7 @@ def CheckSpatialReference(inputFC):
         return False
 
 ## ===================================================================================
-def ConvertToRaster(target, theSnapRaster, iRaster, bTiled):
+def ConvertToRaster(target, iRaster, bTiled):
     # main function used for raster conversion
     try:
         #
@@ -1011,7 +1072,6 @@ def ConvertToRaster(target, theSnapRaster, iRaster, bTiled):
         # Set geoprocessing environment
         #
         env.overwriteOutput = True
-        #env.workspace = theGDB
         arcpy.env.compression = "LZ77"
         env.tileSize = "128 128"
         desc = arcpy.Describe(target)
@@ -1024,12 +1084,12 @@ def ConvertToRaster(target, theSnapRaster, iRaster, bTiled):
             inputFC = target
             theGDB = os.path.dirname(target)
 
-        # Make sure that the env.scratchGDB is NOT Default.gdb. This causes problems for
+        # Make sure that the env.scratchGDB set, and not to Default.gdb. This causes problems for
         # some unknown reason.
-        if (os.path.basename(env.scratchGDB).lower() == "default.gdb") or \
-        (os.path.basename(env.scratchWorkspace).lower() == "default.gdb") or \
-        (os.path.basename(env.scratchGDB).lower() == theGDB):
-            raise MyError, "Invalid scratch workspace setting (" + env.scratchWorkspace + ")"
+
+        if not SetScratch():
+            raise MyError, "Unable to set scratch workspace"
+
 
         # Create an ArcInfo workspace under the scratchFolder. Trying to prevent
         # 99999 errors for PolygonToRaster on very large databases
@@ -1073,8 +1133,8 @@ def ConvertToRaster(target, theSnapRaster, iRaster, bTiled):
             return False
 
         # Sometimes it helps to compact large databases before raster conversion
-        arcpy.SetProgressorLabel("Compacting database prior to rasterization...")
-        arcpy.Compact_management(theGDB)
+        #arcpy.SetProgressorLabel("Compacting database prior to rasterization...")
+        #arcpy.Compact_management(theGDB)
 
         # For rasters named using an attribute value, some attribute characters can result in
         # 'illegal' names.
@@ -1194,7 +1254,7 @@ def ConvertToRaster(target, theSnapRaster, iRaster, bTiled):
 
         with arcpy.da.InsertCursor(lu, ("CELLVALUE", "MUKEY") ) as inCursor:
             for mukey in mukeyList:
-                rec = mukey, mukey
+                rec = mukey, str(mukey)
                 inCursor.insertRow(rec)
 
         # Add MUKEY attribute index to Lookup table
@@ -1204,12 +1264,12 @@ def ConvertToRaster(target, theSnapRaster, iRaster, bTiled):
         # End of Lookup table code
 
         # Match NLCD raster (snapraster)
-        if theSnapRaster != "":
+        #if theSnapRaster != "":
             # Set snapraster environment if  one is specified
-            arcpy.snapRaster = theSnapRaster
+        #    arcpy.snapRaster = theSnapRaster
 
         # Set output extent
-        fullExtent = SnapToNLCD(inputFC, iRaster, theSnapRaster)
+        fullExtent = SnapToNLCD(inputFC, iRaster)
 
         # Raster conversion process...
         #
@@ -1498,10 +1558,9 @@ try:
         # get parameters
         theGDB = arcpy.GetParameterAsText(0)                   # required geodatabase containing MUPOLYGON featureclass
         #outputWS = arcpy.GetParameterAsText(1)                # optional output workspace. If not set, output raster will be created in the same workspace
-        theSnapRaster = arcpy.GetParameterAsText(1)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
-        iRaster = arcpy.GetParameter(2)                       # output raster resolution
-        bTiled = arcpy.GetParameter(3)                                         # boolean - split raster into survey-tiles and then mosaic
-
+        #theSnapRaster = arcpy.GetParameterAsText(1)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
+        iRaster = arcpy.GetParameter(1)                       # output raster resolution
+        bTiled = arcpy.GetParameter(2)                                         # boolean - split raster into survey-tiles and then mosaic
         env.overwriteOutput= True
 
         # Get Spatial Analyst extension
@@ -1515,7 +1574,7 @@ try:
             raise MyError, "Required Spatial Analyst extension is not available"
 
         # Call function that does all of the work
-        bRaster = ConvertToRaster(theGDB, theSnapRaster, iRaster, bTiled)
+        bRaster = ConvertToRaster(theGDB, iRaster, bTiled)
         arcpy.CheckInExtension("Spatial")
 
 except MyError, e:

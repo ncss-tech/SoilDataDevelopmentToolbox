@@ -57,105 +57,6 @@ def errorMsg():
         pass
 
 ## ===================================================================================
-def setScratchWorkspace():
-    # This function will set the scratchGDB environment based on the scratchWorkspace environment.
-    #
-    # The scratch workspac will typically not be defined by the user but the scratchGDB will
-    # always be defined.  The default location for the scratchGDB is at C:\Users\<user>\AppData\Local\Temp
-    # on Windows 7 or C:\Documents and Settings\<user>\Localsystem\Temp on Windows XP.  Inside this
-    # directory, scratch.gdb will be created.
-    #
-    # If scratchWorkspace is set to something other than a GDB or Folder than the scratchWorkspace
-    # will be set to C:\temp.  If C:\temp doesn't exist than the ESRI scratchWorkspace locations will be used.
-    #
-    # If scratchWorkspace is an SDE GDB than the scratchWorkspace will be set to C:\temp.  If
-    # C:\temp doesn't exist than the ESRI scratchWorkspace locations will be used.
-
-    try:
-        # -----------------------------------------------
-        # Scratch Workspace is defined by user or default is set
-        if arcpy.env.scratchWorkspace is not None:
-
-            # describe scratch workspace
-            scratchWK = arcpy.env.scratchWorkspace
-            descSW = arcpy.Describe(scratchWK)
-            descDT = descSW.dataType.upper()
-            #PrintMsg(" \nScratchworkspace location originally set to " + scratchWK, 0)
-
-            # scratch workspace is geodatabase
-            if descDT == "WORKSPACE":
-                progID = descSW.workspaceFactoryProgID
-
-                # scratch workspace is a FGDB
-                if  progID == "esriDataSourcesGDB.FileGDBWorkspaceFactory.1":
-                    if os.path.basename(scratchWK) == "Default.gdb":
-                        raise MyError, "Please change scratchworkspace environment. Using Default.gdb will cause problems"
-
-                    arcpy.env.scratchWorkspace = os.path.dirname(scratchWK)
-                    arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-                # scratch workspace is a Personal GDB -- set scratchWS to folder of .mdb
-                elif progID == "esriDataSourcesGDB.AccessWorkspaceFactory.1":
-                    arcpy.env.scratchWorkspace = os.path.dirname(scratchWK)
-                    arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-                # scratch workspace is an SDE GDB.
-                elif progID == "esriDataSourcesGDB.SdeWorkspaceFactory.1":
-
-                    # set scratch workspace to C:\Temp; avoid the server
-                    if os.path.exists(r'C:\Temp'):
-
-                        arcpy.env.scratchWorkspace = r'C:\Temp'
-                        arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-                    # set scratch workspace to default ESRI location
-                    else:
-                        arcpy.env.scratchWorkspace = arcpy.env.scratchFolder
-                        arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-            # scratch workspace is simply a folder
-            elif descDT == "FOLDER":
-                arcpy.env.scratchWorkspace = scratchWK
-                arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-            # scratch workspace is set to something other than a GDB or folder; set to C:\Temp
-            else:
-                # set scratch workspace to C:\Temp
-                if os.path.exists(r'C:\Temp'):
-
-                    arcpy.env.scratchWorkspace = r'C:\Temp'
-                    arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-                # set scratch workspace to default ESRI location
-                else:
-                    arcpy.env.scratchWorkspace = arcpy.env.scratchFolder
-                    arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-        # -----------------------------------------------
-        # Scratch Workspace is not defined. Attempt to set scratch to C:\temp
-        elif os.path.exists(r'C:\Temp'):
-
-            arcpy.env.scratchWorkspace = r'C:\Temp'
-            arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-        # set scratch workspace to default ESRI location
-        else:
-
-            arcpy.env.scratchWorkspace = arcpy.env.scratchFolder
-            arcpy.env.scratchWorkspace = arcpy.env.scratchGDB
-
-        return True
-
-    except MyError, e:
-        # Example: raise MyError, "This is an error message"
-        PrintMsg(str(e), 2)
-        return False
-
-    except:
-        errorMsg()
-        return False
-
-## ===================================================================================
 def elapsedTime(start):
     # Calculate amount of time since "start" and return time string
     try:
@@ -253,9 +154,9 @@ try:
     dataType = arcpy.GetParameter(0)                      # 'All MUPOLYGON layers' or 'Standard MUPOLYGON layer'. Only used in the Validation code.
     inputFolder = arcpy.GetParameterAsText(1)             # Folder containing all geodatabases to be processed
     inputList = arcpy.GetParameter(2)                     # list of geodatabase names to be processed
-    theSnapRaster = arcpy.GetParameterAsText(3)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
-    iRaster = arcpy.GetParameter(4)                       # output raster resolution
-    bTiled = arcpy.GetParameter(5)                        # breakup raster conversion using AREASYMBOL attribute to tile the process
+    #theSnapRaster = arcpy.GetParameterAsText(3)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
+    iRaster = arcpy.GetParameter(3)                       # output raster resolution
+    bTiled = arcpy.GetParameter(4)                        # breakup raster conversion using AREASYMBOL attribute to tile the process
 
     import SSURGO_ExportMuRaster
 
@@ -272,7 +173,7 @@ try:
         PrintMsg(" \n" + (65 * "*"), 0)
         PrintMsg("Processing " + input, 0)
         PrintMsg(" \n" + (65 * "*"), 0)
-        bRaster = SSURGO_ExportMuRaster.ConvertToRaster(input, theSnapRaster, iRaster, bTiled)
+        bRaster = SSURGO_ExportMuRaster.ConvertToRaster(input, iRaster, bTiled)
 
     theMsg = " \nTotal processing time for " + str(len(inputList)) + " rasters: " + elapsedTime(start) + " \n "
     PrintMsg(theMsg, 0)

@@ -376,8 +376,8 @@ def SortMapunits(newDB):
             for inRec in sCur:
                 outCur.insertRow(inRec)
 
-            del outCur
-            del inRec
+            #del outCur
+            #del inRec
 
         return True
 

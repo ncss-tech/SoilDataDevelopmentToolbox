@@ -1,0 +1,9 @@
+SELECT m.mukey, m.musym, m.muname, c.compname AS compnamedcp, c.comppct_r, c.taxclname, (c.nirrcapcl + c.nirrcapscl) AS nirrcapcl, m.farmlndcl, ma.hydgrpdcd, ma.hydclprs, ma.flodfreqdcd, s.saverest
+FROM legend AS l
+INNER JOIN mapunit m ON l.lkey = m.lkey AND m.mukey IN (xxMUKEYSxx)
+INNER JOIN muaggatt ma ON m.mukey = ma.mukey
+INNER JOIN sacatalog s ON l.areasymbol = s.areasymbol
+INNER JOIN component c ON c.mukey = m.mukey AND c.majcompflag = 'Yes' AND c.cokey = 
+    (SELECT TOP 1 co.cokey FROM component co INNER JOIN mapunit mu ON co.mukey=mu.mukey AND mu.mukey=m.mukey 
+    ORDER BY co.comppct_r DESC)
+ORDER BY m.musym, c.comppct_r DESC, c.cokey

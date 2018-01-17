@@ -433,7 +433,8 @@ try:
             #PrintMsg(" \n\tSelected " + str(iCnt) + " survey area polygons in " + ssaLayer, 1)
             # get list of unique areasymbol values from survey boundary layer (param 1)
             fieldList = ["AREASYMBOL"]
-            asList = [("soil_" + row[0].encode('ascii').lower()) for row in arcpy.da.SearchCursor(ssaLayer, fieldList)]
+            asList = [("soil_" + row[0].encode('ascii').lower()) for row in arcpy.da.SearchCursor(ssaLayer, fieldList)]  # This was working....
+            
             asSet = set(asList)   # remove duplicate attribute values
             surveyList = list(sorted(asSet))
 
@@ -475,7 +476,10 @@ try:
 
         # Call SDM Export script
         aliasName = tileName + " " + str(theTile)
-        bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, (aliasName, aliasName), useTextFiles, bClipSoils)
+        #PrintMsg("\nSurvey list: " + str(surveyList), 1)
+        #bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, (aliasName, aliasName), useTextFiles, bClipSoils, surveyList)
+        bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, (aliasName, aliasName), useTextFiles, bClipSoils, [])
+        
 
         if bExported:
             exportList.append(os.path.basename(outputWS))

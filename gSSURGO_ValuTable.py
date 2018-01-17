@@ -1693,7 +1693,6 @@ def CalcAWS(inputDB, outputDB, theCompTable, theMuTable, dPct, depthList):
         errorMsg()
         return False
 
-
 ## ===================================================================================
 def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList, dRestrictions, maxD):
     # Modified SDP 2017-10-12
@@ -1871,28 +1870,17 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                             if sumCompPct > 0:
 
                                 # write the new component-level SOC data to the Co_VALU table
-                                #soc = soc  * 100.0 * compPct / sumCompPct # metric tons per hectare for this component
-                                soc = soc  * 10000 * compPct / sumCompPct # grams per square meter for this component
+                                #soc = soc  * 100.0 * compPct / sumCompPct   # metric tons per hectare for this component
+                                #soc = soc  * 10000 * compPct / sumCompPct    # grams per square meter for this component
+                                soc = soc * compPct / sumCompPct    # grams per square meter for this component  2017-11-14
                                 corec[1] = soc                      # Test
-                                hzT = hzT * compPct / 100.0      # Adjust component share of horizon thickness by comppct/100
-                                #hzT = hzT * compPct / adjCompPct      # Adjust component share of horizon thickness by (comppct/sum of comppct)
-                                corec[2] = hzT             # This is new for the TK0_5A column
+                                hzT = hzT * compPct / 100.0         # Adjust component share of horizon thickness by comppct/100
+                                #hzT = hzT * compPct / adjCompPct   # Adjust component share of horizon thickness by (comppct/sum of comppct)
+                                corec[2] = hzT                      # This is new for the TK0_5A column
                                 coCursor.updateRow(corec)
 
                                 # Update component values in component dictionary   CHK
                                 dComp[cokey] = mukey, compPct, hzT, soc
-
-                                if bCarbon and rng == (0,30):# Remove this
-                                    if not mukey in dMinMax:
-                                        dMinMax[mukey] = [9999999999,-999999999]
-
-                                    minMax = dMinMax[mukey] # Remove all this
-
-                                    if minMax[0] > soc: # Remove this
-                                        minMax[0] = soc
-
-                                    if minMax[1] < soc:
-                                        minMax[1] = soc
 
                                 if mukey in dMu:
                                     # add this component's data to the map unit

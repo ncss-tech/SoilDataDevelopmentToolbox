@@ -243,6 +243,8 @@ try:
     desc = arcpy.Describe(soilsLayer)
     field = arcpy.ListFields(aoiLayer, aoiField)[0]
     fieldType = field.type.upper()  # STRING, DOUBLE, SMALLINTEGER, LONGINTEGER, SINGLE, FLOAT
+    #PrintMsg(" \nAOI field type: " + fieldType, 1)
+    
     catalogPath = desc.catalogPath
     gdb = os.path.dirname(catalogPath)
     env.workspace = gdb
@@ -317,7 +319,7 @@ try:
                 sql = aoiField + " = " + str(attrList[0])
 
             else:
-                sql = aoiField + " = " + attrList[0]
+                sql = aoiField + " = '" + attrList[0] + "'"
 
         PrintMsg(" \nResetting aoi selection using " + sql + " \n", 0)
         arcpy.SelectLayerByAttribute_management(aoiLayer, "NEW_SELECTION", sql)

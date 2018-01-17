@@ -79,7 +79,6 @@ def CheckBrowser(BrowserList):
         except ImportError:
             import _winreg as winreg
 
-
         chromeKey = r"Software\Microsoft\Windows\CurrentVersion\App Paths\Chrome.exe"
         foxKey = r"Software\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe"
         dKeys = dict()
@@ -105,18 +104,7 @@ def CheckBrowser(BrowserList):
         if exePath == "":
             raise MyError, "No compatible browser found on this system"
 
-        # Try registering the selected browser # this does not seem to work on my computer. Possible
-        # os.environ["PATH"] problem?
-        #PrintMsg(" \nTrying webbrowser method again for ", 1)
-        #webbrowser.register(browser, exePath)
-
-        #dBrowser = webbrowser._browsers
-        #PrintMsg(" \n" + str(dBrowser), 1)
-        #wb = webbrowser.get(exePath)
-        #time.sleep(7)
-
         return exePath
-
 
     except MyError, e:
         # Example: raise MyError, "This is an error message"
@@ -229,7 +217,7 @@ def CleanShapefile(inputAOI, bDissolve, bClean):
                     # Planned land Unit featureclass
                     # Go ahead and dissolve using PartName which will be added next
                     PrintMsg(" \nUsing Planned Land Unit polygons to build AOI for Web Soil Survey", 0)
-                    arcpy.AddField_management(simpleShp, "partName", "TEXT", "", "", 20)
+                    arcpy.AddField_management(simpleShp, "PartName", "TEXT", "", "", 20)
                     curFields = ["PARTNAME", "LAND_UNIT_TRACT_NUMBER", "LAND_UNIT_LAND_UNIT_NUMBER"]
 
                     with arcpy.da.UpdateCursor(simpleShp, curFields) as cur:
@@ -380,7 +368,7 @@ def NoCleanShapefile(inputAOI, bDissolve, bClean):
         dissShp = os.path.join(tmpFolder, "aoi_diss")
 
         # Create a new featureclass with just the selected polygons
-        PrintMsg(" \nCreating single part polygon shapefile: " + simpleShp, 1)
+        #PrintMsg(" \nCreating single part polygon shapefile: " + simpleShp, 1)
         arcpy.MultipartToSinglepart_management(inputAOI, simpleShp)
         #arcpy.CopyFeatures_management(inputAOI, simpleShp)
 
@@ -408,7 +396,7 @@ def NoCleanShapefile(inputAOI, bDissolve, bClean):
 
             # Let's get a count to see how many polygons remain after the dissolve
             dissCnt = int(arcpy.GetCount_management(outputShp).getOutput(0))
-            PrintMsg(" \nAfter dissolve, " + Number_Format(dissCnt, 0, True) + " polygons remain", 1)
+            PrintMsg(" \nAfter dissolve, " + Number_Format(dissCnt, 0, True) + " polygons remain", 0)
 
         else:
             # Keep original boundaries, but if attribute table contains PARTNAME or LANDUNIT attributes, dissolve on that
@@ -472,6 +460,27 @@ def NoCleanShapefile(inputAOI, bDissolve, bClean):
                     for rec in cur:
                         # create stacked label for tract and field
                         partName = "F" + str(rec[1]) + "T" + str(rec[2]) + "\n" + str(rec[3])
+                        rec[0] = partName
+                        cur.updateRow(rec)
+
+                #arcpy.Dissolve_management(simpleShp, dissShp, ["PARTNAME"], "", "SINGLE_PART")
+                arcpy.Dissolve_management(simpleShp, outputShp, ["PARTNAME"], "", "MULTI_PART")
+                #outputShp = dissShp
+
+            elif ("CLUNBR" in fldNames and "TRACTNBR" in fldNames and "FARMNBR" in fldNames):
+                # This must be a shapefile copy of CLU from Iowa
+                # Keep original boundaries, but if attribute table contains LANDUNIT attributes, dissolve on that
+                #
+                # Go ahead and dissolve using PartName which was previously added
+                PrintMsg(" \nUsing CLU shapefile to build AOI for Web Soil Survey", 0)
+                arcpy.AddField_management(simpleShp, "partName", "TEXT", "", "", 20)
+                curFields = ["PARTNAME", "FARMNBR", "TRACTNBR", "CLUNBR"]
+
+                with arcpy.da.UpdateCursor(simpleShp, curFields) as cur:
+                    for rec in cur:
+                        # create stacked label for tract and field
+                        partName = "F" + str(rec[1]) + "T" + str(rec[2]) + "\n" + str(rec[3])
+                        #PrintMsg(partName, 1)
                         rec[0] = partName
                         cur.updateRow(rec)
 
@@ -1418,16 +1427,11 @@ def OpenWSS4(shpPath, wssURL, browserStartupAllowanceSeconds):
             raise MyError, "AOI shapefile has " + Number_Format(aoiCnt, 0, True) + " polygons, exceeding the WSS limit of 32"
 
         # 2017-02-02 only works in Dev WSS right now.
-        #wssUrl = 'https://websoilsurvey-dev.dev.sc.egov.usda.gov/App/WebSoilSurvey.aspx'
-        wssUrl = 'https://websoilsurvey.sc.egov.usda.gov/App/WebSoilSurvey.aspx?'
-
-        #temporaryFile = os.path.normpath('c:/temp/temp_file.html')
+        #wssUrl = 'https://websoilsurvey-dev.dev.sc.egov.usda.gov/App/WebSoilSurvey.aspx'  # 
+        #wssUrl = 'https://websoilsurvey.sc.egov.usda.gov/App/WebSoilSurvey.aspx?'
         temporaryFile = os.path.join(env.scratchFolder, "xxWSS_AOI.html")
-
-        #browserStartupAllowanceSeconds = 5
-
         aoicoords = FormSpatialQueryJSON(shpPath)
-        #raise MyError, "EARLY OUT"
+
         if len(aoicoords) == 0:
             raise MyError, ""
 
@@ -1466,11 +1470,6 @@ def OpenWSS4(shpPath, wssURL, browserStartupAllowanceSeconds):
             file.write(base_file_contents.format(js_submit, action, method, input_fields))
             file.close()
 
-
-            # open the default web browser using the html file
-            # webbrowser.open(os.path.abspath(file.name))
-        	#browserController.open(os.path.abspath(file.name))
-
             browserPath = CheckBrowser(["chrome", "firefox"])
 
             if browserPath == "":
@@ -1486,7 +1485,6 @@ def OpenWSS4(shpPath, wssURL, browserStartupAllowanceSeconds):
             PrintMsg(" \nAOI import complete \n ", 0)
 
         return True
-
 
     except MyError, e:
         # Example: raise MyError, "This is an error message"
@@ -1520,16 +1518,13 @@ try:
     featureCnt = arcpy.GetParameter(1)                        # String. Number of polygons selected of total features in the AOI featureclass.
     bDissolve = arcpy.GetParameter(2)                         # User does not want to keep individual polygon or field boundaries
     wssURL = arcpy.GetParameter(3)                            # user's choice of production or Dev Soil Data Access URL
-    # temporarily set default values for old paraameters
-    # delete them once they for sure aren't needed.
-    #
     outputZipfile = r"c:\temp"
     bClean = False
     timeOut = 0
-
     env.overwriteOutput= True
 
     licenseLevel = arcpy.ProductInfo().upper()
+    
     if licenseLevel != "ARCINFO":
         raise MyError, "License level must be Advanced to run this tool"
 
@@ -1540,7 +1535,9 @@ try:
         bCleaned = NoCleanShapefile(inputAOI, bDissolve, bClean)
 
     if bCleaned:
-        bWSS = OpenWSS4(os.path.join(env.workspace, "wss_aoi.shp"), wssURL, timeOut)
+        aoiShp = os.path.join(env.workspace, "wss_aoi.shp")
+        #PrintMsg(" \nUsing " + aoiShp + " to set Web Soil Survey AOI", 0)
+        bWSS = OpenWSS4(aoiShp, wssURL, timeOut)
         #bZipped = MakeZipFile(outputZipfile, timeOut) # zipping is not required when OpenWSS4 or OpenWSS3 functions are called
 
 

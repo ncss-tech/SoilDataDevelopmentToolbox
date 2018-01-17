@@ -679,35 +679,41 @@ def GetClipPolygons(fcName, newGDB, inputMDB, newMukeys, inputRaster):
             for rec in cur:
                 mukeyList.append(rec[0].encode('ascii'))
 
-        # Determine whether the first horizon for each component has data
-        sqlClause = (None, "ORDER BY cokey")
-        whereClause = "hzdept_r = 0 AND (om_r IS NULL OR awc_r IS NULL)"
-        dComponents = dict()
 
-        with arcpy.da.SearchCursor(hzTbl, ["cokey"], sql_clause=sqlClause, where_clause=whereClause) as cur:
-            for rec in cur:
-                dComponents[rec[0]] = 1
+        if 1 == 0:
+            # Skipping this data quality check
+            #
+            # Determine whether the first horizon for each component has data for OM and AWC
+            sqlClause = (None, "ORDER BY cokey")
+            whereClause = "hzdept_r = 0 AND (om_r IS NULL OR awc_r IS NULL)"
+            #dComponents = dict()
+            nodataComponents = list()
 
-        # Find the dominant component based upon comppct_r and add to the list
-        sqlClause = (None, "ORDER BY mukey, comppct_r DESC, cokey")
-        lastKey = "xxxxxx"
-        
-        with arcpy.da.SearchCursor(compTbl, ["mukey", "cokey", "comppct_r", "compkind"], sql_clause=sqlClause) as cur:
-            for rec in cur:
-                mukey, cokey, comppct, compkind = rec
-                
-                if not mukey == lastKey:
-                    # this is the dominant component
-                    lastKey = mukey
+            with arcpy.da.SearchCursor(hzTbl, ["cokey"], sql_clause=sqlClause, where_clause=whereClause) as cur:
+                for rec in cur:
+                    #dComponents[rec[0]] = 1
+                    nodataComponents.append(rec[0])
 
-                    if cokey in dComponents:
-                        # this component has little or no horizon data
-                        if compkind != "Miscellaneous area":
-                            # Add it to the list
-                            mukeyList.append(mukey.encode('ascii'))
+            # Find the dominant component based upon comppct_r and add to the list
+            sqlClause = (None, "ORDER BY mukey, comppct_r DESC, cokey")
+            lastKey = "xxxxxx"
+            
+            with arcpy.da.SearchCursor(compTbl, ["mukey", "cokey", "comppct_r", "compkind"], sql_clause=sqlClause) as cur:
+                for rec in cur:
+                    mukey, cokey, comppct, compkind = rec
+                    
+                    if not mukey == lastKey:
+                        # this is the dominant component
+                        lastKey = mukey
+
+                        if cokey in nodataComponents:
+                            # this component has little or no horizon data. Unless it is a Miscellaneous area, add it to the NOTCOM list of map units.
+                            if compkind != "Miscellaneous area":
+                                # Add it to the list
+                                mukeyList.append(mukey.encode('ascii'))
 
 
-        PrintMsg(" \nIdentified " + Number_Format(len(mukeyList), 0, True) + " map units lacking horizon data or labeled as NOTCOM...", 0)
+            PrintMsg(" \nIdentified " + Number_Format(len(mukeyList), 0, True) + " map units lacking horizon data or labeled as NOTCOM...", 0)
 
         # Get the STATSGO soil polygon featureclass
         # Start with folder where mdb is stored

@@ -1721,6 +1721,47 @@ def GetMetadata(outputFC):
         return False
 
 ## ===================================================================================
+def SetScratch():
+    # try to set scratchWorkspace and scratchGDB if null
+    #        SYSTEMDRIVE
+    #        APPDATA C:\Users\adolfo.diaz\AppData\Roaming
+    #        USERPROFILE C:\Users\adolfo.diaz
+    try:
+        #envVariables = os.environ
+
+        #for var, val in envVariables.items():
+        #    PrintMsg("\t" + str(var) + ": " + str(val), 1)
+
+        if env.scratchWorkspace is None:
+            #PrintMsg("\tWarning. Scratchworkspace has not been set for the geoprocessing environment", 1)
+            env.scratchWorkspace = env.scratchFolder
+            #PrintMsg("\nThe scratch geodatabase has been set to: " + str(env.scratchGDB), 1)
+
+        elif str(env.scratchWorkspace).lower().endswith("default.gdb"):
+            #PrintMsg("\tChanging scratch geodatabase from Default.gdb", 1)
+            env.scratchWorkspace = env.scratchFolder
+            #PrintMsg("\tTo: " + str(env.scratchGDB), 1)
+
+        #else:
+        #    PrintMsg(" \nOriginal Scratch Geodatabase is OK: " + env.scratchGDB, 1)
+
+        if env.scratchGDB:
+            return True
+        
+        else:
+            return False
+
+    
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e) + " \n ", 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+## ===================================================================================
 def UpdateMetadata(outputWS, target, surveyInfo, description, dParams, dColumns):
     #
     # Used for featureclass and geodatabase metadata. Does not do individual tables
@@ -2218,9 +2259,11 @@ try:
 
     env.overwriteOutput= True
     installInfo = arcpy.GetInstallInfo()
-    version = installInfo["Version"][0:4]                      # Need to fix this variable. Won't handle 10.4.1
+    version = installInfo["Version"][0:4]                
     sdaURL = r"https://sdmdataaccess.sc.egov.usda.gov"
-    # https://SDMDataAccess.sc.egov.usda.gov/Tabular/post.rest
+    
+    if not SetScratch():
+        raise MyError, "Unable to set scratch workspace"
 
     # Get data folders from input layer
     # probably should validate the inputShp as soil polygon

@@ -27,6 +27,8 @@
 #             GCS WGS1984 state boundaries; test Alaska clip; JFF, compare Guam gSSURGO clip to Guam shapefile; test missing
 #             SSURGO downloads; test loss of S drive; make sure all temporary layers are cleaned up;
 #
+# 2017-12-21  Overlap tables fixed, so this version of the tool will now work with the Pacific Islands to create
+#             individual geodatabasess by state.
 
 ## ===================================================================================
 class MyError(Exception):
@@ -118,6 +120,7 @@ def StateNames():
         stDict["Louisiana"] = "LA"
         stDict["Maine"] = "ME"
         stDict["Northern Mariana Islands"] = "MP"
+        stDict["Marshall Islands"] = "MH"
         stDict["Maryland"] = "MD"
         stDict["Massachusetts"] = "MA"
         stDict["Michigan"] = "MI"
@@ -137,7 +140,7 @@ def StateNames():
         stDict["Ohio"] = "OH"
         stDict["Oklahoma"] = "OK"
         stDict["Oregon"] = "OR"
-        stDict["Republic of Palau"] = "PW"
+        stDict["Palau"] = "PW"
         stDict["Pacific Basin"] = "PB"
         stDict["Pennsylvania"] = "PA"
         stDict["Puerto Rico and U.S. Virgin Islands"] = "PRUSVI"
@@ -229,6 +232,8 @@ def StateAOI():
         dAOI['Northern Mariana Islands'] = 'Pacific Islands Area'
         dAOI['Federated States of Micronesia'] = 'Pacific Islands Area'
         dAOI['Guam'] = 'Pacific Islands Area'
+        dAOI['Palau'] = 'Pacific Islands Area'
+        dAOI['Marshall Islands'] = 'Pacific Islands Area'
 
         return dAOI
 
@@ -296,8 +301,8 @@ def GetAreasymbols(attName, theTile):
 
         # PrintMsg("\tQuery for " + theTile + ":  " + sQuery + " \n", 0)
 
-	    # NEW POST REST REQUEST BEGINS HERE
-	    #
+	# NEW POST REST REQUEST BEGINS HERE
+	#
         # Uses new HTTPS URL
         # Post Rest returns
         theURL = "https://sdmdataaccess.nrcs.usda.gov"
@@ -621,7 +626,7 @@ try:
             if rmVal in valList:
                 valList.remove(rmVal)
 
-        #PrintMsg(" \nFinal Areasymbol List: " + ", ".join(valList), 0)
+        # PrintMsg(" \nFinal Areasymbol List: " + ", ".join(valList), 0)
 
         # Get the AOI for this state. This is needed later to set the correct XML and coordinate system
         theAOI = dAOI[theTile]
@@ -637,27 +642,31 @@ try:
             if arcpy.Exists(outputWS):
                 if bOverwriteOutput:
                     PrintMsg(" \nRemoving existing geodatabase for " + theTile, 0)
-                    arcpy.Delete_management(outputWS)
-                    time.sleep(1)
+                    try:
+                        arcpy.Delete_management(outputWS)
+                        time.sleep(1)
+                        
+                    except:
+                        pass
 
                     if arcpy.Exists(outputWS):
                         # Failed to delete existing geodatabase
-                        raise MyError, "Failed to delete " + outputWS
+                        raise MyError, "Unable to delete existing database: " + outputWS
 
             # Call SDM Export script
             # 12-25-2013 try passing more info through the stAbbrev parameter
             #
-            bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, tileInfo, useTextFiles, False)
+            bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, tileInfo, useTextFiles, False, valList)
 
             if bExported == False:
                 PrintMsg("\tAdding " + theTile + " to list if failed conversions", 0)
                 badExports.append(theTile)
                 err = "Passed - Export failed for " + theTile
 
-                if arcpy.Exists(outputWS):
+                #if arcpy.Exists(outputWS):
                     # Delete failed geodatabase which is probably empty
                     #arcpy.Delete_management(outputWS)
-                    pass
+                #    pass
 
             else:
                 # Successful export of the current tile
