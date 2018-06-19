@@ -212,7 +212,8 @@ def SnapToNLCD(inputFC, iRaster):
             PrintMsg("Projected coordinate system is " + inputSRName + "; units = '" + theUnits + "'", 0)
             raise MyError, "Unable to align raster output with this coordinate system"
 
-        elif inputSRName == "USA_Contiguous_Albers_Equal_Area_Conic_USGS_version":
+        elif inputSRName == "Albers_Conical_Equal_Area":
+            # This used to be the Contiguous USGS version
             xNLCD = 532695
             yNLCD = 1550295
 
@@ -928,11 +929,16 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
                 
                 if child.tag == "title":
                     if child.text.find('xxSTATExx') >= 0:
-                        #PrintMsg("\t\tReplacing xxSTATExx", 1)
-                        child.text = child.text.replace('xxSTATExx', mdState)
+                        newTitle = "Map Unit Raster " + str(iRaster) + "m - " + mdState
+                        #PrintMsg("\t\tUpdating title to: " + newTitle, 1)
+                        #child.text = child.text.replace('xxSTATExx', mdState)
+                        child.text = newTitle
 
                     elif mdState != "":
-                        child.text = child.text + " - " + mdState
+                        child.text = child.text + " " + str(iRaster) + "m - " + mdState
+
+                    else:
+                        child.text = "Map Unit Raster " + str(iRaster) + "m"
 
                 elif child.tag == "edition":
                     if child.text == 'xxFYxx':
@@ -1471,6 +1477,7 @@ def ConvertToRaster(target, iRaster, bTiled):
 
             missingList = list(set(mukeyList) - set(rList))
             queryList = list()
+            
             for mukey in missingList:
                 queryList.append("'" + mukey + "'")
 

@@ -87,7 +87,7 @@ try:
 
         # Overwrite original
         outputLayerFile = os.path.join(os.path.dirname(gdb), os.path.basename(inputLayer.replace(", ", "_").replace(" ", "_")) + ".lyr")
-        arcpy.SaveToLayerFile_management(inputLayer, outputLayerFile)
+        arcpy.SaveToLayerFile_management(inputLayer, outputLayerFile, "RELATIVE", "10.3")
         PrintMsg(" \n\tUpdated layer file for '" + inputLayer + "'", 0)
 
     if len(folderList) == 0:

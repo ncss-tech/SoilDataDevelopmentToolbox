@@ -316,7 +316,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
         component.cokey = chorizon.cokey and mapunit.objectid = 1"
 
         outputTable = os.path.join(outputDB, "QueryTable_HZ")
-        #PrintMsg(" \nCreating table " + outputTable, 0)
+        PrintMsg(" \nCreating table " + outputTable, 0)
         arcpy.MakeQueryTable_management(['mapunit', 'component', 'chorizon'], queryTemp, "USE_KEY_FIELDS", "#", fldAll, whereClause)
         arcpy.CreateTable_management(outputDB, "QueryTable_HZ", queryTemp)
         arcpy.AddField_management(outputTable, "texture", "TEXT", "", "", "30", "texture")
@@ -595,15 +595,15 @@ def CreateOutputTableMu(theMuTable, depthList, dPct):
         elif mainRuleName == "NCCPI - National Commodity Crop Productivity Index (Ver 3.0)":
             # Add fields for NCCPI version 3
             #  "mukey", "NCCPI2CORN", "NCCPI2SOY", "NCCPI2COT","NCCPI2SG", "NCCPI2ALL"
-            arcpy.AddField_management(tmpTable, "nccpi2corn", "FLOAT", "", "", "")
-            arcpy.AddField_management(tmpTable, "nccpi2soy", "FLOAT", "", "", "")
-            arcpy.AddField_management(tmpTable, "nccpi2cot", "FLOAT", "", "", "")
-            arcpy.AddField_management(tmpTable, "nccpi2sg", "FLOAT", "", "", "")
-            arcpy.AddField_management(tmpTable, "nccpi2all", "FLOAT", "", "", "")
+            arcpy.AddField_management(tmpTable, "nccpi3corn", "FLOAT", "", "", "")
+            arcpy.AddField_management(tmpTable, "nccpi3soy", "FLOAT", "", "", "")
+            arcpy.AddField_management(tmpTable, "nccpi3cot", "FLOAT", "", "", "")
+            arcpy.AddField_management(tmpTable, "nccpi3sg", "FLOAT", "", "", "")
+            arcpy.AddField_management(tmpTable, "nccpi3all", "FLOAT", "", "", "")
 
         else:
-            PrintMsg(" \n\tNCCPI version 2 or 3 not found", 1)
-            #raise MyError, "Problem handling mainrule: " + mainRuleName
+            #PrintMsg(" \n\tNeither NCCPI version 2 or 3 not found", 1)
+            raise MyError, "Problem handling mainrule: " + mainRuleName
 
         # Add fields for root zone depth and root zone available water supply
         arcpy.AddField_management(tmpTable, "pctearthmc", "SHORT", "", "", "")
@@ -1710,6 +1710,7 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
 
         # mukey, cokey, compPct,val, top, bot
         #qFieldNames = ["mukey", "cokey", "comppct_r", "hzdept_r", "hzdepb_r", "om_r", "dbthirdbar_r"]
+
         qFieldNames = ["mukey","cokey","comppct_r","compname","localphase","chkey","om_r","dbthirdbar_r", "hzdept_r","hzdepb_r"]
 
         # Track map units that are missing data
@@ -1762,19 +1763,12 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
 
                 iCnt = int(arcpy.GetCount_management(queryTbl).getOutput(0))
                 inCur = arcpy.da.SearchCursor(queryTbl, qFieldNames, where_clause=hzSQL, sql_clause=sqlClause)
-                #arcpy.TableToTable_conversion(queryTbl, env.scratchGDB, "Query_SOC")
-
                 arcpy.SetProgressor("step", "Reading QueryTable_HZ ...",  0, iCnt, 1)
-
-                #if rng == (0,30):
-                #    PrintMsg(" \nMUKEY|COKEY|COMPNAME|COMPPCT|LOCALPHASE|CHKEY|TOP|BOT|HzT|RES|RESKIND|DB3|OM|FRAGVOL|SOC|PCT_SUM", 1)
-
 
                 for rec in inCur:
                     # read each horizon-level input record from the query table ...
 
                     mukey, cokey, compPct, compName, localPhase, chkey, om, db3, top, bot = rec
-
                     sumCompPct = float(dPct[mukey][0])
 
                     if om is not None and db3 is not None:
@@ -1816,7 +1810,14 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
 
                             # Calculate SOC using horizon thickness, OM, BD, FragVol, CompPct.
                             # changed the OM to carbon conversion from * 0.58 to / 1.724 after running FY2017 value table
+                            db3 = round(db3, 2)
+                                 
                             soc =  ( (hzT * ( ( om / 1.724 ) * db3 )) / 100.0 ) * ((100.0 - fragvol) / 100.0) * ( compPct * 100 )
+
+                            if td == 0 and bd == 5.0:
+                                # Everything here matches the other script
+                                test = [mukey, cokey, compPct, compName, localPhase, chkey, om, db3, top, bot, hzT, fragvol, round(soc, 2)]
+                                PrintMsg(str(test), 1)
 
                             if not cokey in dComp:
                                 # Create initial entry for this component using the first horizon CHK
@@ -1872,7 +1873,7 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                                 # write the new component-level SOC data to the Co_VALU table
                                 #soc = soc  * 100.0 * compPct / sumCompPct   # metric tons per hectare for this component
                                 #soc = soc  * 10000 * compPct / sumCompPct    # grams per square meter for this component
-                                soc = soc * compPct / sumCompPct    # grams per square meter for this component  2017-11-14
+                                # soc = soc * compPct / sumCompPct    # grams per square meter for this component  2017-11-14
                                 corec[1] = soc                      # Test
                                 hzT = hzT * compPct / 100.0         # Adjust component share of horizon thickness by comppct/100
                                 #hzT = hzT * compPct / adjCompPct   # Adjust component share of horizon thickness by (comppct/sum of comppct)
@@ -1890,6 +1891,7 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                                     soc = soc + val3
 
                                 dMu[mukey] = (compPct, hzT, soc)
+                                #PrintMsg(str((compPct, hzT, soc)), 1)
 
                         arcpy.SetProgressorPosition()
 
@@ -1909,26 +1911,10 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                         murec[2] = round(soc, 0)
                         murec[3] = round(hzT, 0)  # this value appears to be low sometimes
                         muCursor.updateRow(murec)
-
-                # Remove this later
-                # Writing SOC min-max values to file
-                if bCarbon and rng == (0,30):
-                    socFile = os.path.join(env.scratchFolder, "xxSOC_MaxMin.csv")
-                    
-                    if arcpy.Exists(socFile):
-                        arcpy.Delete_management(socFile)
                         
-                    fh = open(socFile, "a")
-                    fh.write("MUKEY, MIN_SOC, MAX_SOC, MAPUNIT_SOC\n")
-
-                    for mukey, minMax in dMinMax.items():
-                        minSOC = round(minMax[0], 1)
-                        maxSOC = round(minMax[1], 1)
-                        meanSOC = round(dMu[mukey][2], 1)
-                        #PrintMsg("\t" + mukey + ": " + str(minSOC) + ",  " + str(maxSOC) + ", " + str(meanSOC), 1)
-                        fh.write(mukey + ", " + str(minSOC) + ", " + str(maxSOC) + ", " + str(meanSOC) + "\n")
-                    fh.close()
-                    PrintMsg(" \nSOC stats written to: " + socFile, 1)
+                        #if td == 0 and bd == 100.0:
+                            # Mismatch here for some mapunits
+                        #    PrintMsg(str(murec), 1)
 
 
         return True
@@ -2091,15 +2077,20 @@ def MakeNCCPIQueryTable(inputDB, qTable):
         ["COINTERP.RULEDEPTH", "RULEDEPTH"], \
         ["COINTERP.INTERPHR", "INTERPHR"]]
 
-
-
-
-        #rule = 'NCCPI - National Commodity Crop Productivity Index (Ver 2.0)'
-
-
         #theSQL = "COMPONENT.COMPPCT_R > 0 AND COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.MRULENAME = '" + rule + "'"
-        theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.MRULENAME = '" + mainRuleName + "'"
+        if bRulekey:
+            # Much better performance if COINTER.RULEKEY is indexed and can be used in the query
+            if mainRuleName == 'NCCPI - National Commodity Crop Productivity Index (Ver 2.0)':
+                theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.RULEKEY = '34170'"
+
+            else:
+                theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.RULEKEY = '54955'"
+                
+        else:
+            theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.MRULENAME = '" + mainRuleName + "'"
+            
         PrintMsg(" \n\tCalculating NCCPI weighted averages for all major components...", 0)
+        #PrintMsg("Using SQL: " + theSQL, 1)
 
         # Things to be aware of with MakeQueryTable:
         # USE_KEY_FIELDS does not create OBJECTID field. Lack of OBJECTID precludes sorting on Mukey.
@@ -2177,7 +2168,7 @@ def CalcNCCPI2(inputDB, theMuTable, qTable, dPct):
 
         #PrintMsg(" \n\tReading query table with " + Number_Format(iCnt, 0, True) + " records...", 0)
 
-        arcpy.SetProgressor("step", "Reading query table...", 0,iCnt, 1)
+        arcpy.SetProgressor("step", "Reading NCCPI query table...", 0,iCnt, 1)
 
         with arcpy.da.SearchCursor(qTable, qFields, where_clause=querytblSQL, sql_clause=sqlClause) as qCursor:
 
@@ -2355,7 +2346,7 @@ def CalcNCCPI3(inputDB, theMuTable, qTable, dPct):
 
         #PrintMsg(" \n\tReading query table with " + Number_Format(iCnt, 0, True) + " records...", 0)
 
-        arcpy.SetProgressor("step", "Reading query table...", 0,iCnt, 1)
+        arcpy.SetProgressor("step", "Reading NCCPI query table...", 0,iCnt, 1)
 
         with arcpy.da.SearchCursor(qTable, qFields, where_clause=querytblSQL, sql_clause=sqlClause) as qCursor:
 
@@ -2444,7 +2435,7 @@ def CalcNCCPI3(inputDB, theMuTable, qTable, dPct):
             # theMuTable is a global variable. Need to check this out in the gSSURGO_ValuTable script
             #                                                 corn&soybeans, cotton, smallgrains, overall
 
-            with arcpy.da.UpdateCursor(theMuTable, ["mukey", "NCCPI2CORN", "NCCPI2SOY", "NCCPI2COT","NCCPI2SG", "NCCPI2ALL"]) as muCur:
+            with arcpy.da.UpdateCursor(theMuTable, ["mukey", "NCCPI3CORN", "NCCPI3SOY", "NCCPI3COT","NCCPI3SG", "NCCPI3ALL"]) as muCur:
 
                 arcpy.SetProgressor("step", "Saving map unit weighted NCCPI data to VALU table...", 0, iCnt, 0)
                 for rec in muCur:
@@ -2785,7 +2776,7 @@ def UpdateMetadata(outputWS, target, surveyInfo):
 
         if pythonVersion.find("32 bit") == -1:
             # Print a non-fatal warning to the user that the metadata will not be updated in 64 bit mode
-            PrintMsg(" \nWarning! Unable to update metadata when using background-mode geoprocessing", 1)
+            PrintMsg(" \nWarning! Unable to update metadata when running under 64-bit background-mode", 1)
             return False
 
         if not arcpy.Exists(target):
@@ -2800,7 +2791,6 @@ def UpdateMetadata(outputWS, target, surveyInfo):
 
         if arcpy.Exists(out_xml):
             arcpy.Delete_management(out_xml)
-
 
         # Using the stylesheet, write 'clean' metadata to out_xml file and then import back in
         # It appears that the metadata tools do not work within 64 bit background processing for 10.4.
@@ -2824,7 +2814,13 @@ def UpdateMetadata(outputWS, target, surveyInfo):
         # Define input and output XML files
         #mdExport = os.path.join(env.scratchFolder, "xxExport.xml")  # initial metadata exported from current data data
         xmlPath = os.path.dirname(sys.argv[0])
-        mdExport = os.path.join(xmlPath, "gSSURGO_ValuTable.xml")  # template metadata stored in ArcTool folder
+
+        if mainRuleName == "NCCPI - National Commodity Crop Productivity Index (Ver 3.0)":
+            mdExport = os.path.join(xmlPath, "gSSURGO_ValuTable2.xml")  # template metadata stored in ArcTool folder
+
+        elif mainRuleName == "NCCPI - National Commodity Crop Productivity Index (Ver 2.0)":
+            mdExport = os.path.join(xmlPath, "gSSURGO_ValuTable.xml")  # template metadata stored in ArcTool folder
+            
         mdImport = os.path.join(env.scratchFolder, "xxImport.xml")  # the metadata xml that will provide the updated info
 
         # Cleanup XML files from previous runs
@@ -3019,18 +3015,49 @@ def CreateValuTable(inputDB):
             #
             # query for sdvattribute.attributename like 'National Commodity Crop Productivity Index%'
             # return value for 'nasisrulename'
+            # Need to give preference to version 3.0 if it is available.
             sdvTbl = os.path.join(inputDB, "sdvattribute")
             wc = "attributename like 'National Commodity Crop Productivity Index%'"
             global mainRuleName
+            global bRulekey
+            ruleNames = list()
 
             with arcpy.da.SearchCursor(sdvTbl, ["nasisrulename"], where_clause=wc) as cur:
                 for rec in cur:
-                    mainRuleName = rec[0].encode('ascii')
+                    #mainRuleName = rec[0].encode('ascii')
+                    rule = rec[0].encode('ascii')
+                    if not rule in ruleNames:
+                        ruleNames.append(rule)
 
             #PrintMsg(" \nSet main rulename to: " + mainRuleName, 1)
+            if len(ruleNames) == 0:
+                raise MyError, "Failed to get NCCPI rulename"
+
+            elif len(ruleNames) == 1:
+                mainRuleName = ruleNames[0]
+
+            elif "NCCPI - National Commodity Crop Productivity Index (Ver 3.0)" in ruleNames:
+                mainRuleName = "NCCPI - National Commodity Crop Productivity Index (Ver 3.0)"
+
+            else:
+                mainRuleName = "NCCPI - National Commodity Crop Productivity Index (Ver 2.0)"
+
+            indexList = [indx.name.upper() for indx in arcpy.ListIndexes(os.path.join(inputDB, "cointerp"))]
+                         
+            if "INDX_COINTERPRULEKEY" in indexList:
+                bRulekey = True
+
+            else:
+                bRulekey = False
+                        
 
         except:
+            # Shouldn't we just bail out here?
+            errorMsg()
             mainRuleName = ""
+            raise MyError, "Unable to identify NCCPI mainrule in " + inputDB
+
+        #PrintMsg(" \nUsing " + mainRuleName, 1)
 
         # Name of mapunit level output table (global variable)
         theMuTable = os.path.join(inputDB, "Valu1")
@@ -3105,6 +3132,7 @@ def CreateValuTable(inputDB):
 
         # Calculate NCCPI
         # Create query table using component and chorizon tables
+        arcpy.SetProgressor("default", "Calculating NCCPI data elements...")
         nccpiTbl = "NCCPI_Table"
 
         if  MakeNCCPIQueryTable(inputDB, nccpiTbl) == False:
@@ -3145,8 +3173,8 @@ def CreateValuTable(inputDB):
         PrintMsg(" \n\tUpdating " + os.path.basename(theMuTable) + " metadata...", 0)
         bMetadata = UpdateMetadata(inputDB, theMuTable, surveyInfo)
 
-        if arcpy.Exists(theCompTable):
-            arcpy.Delete_management(theCompTable)
+        #if arcpy.Exists(theCompTable):
+        #    arcpy.Delete_management(theCompTable)
 
         if bMetadata:
             PrintMsg("\t\tMetadata complete", 0)

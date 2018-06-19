@@ -573,8 +573,8 @@ try:
     bOverwriteOutput = arcpy.GetParameter(3)       # overwrite existing geodatabases
     bRequired = arcpy.GetParameter(4)              # require that all available SSURGO be present in the input folder
     useTextFiles = arcpy.GetParameter(5)           # checked: use text files for attributes; unchecked: use Access database for attributes
-    aoiLayer = arcpy.GetParameterAsText(6)               # state layer used for clipping
-    aoiField = arcpy.GetParameterAsText(7)               # state name field used to query for AOI
+    aoiLayer = arcpy.GetParameterAsText(6)         # optional state layer used for clipping
+    aoiField = arcpy.GetParameterAsText(7)         # optional state name field used to query for AOI
 
 
     #import SSURGO_MergeSoilShapefilesbyAreasymbol_GDB
@@ -633,6 +633,7 @@ try:
 
         # Get list of matching folders containing SSURGO downloads
         surveyList = GetFolders(inputFolder, valList, bRequired, theTile)
+        valList = list() # empty list or the spatial sort won't get used later on
 
         if len(surveyList) > 0:
 
@@ -656,6 +657,7 @@ try:
             # Call SDM Export script
             # 12-25-2013 try passing more info through the stAbbrev parameter
             #
+            # PrintMsg(" \nPassing list of survey areas to 'SSURGO_Convert_to_Geodatabase' script: " + ", ".join(surveyList), 1)
             bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, tileInfo, useTextFiles, False, valList)
 
             if bExported == False:

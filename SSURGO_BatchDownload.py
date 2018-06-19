@@ -73,20 +73,20 @@ class MyError(Exception):
 ## ===================================================================================
 def errorMsg():
     try:
-        exInfo = sys.exc_info()
+        sysExc = sys.exc_info()
+        tb = sysExc[2]
+        tbInfo = traceback.format_tb(tb)
 
-        if len(exInfo) > 2:
-            tb = exInfo[2]
+        if len(tbInfo) == 0:
+            # No error found
+            return
 
-            if not tb is None and len(tb) > 0:
-                tbinfo = traceback.format_tb(tb)[0]
-                theMsg = tbinfo + " \n" + str(sys.exc_type)+ ": " + str(sys.exc_value) + " \n"
-                PrintMsg(theMsg, 2)
-
-        return
+        tbMsg = tbInfo[0]
+        theMsg = tbMsg + " \n" + str(sys.exc_type)+ ": " + str(sys.exc_value) + " \n"
+        PrintMsg(theMsg, 2)
 
     except:
-        PrintMsg("Unhandled error in errorMsg method", 2)
+        PrintMsg("Unhandled error", 2)
         pass
 
 ## ===================================================================================
@@ -113,7 +113,7 @@ def PrintMsg(msg, severity=0):
 def Number_Format(num, places=0, bCommas=True):
     try:
     # Format a number according to locality and given places
-        #locale.setlocale(locale.LC_ALL, "")
+        locale.setlocale(locale.LC_ALL, "")
         if bCommas:
             theNumber = locale.format("%.*f", (places, num), True)
 
@@ -249,6 +249,8 @@ def GetTemplateDate(newDB):
                     dateObj = rec[0]
 
             if dateObj is None:
+                del saCatalog
+                del newDB
                 return 0
 
             intDate = "%Y%m%d"                       # YYYYMMDD format for comparison
@@ -257,6 +259,8 @@ def GetTemplateDate(newDB):
         else:
             #raise MyError, "SACATALOG table in Template database not found"
             #raise MyError, ""
+            del saCatalog
+            del newDB
             return 0
 
         del saCatalog
@@ -293,11 +297,17 @@ def GetTabularDate(newFolder):
             rec = fh.readline()
             fh.close()
             # Example date (which is index 3 in pipe-delimited file):  9/23/2014 6:49:27
+            #PrintMsg(" \nGetTabularDate rec: " + str(rec), 1)  # "MN061"|"Itasca County, Minnesota"|15|02/01/2018 15:54:22|14|02/01/2018 15:54:22|10/01/2017 15:26:19|"certified, major components"|"FY17 updates to the county have been reviewed and certified to the best of my knowledge and abilities."|"<metadata><idinfo><citation><citeinfo><origin>
+            
             vals = rec.split("|")
+            #PrintMsg(" \nGetTabularDate vals: " + str(vals), 1)
+            
             recDate = vals[3]
+            #PrintMsg(" \nGetTabularDate vals: " + str(recDate), 1)
+            
             wssDate = "%m/%d/%Y %H:%M:%S"  # string date format used for SAVEREST in text file
             intDate = "%Y%m%d"             # YYYYMMDD format for comparison
-            dateObj = datetime.datetime.strptime(recDate, wssDate)
+            dateObj = datetime.strptime(recDate, wssDate)
             tabDate = int(dateObj.strftime(intDate))
 
         else:
@@ -306,7 +316,8 @@ def GetTabularDate(newFolder):
         return tabDate
 
     except:
-        errorMsg()
+        PrintMsg(" \nException in GetTabularDate", 1)  # For some reason, errors in this function are not handled properly by errorMsg
+        #errorMsg()
         return tabDate
 
 ## ===================================================================================
@@ -484,13 +495,12 @@ def GetDownload(areasym, surveyDate, importDB):
         errorMsg()
         return ""
 
-
 ## ===================================================================================
 def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
 
     try:
         bNewer = True  # Default setting should result in overwriting the current data if it already exists
-        #PrintMsg(" \nChecking newFolder: " + newFolder, 1)
+        # PrintMsg(" \nChecking newFolder: " + newFolder, 1)
 
         if os.path.isdir(newFolder):
             # This survey appears to have already been downloaded. Check to see if it is complete.
@@ -508,28 +518,38 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
             # if the specified database doesn't exist instead of failing over to looking at the
             # date from the text file?
             #
+            # Check spatial first
+            shpFile = os.path.join(os.path.join(newFolder, "spatial"), "soilmu_a_" + areaSym.lower() + ".shp")
+            
+            if not arcpy.Exists(shpFile):
+                #PrintMsg(" \nMissing soil polygon shapefile: " + shpFile, 1)
+
+                # Delete entire dataset and replace with new one
+                shutil.rmtree(newFolder)
+
+                return True
+                            
             if newDB == "":
                 # No tabular import will be performed, use the text file to get the date
+                # PrintMsg(" \nGetting tabular date from text file", 1)
                 dbDate = GetTabularDate(newFolder)
 
             elif os.path.isfile(newDB):
                 # Template database exists, get date from the SACATALOG table
+                # PrintMsg(" \nGetting tabular date from Access database", 1)
                 dbDate = GetTemplateDate(newDB)
-                #if dbDate == 0:
-                #    PrintMsg(" \nLocal dataset " + areaSym + " already exists but is incomplete", 1)
 
-                #else:
-                if dbDate != 0:
-                    PrintMsg(" \nLocal dataset for " + areaSym + " already exists (date of " + str(dbDate) + ")", 0)
+                #if dbDate != 0:
+                #    PrintMsg(" \nLocal dataset for " + areaSym + " already exists (date of " + str(dbDate) + ")", 0)
 
             else:
                 # Missing database even though a path was given by the user
-                PrintMsg(" \nMissing database (" + newDB + ")", 1)
+                # PrintMsg(" \nMissing database (" + newDB + ")", 1)
                 dbDate = 0
 
             if dbDate == 0:
                 # Could not get SAVEREST date from database, assume old dataset is incomplete and overwrite
-                PrintMsg("\tLocal dataset (" + newFolder + ") is incomplete and will be overwritten", 0)
+                PrintMsg(" \nLocal dataset (" + newFolder + ") is incomplete and will be replaced", 1)
                 env.workspace = outputFolder
                 shutil.rmtree(newFolder, True)
                 #arcpy.Delete_management(newFolder)
@@ -542,14 +562,14 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
                     # Got the above problem fixed, but now failing to delete the parent soil_ folder
                     #shutil.rmtree(newFolder, ignore_errors=False) # Try, try again
                     arcpy.Delete_management(newFolder)
-                    #raise MyError, "1. Failed to delete old dataset (" + newFolder + ")"
+                    raise MyError, "1. Failed to delete old dataset (" + newFolder + ")"
 
             else:
                 # Compare SDM date with local database date
                 if surveyDate > dbDate:
                     # Downloaded data is newer than the local copy. Delete and replace with new data.
                     #
-                    #PrintMsg("\tReplacing local dataset with newer download", 1)
+                    PrintMsg("\tReplacing local dataset with newer download", 1)
                     bNewer = True
                     env.workspace = outputFolder
                     # delete old data folder
@@ -557,16 +577,16 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
                     sleep(3)
 
                     if arcpy.Exists(newFolder):
-                        raise MyError, "Failed to delete old dataset (" + newFolder + ")"
+                        raise MyError, "2. Failed to delete old dataset (" + newFolder + ")"
 
                 else:
                     # according to the filename-date, the WSS version is the same or older
                     # than the local Template DB, skip download for this survey
                     if surveyDate == dbDate:
-                        PrintMsg(" \nSkipping survey " + areaSym + ", local version is already current", 1)
+                        PrintMsg(" \nSkipping survey " + areaSym + ", existing copy is current", 0)
 
                     else:
-                        PrintMsg(" \nSkipping survey " + areaSym + ", local version is newer (" + str(dbDate) + ") than the WSS data!?", 1)
+                        PrintMsg(" \nSkipping survey " + areaSym + ", local copy is newer (" + str(dbDate) + ") than the WSS data!?", 1)
 
                     bNewer = False
 
@@ -683,19 +703,30 @@ def UnzipDownload(outputFolder, newFolder, importDB, zipName ):
 
     try:
         local_zip = os.path.join(outputFolder, zipName)
+        zipfile.ZipFile.debug = 3
 
         if os.path.isfile(local_zip):
             # got a zip file, go ahead and extract it
+
             zipSize = (os.stat(local_zip).st_size / (1024.0 * 1024.0))
 
             if zipSize > 0:
-
+                
                 # Download appears to be successful
-                PrintMsg("\tUnzipping " + zipName + " (" + Number_Format(zipSize, 3, True) + " MB)...", 0)
+                PrintMsg("\tUnzipping " + zipName + " (" + Number_Format(zipSize, 3, True) + " MB) to " + outputFolder + "...", 0)
 
-                with zipfile.ZipFile(local_zip, "r") as z:
-                    # a bad zip file returns exception zipfile.BadZipFile
+                try:
+                    z = zipfile.ZipFile(local_zip, "r")
                     z.extractall(outputFolder)
+                    z.close()
+
+                except zipfile.BadZipfile:
+                    PrintMsg("Bad zip file?", 2)
+                    return False
+
+                except:
+                    PrintMsg(" \nUnhandled error unzipping " + local_zip, 2)
+                    return False
 
                 # remove zip file after it has been extracted,
                 # allowing a little extra time for file lock to clear
@@ -718,7 +749,7 @@ def UnzipDownload(outputFolder, newFolder, importDB, zipName ):
 
                 else:
                     # none of the subfolders within the zip file match any of the expected names
-                    raise MyError, "Subfolder within the zip file does not match any of the standard names"
+                    raise MyError, "Subfolder within the zip file does not match the standard naminig convention"
 
             else:
                 # Downloaded a zero-byte zip file
@@ -739,11 +770,8 @@ def UnzipDownload(outputFolder, newFolder, importDB, zipName ):
         PrintMsg(str(e), 2)
         return False
 
-    except zipfile.BadZipfile:
-        PrintMsg("Bad zip file?", 2)
-        return False
-
     except:
+        PrintMsg(" \nDropped to the bottom", 1)
         errorMsg()
         return False
 
@@ -1131,8 +1159,21 @@ def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT, bLast):
             arcpy.SetProgressorLabel("Tabular import complete")
 
             # Import SSURGO metadata for shapefiles
-            #if bMuName:
-            bNamed = AddMuName(newFolder, bLast)
+            bNamed = AddMuName(newFolder, bLast, bMuName)
+
+            # Check scratchfolder for xxImport*.log files
+            # For some reason they are being put in the folder above env.scratchFolder (or is it one above scratchworkspace?)
+            
+            env.workspace = os.path.dirname(env.scratchFolder)
+            #PrintMsg(" \nCleaning log files from " + env.workspace, 1)
+
+            logFiles = arcpy.ListFiles("dummymetadata*.log")
+
+            if len(logFiles) > 0:
+                #PrintMsg(" \nFound " + str(len(logFiles)) + " log files in " + env.workspace, 1)
+                for logFile in logFiles:
+                    #PrintMsg("\t\tDeleting " + logFile, 1)
+                    arcpy.Delete_management(logFile)
 
             # Remove all the text files from the tabular folder
             if bRemoveTXT:
@@ -1155,8 +1196,8 @@ def ImportTabular(areaSym, newFolder, importDB, newDB, bRemoveTXT, bLast):
         return False
 
 ## ===================================================================================
-def AddMuName(newFolder, bLast):
-    # Add muname column (map unit name) to soil polygon shapefile
+def AddMuName(newFolder, bLast, bMuName):
+    # Add metadata and optionally add muname column (map unit name) to soil polygon shapefile
     #
     # Started having problems with Addfield when the shapefile is on a Network Share.
     # Could it be virus scan locking the table??
@@ -1265,6 +1306,7 @@ def AddMuName(newFolder, bLast):
                                 #PrintMsg("\tImporting dummy metadata", 1)
                                 
                                 arcpy.ImportMetadata_conversion(dummyMetadata, "FROM_FGDC", os.path.join(env.scratchFolder, "dummy.shp"), "ENABLED")
+                                arcpy.Delete_management(os.path.join(env.scratchFolder, "dummy.shp"))
 
                             except:
                                 pass
@@ -1306,9 +1348,8 @@ def AddMuName(newFolder, bLast):
 # Import system modules
 import arcpy, sys, os, locale, string, traceback, urllib, shutil, zipfile, subprocess, glob, socket, csv, re
 import httplib
-#, URLError, HTTPError
+
 from arcpy import env
-#from _winreg import *
 from datetime import datetime
 from time import sleep
 
@@ -1394,18 +1435,21 @@ try:
         arcpy.SetProgressorPosition()
 
     if len(failedList) > 0 or len(skippedList) > 0:
-        PrintMsg(" \nDownload process completed (" + Number_Format(len(goodList), 0, True) + " succeeded) with the following issues...", 1)
+        if len(skippedList) == len(asList):
+            PrintMsg(" \nAll existing datasets were already up to date", 0)
 
-        if len(failedList) > 0:
-            PrintMsg(" \n\tWSS download failed for: " + ", ".join(failedList), 2)
+        else:    
+            PrintMsg(" \nDownload process completed (" + Number_Format(len(goodList), 0, True) + " succeeded) with the following issues...", 0)
 
-        if len(skippedList) > 0:
-            PrintMsg(" \n\tSkipped because a current version already exists: " + ", ".join(skippedList), 1)
+            if len(failedList) > 0:
+                PrintMsg("\tWSS download failed for: " + ", ".join(failedList), 2)
+
+            if len(skippedList) > 0:
+                PrintMsg(" \nSurveys skipped because current version(s) already exist: " + ", ".join(skippedList), 0)
 
         PrintMsg(" ", 0)
 
     else:
-        errorMsg()
         if importDB:
             PrintMsg(" \nAll " + Number_Format(len(asList), 0, True) + " surveys succcessfully downloaded, tabular import process complete \n ", 0)
 

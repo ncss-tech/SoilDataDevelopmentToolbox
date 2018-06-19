@@ -409,10 +409,10 @@ def ImportTables(inputMDB, newGDB, mukeyList):
         #tblList = GetTableList(newGDB)  # Original
 
         # Testing new order
-        tblList = ['distmd', 'legend', 'distlegendmd', 'laoverlap', 'legendtext', 'mapunit', 'component', 'muaggatt', 'muaoverlap', 'mucropyld', 'mutext', 'chorizon', 'cocanopycover', 'cocropyld', 'codiagfeatures', 'coecoclass', 'coeplants', 'coerosionacc', 'coforprod', 'cogeomordesc', 'cohydriccriteria', 'comonth', 'copmgrp', 'copwindbreak', 'corestrictions', 'cosurffrags', 'cotaxfmmin', 'cotaxmoistcl', 'cotext', 'cotreestomng', 'cotxfmother', 'chaashto', 'chconsistence', 'chdesgnsuffix', 'chfrags', 'chpores', 'chstructgrp', 'chtext', 'chtexturegrp', 'chunified', 'coforprodo', 'copm', 'cosoilmoist', 'cosoiltemp', 'cosurfmorphgc', 'cosurfmorphhpp', 'cosurfmorphmr', 'cosurfmorphss', 'chstruct', 'chtexture', 'chtexturemod', 'sacatalog']
+        tblList = ['distmd', 'legend', 'distlegendmd', 'laoverlap', 'legendtext', 'mapunit', 'component', 'muaggatt', 'muaoverlap', 'mucropyld', 'mutext', 'chorizon', 'cointerp', 'cocanopycover', 'cocropyld', 'codiagfeatures', 'coecoclass', 'coeplants', 'coerosionacc', 'coforprod', 'cogeomordesc', 'cohydriccriteria', 'comonth', 'copmgrp', 'copwindbreak', 'corestrictions', 'cosurffrags', 'cotaxfmmin', 'cotaxmoistcl', 'cotext', 'cotreestomng', 'cotxfmother', 'chaashto', 'chconsistence', 'chdesgnsuffix', 'chfrags', 'chpores', 'chstructgrp', 'chtext', 'chtexturegrp', 'chunified', 'coforprodo', 'copm', 'cosoilmoist', 'cosoiltemp', 'cosurfmorphgc', 'cosurfmorphhpp', 'cosurfmorphmr', 'cosurfmorphss', 'chstruct', 'chtexture', 'chtexturemod', 'sacatalog']
 
         
-        PrintMsg(" \nAppending STATSGO attributes to tabular side of new database...", 0)
+        PrintMsg(" \nAppending STATSGO attribute data to the merged database...", 0)
 
         # Handle mapunit, component, chorizon tables first. Skip STATSGO tables that aren't populated.
         #rmTables = ['mapunit', 'component', 'chorizon', 'cointerp', 'sainterp', 'distinterpmd', 'sdvfolderattribute', 'sdvattribute', 'sdvfolder', 'sdvalgorithm']
@@ -468,18 +468,7 @@ def ImportTables(inputMDB, newGDB, mukeyList):
 
                     fieldNames = [fld.name for fld in arcpy.Describe(inputTbl).fields]  # get list of fields from MDB (no OBJECTID)
                     tblCnt += 1
-                    # PrintMsg("\t" + str(tblCnt) + ". " + tblName + ": primary key: " + fieldNames[-1] + ", foreign key: " + fieldNames[-2], 1)
-                    #PrintMsg(" \nprimaryKeys: " + ", ".join(primaryKeys.keys()), 1)
-                    
-                    #PrintMsg(" \nUsing query: " + wc, 1)
-                    # PrintMsg(" \nprimaryKeys items: " + str(primaryKeys.keys()), 1)
-                    #if fieldName != "":
-                    #    PrintMsg("\t\tQuery for " + tblName + " uses " + fieldName + " and " + Number_Format(len(keys), 0, True) + " key values", 1)
 
-                    #else:
-                    #    PrintMsg("\t\tNo Query for " + tblName, 1)
-
-                        
                     arcpy.MakeQueryTable_management(inputTbl, tmpTbl, "ADD_VIRTUAL_KEY_FIELD")
 
 
@@ -511,7 +500,7 @@ def ImportTables(inputMDB, newGDB, mukeyList):
 
                         else:
                             recCnt = int(arcpy.GetCount_management(tmpTbl).getOutput(0))
-                            PrintMsg("\tImporting all " + Number_Format(recCnt, 0, True) + " records for " + tblName, 1)
+                            PrintMsg("\tImporting all " + Number_Format(recCnt, 0, True) + " records for " + tblName, 0)
                             wc = ""
                             fieldName = ""
                             keys = []
@@ -625,13 +614,13 @@ def ImportTables(inputMDB, newGDB, mukeyList):
                                 iCnt += 1
                                 #PrintMsg("\tb. " + str(rec), 1)
 
-                        PrintMsg("\tImported " + Number_Format(iCnt, 0, True) + " records to " + tblName, 1)
+                        PrintMsg("\tImported " + Number_Format(iCnt, 0, True) + " records to " + tblName, 0)
                         del sdvCur, outCur, tmpTbl
                         #PrintMsg("\t" +  Number_Format(iCnt, 0, True) + " written records", 1)
 
                     else:
-                        PrintMsg(" \nQuery returned no records for " + tblName, 1)
-                        PrintMsg(" \n" + wc, 1)
+                        PrintMsg("\tQuery found no matching records for " + tblName, 1)
+                        #PrintMsg(" \n" + wc, 1)
                         #raise MyError, "Query failed. Nothing selected for " + tblName
                         del tmpTbl
 

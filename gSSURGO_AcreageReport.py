@@ -213,11 +213,9 @@ def CalculateAcres(sdvLayer):
                 for rec in cur:
                     # Accumulate acres for each rating value
                     try:
-                        #dAcres[rec[1]] += (rec[0] * cellSize)
                         dAcres[rec[1]] += (float(rec[0]) * cellAcres)
 
                     except:
-                        #dAcres[rec[1]] = (rec[0] * cellSize)
                         dAcres[rec[1]] = (rec[0] * cellAcres)
 
         elif sdvLayer.isFeatureLayer and desc.shapetype.lower() == "polygon":

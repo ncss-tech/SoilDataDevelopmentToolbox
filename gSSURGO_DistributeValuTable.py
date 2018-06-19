@@ -136,15 +136,6 @@ def UpdateMetadata(outputWS, target, surveyInfo):
     #
     try:
 
-        # Clear process steps from the VALU1 table. Mostly AddField statements.
-        #
-        # Different path for ArcGIS 10.2.2??
-        #
-        #
-        #if not arcpy.Exists(target):
-        #    target = os.path.join(outputWS, target)
-
-
         # Remove geoprocessing history
         remove_gp_history_xslt = os.path.join(os.path.dirname(sys.argv[0]), "remove geoprocessing history.xslt")
         out_xml = os.path.join(env.scratchFolder, "xxClean.xml")
@@ -165,7 +156,7 @@ def UpdateMetadata(outputWS, target, surveyInfo):
         # Define input and output XML files
         #mdExport = os.path.join(env.scratchFolder, "xxExport.xml")  # initial metadata exported from current data data
         xmlPath = os.path.dirname(sys.argv[0])
-        mdExport = os.path.join(xmlPath, "gSSURGO_ValuTable.xml")  # template metadata stored in ArcTool folder
+        mdExport = os.path.join(xmlPath, "gSSURGO_ValuTable2.xml")  # template Valu1 metadata stored in ArcTool folder
         mdImport = os.path.join(env.scratchFolder, "xxImport.xml")  # the metadata xml that will provide the updated info
 
         # Cleanup XML files from previous runs

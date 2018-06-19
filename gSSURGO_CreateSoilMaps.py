@@ -132,77 +132,86 @@ import arcpy, sys, string, os, traceback, locale, time
 from arcpy import env
 
 try:
-    if __name__ == "__main__":
-        inputLayer = arcpy.GetParameterAsText(0)       # Input mapunit polygon layer
-        sdvAtts = arcpy.GetParameter(1)                # SDV Attribute
-        top = arcpy.GetParameter(2)                    # Top Depth, default = 0
-        bot = arcpy.GetParameter(3)                     # Bottom Depth, default = 1
 
-        num = 0
-        badList = list()
-        PrintMsg(" \n", 0)
-        import gSSURGO_CreateSoilMap
+    inputLayer = arcpy.GetParameterAsText(0)       # Input mapunit polygon layer
+    sdvAtts = arcpy.GetParameter(1)                # SDV Attribute
+    top = arcpy.GetParameter(2)                    # Top Depth, default = 0
+    bot = arcpy.GetParameter(3)                     # Bottom Depth, default = 1
 
-        # Turn off display of the inputLayer to reduce potential screen redraws
-        mxd = arcpy.mapping.MapDocument("CURRENT")
-        df = mxd.activeDataFrame
-        layers = arcpy.mapping.ListLayers(mxd, inputLayer, df)
+    num = 0
+    badList = list()
+    PrintMsg(" \n", 0)
+    import gSSURGO_CreateSoilMap
+
+    # Turn off display of the inputLayer to reduce potential screen redraws
+    mxd = arcpy.mapping.MapDocument("CURRENT")
+    df = mxd.activeDataFrame
+    layers = arcpy.mapping.ListLayers(mxd, inputLayer, df)
+    
+    if len(layers) == 1:
+        soilLayer = layers[0]
+        soilLayer.visible = False
+        del soilLayer
+
+    del mxd, df, layers
+
+    # Get gSSURGO Db behind inputLayer
+    desc = arcpy.Describe(inputLayer)
+    
+    if desc.dataType.lower() == "featurelayer":
+        fc = desc.featureclass.catalogPath
+        gdb = os.path.dirname(fc)
+
+    elif desc.dataType.lower() == "rasterlayer":
+        gdb = os.path.dirname(desc.catalogPath)
+
+    aggMethod = ""
+    primCst = ""
+    secCst = ""
+    begMo = "January"
+    endMo = "December"
+    bZero = True
+    cutOff = 0
+    bFuzzy = False
+    bNulls = True
+    tieBreaker = ""
+    sRV = "Representative"
+
+    PrintMsg(" \nCreating a series of " + str(len(sdvAtts)) + " soil maps", 0)
+    arcpy.SetProgressor("step", "Creating series of soil maps...", 1, len(sdvAtts), 1)
+    num = 0
+    
+    for sdvAtt in sdvAtts:
+        num += 1
+        msg = "Creating map number " + str(num) + ":  " + sdvAtt
+        #arcpy.SetProgressorLabel(msg)
+        PrintMsg(" \n" + msg, 0)
+        time.sleep(2)
+
+        # Trying here to enter default values for most parameters and to modify CreateSoilMap.CreateSoilMap to use default aggregation method (aggMethod) when it is passed an empty string
+        bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
+        #arcpy.SetProgressorPosition()
         
-        if len(layers) == 1:
-            soilLayer = layers[0]
-            soilLayer.visible = False
-            del soilLayer
+        if bSoilMap == 2:
+            badList.append(sdvAtt)
 
-        del mxd, df
-
-        # Get gSSURGO Db behind inputLayer
-        desc = arcpy.Describe(inputLayer)
-        
-        if desc.dataType.lower() == "featurelayer":
-            fc = desc.featureclass.catalogPath
-            gdb = os.path.dirname(fc)
-
-        elif desc.dataType.lower() == "rasterlayer":
-            gdb = os.path.dirname(desc.catalogPath)
-
-        aggMethod = ""
-        primCst = ""
-        secCst = ""
-        begMo = "January"
-        endMo = "December"
-        bZero = False
-        cutOff = 0
-        bFuzzy = False
-        bNulls = True
-        tieBreaker = ""
-        sRV = "Representative"
-
-        arcpy.SetProgressor("step", "", 0, len(sdvAtts), 1)
-        
-        for sdvAtt in sdvAtts:
-            #num += 1
-
-            # Trying here to enter default values for most parameters and to modify CreateSoilMap.CreateSoilMap to use default aggregation method (aggMethod) when it is passed an empty string
-            bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
-            arcpy.SetProgressorPosition()
+        elif bSoilMap == 0:
+            PrintMsg("\tbSoilMap returned 0", 0)
             
-            if bSoilMap == False:
-                badList.append(sdvAtt)
-
-        arcpy.RefreshActiveView()
-        
-        if len(badList) > 0:
-            if len(badList) == 1:
-                PrintMsg(" \nUnable to create the following soil map layers: '" + badList[0] + "' \n ", 1)
-
-            else:
-                PrintMsg(" \nUnable to create the following soil map layers: '" + "', '".join(badList) + "' \n ", 1)
+    del bSoilMap
+    arcpy.RefreshActiveView()
+    
+    if len(badList) > 0:
+        if len(badList) == 1:
+            PrintMsg(" \nUnable to create the following soil map layer: '" + badList[0] + "' \n ", 1)
 
         else:
-            PrintMsg(" ", 0)
+            PrintMsg(" \nUnable to create the following soil map layers: '" + "', '".join(badList) + "' \n ", 1)
 
-except MyError, e:
-    PrintMsg(str(e), 2)
+    else:
+        PrintMsg(" \nCreateSoilMaps finished \ n ", 0)
+    
+    del badList
 
 except:
     errorMsg()

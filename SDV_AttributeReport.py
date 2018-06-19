@@ -191,7 +191,9 @@ try:
 
 
             iChoice = 0
-            alphaList = ['','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z', 'aa','ab','ac','ad','ae','af','ag','ah','ai']
+            alphaList = ['','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
+                         'aa','ab','ac','ad','ae','af','ag','ah','ai', 'aj', 'ak', 'al', 'am', 'ao','ap', 'aq', 'ar', 'as', 'at',
+                         'au', 'av', 'aw', 'ax', 'ay', 'az']
 
             if len(attList) > 0:
                 iFolder += 1
