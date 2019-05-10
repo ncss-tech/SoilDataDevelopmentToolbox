@@ -1056,6 +1056,11 @@ def ImportTables(outputWS, dbList, dbVersion):
                                             dKeys[tblName].append(keyVal)
                                             outCursor.insertRow(inRow)
 
+                            if inputTbl == "sdvattribute":
+                                # Check to see if sainterp contains anything that is not in sdvattribute.nasisrulename.
+                                # If so, try to get it from os.path.join(os.path.dirname(sys.argv[0]), MissingInterps.gdb)
+                                pass
+
                 else:
                     err = "\tMissing input table: " + inputTbl
                     raise MyError, err
@@ -1465,40 +1470,21 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
 
         except:
             errorMsg()
-            PrintMsg(" \nUnable to create new index on the cointerp table", 1)
+            PrintMsg(" \nUnable to create new rulekey index on the cointerp table", 1)
 
-
-        if 1==2:  # Skip other two indexes on cointerp
+        try:
+            indxName = "Indx_CointerpMrulekey"
+            indxList = arcpy.ListIndexes(os.path.join(newDB, "cointerp"), indxName)
             
-            try:
-                indxName = "Indx_CointerpMruleName"
-                indxList = arcpy.ListIndexes(os.path.join(newDB, "cointerp"), indxName)
-                
-                if len(indxList) == 0: 
-                    arcpy.SetProgressorLabel("\tAdding attribute index on mrulename for cointerp table")
-                    # Tried to add this Cointerp index to the XML workspace document, but slowed down data import.
-                    arcpy.AddIndex_management(os.path.join(newDB, "COINTERP"), "MRULENAME", indxName)
-                    arcpy.SetProgressorPosition()
+            if len(indxList) == 0: 
+                arcpy.SetProgressorLabel("\tAdding attribute index on mrulekey for cointerp table")
+                # Tried to add this Cointerp index to the XML workspace document, but slowed down data import.
+                arcpy.AddIndex_management(os.path.join(newDB, "COINTERP"), "MRULEKEY", indxName)
+                arcpy.SetProgressorPosition()
 
-            except:
-                errorMsg()
-                PrintMsg(" \nUnable to create new index on the cointerp table", 1)
-                
-            arcpy.SetProgressorLabel("Tabular import complete")
-
-            try:
-                indxName = "Indx_CointerpRuleDepth"
-                indxList = arcpy.ListIndexes(os.path.join(newDB, "cointerp"), indxName)
-                
-                if len(indxList) == 0: 
-                    arcpy.SetProgressorLabel("\tAdding attribute index on ruledepth for cointerp table")
-                    # Tried to add this Cointerp index to the XML workspace document, but slowed down data import.
-                    arcpy.AddIndex_management(os.path.join(newDB, "COINTERP"), "RULEDEPTH", indxName)
-                    arcpy.SetProgressorPosition()
-
-            except:
-                errorMsg()
-                PrintMsg(" \nUnable to create new index on the cointerp table", 1)
+        except:
+            errorMsg()
+            PrintMsg(" \nUnable to create new mrulekey index on the cointerp table", 1)
             
         arcpy.SetProgressorLabel("Tabular import complete")
 
@@ -1513,6 +1499,93 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
         errorMsg()
         return False
 
+
+## ===================================================================================
+def IdentifyNewInterps(outputWS):
+    # Generate list of unpublished interps not found in sdvattribute table, but do exist
+    # in the sainterp and cointerp tables of this NASIS-SSURGO download
+    # Adding this information will help make these interps 'mappable'.
+    #
+    # In FY2019 we ran into a problem where some of the new interps were exported to sainterp, cointerp, but
+    # not added to the sdvattribute table. Identify those so that they can be retrieved from MissingInterps.gdb.
+
+    try:
+
+        sdvInterps = list()
+        missingInterps = list()
+        missingDB = os.path.join(os.path.dirname(sys.argv[0]), "MissingInterps.gdb")
+
+        if not arcpy.Exists(missingDB):
+            raise MyError, "Missing database: " + missingDB
+        
+        # create pointers to tables being used
+        sainterpTbl = os.path.join(outputWS, "sainterp")
+        sdvattTbl = os.path.join(outputWS, "sdvattribute")
+        sdvfolderattTbl = os.path.join(outputWS, "sdvfolderattribute")
+        sdvfolderTbl = os.path.join(outputWS, "sdvfolder")
+
+        with arcpy.da.SearchCursor(sdvattTbl, ["nasisrulename"], where_clause="attributetablename = 'cointerp'") as cur:
+            for rec in cur:
+                interpName = rec[0].encode('ascii')
+                
+                if not interpName in sdvInterps:
+                    sdvInterps.append(interpName)
+              
+        with arcpy.da.SearchCursor(sainterpTbl, ["interpname"]) as cur:
+            for rec in cur:
+                interpName = rec[0].encode('ascii')
+
+                if not interpName in sdvInterps and not interpName in missingInterps:
+                    missingInterps.append(interpName)
+                    
+        for interpName in missingInterps:
+            # Get the missing information from MissingInterps.gdb
+            srcTbl = os.path.join(missingDB, "sdvattribute")
+            sdvattFlds = [fld.name for fld in arcpy.Describe(srcTbl).fields if fld.type != "OID"]
+            sdvwc = "nasisrulename = '" + interpName + "'"
+            #PrintMsg("\tMissing " + interpName, 1)
+            sdvCnt = 0
+            
+            with arcpy.da.SearchCursor(os.path.join(missingDB, "sdvattribute"), sdvattFlds, where_clause=sdvwc) as incur:
+                for rec in incur:
+                    # Insert copy of missing record into gSSURGO database
+                    if sdvCnt > 0:
+                        raise MyError, "Where_Clause failed to get just one record: " + sdvwc
+
+                    sdvCnt += 1
+                    attributeKey = rec[0]
+                    
+                    with arcpy.da.InsertCursor(sdvattTbl, sdvattFlds) as outcur:
+                        outcur.insertRow(rec)
+
+                    folderwc = "attributekey = " + str(attributeKey)
+                    folderKey = None
+                    
+                    with arcpy.da.SearchCursor(os.path.join(missingDB, "sdvfolderattribute"),  ["folderkey"], where_clause=folderwc) as fcur:
+                        for frec in fcur:
+                            #PrintMsg("\t\tGot folderkey: " + str(frec[0]), 1)
+                            folderKey = frec[0]
+
+                    if not folderKey is None and interpName.find("Radioactive") == -1:
+                        PrintMsg("\tAdding missing information for interpretation: '" + interpName + "'", 0)
+                        
+                        with arcpy.da.InsertCursor(sdvfolderattTbl, ["folderkey", "attributekey"]) as outcur:
+                            newrec = [folderKey, attributeKey]
+                            outcur.insertRow(newrec)
+                                               
+                                       
+        return True
+
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+        
 ## ===================================================================================
 def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineList, sfpointList, sapolyList, featCnt):
     # Merge all spatial layers into a set of file geodatabase featureclasses
@@ -2361,6 +2434,7 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
                 areaSym = subFolder[(subFolder.rfind("_") + 1):].lower()  # STATSGO mod
                 env.workspace = os.path.join( inputFolder, os.path.join( subFolder, "spatial"))
                 mupolyName = "soilmu_a_" + areaSym + ".shp"
+                gsmpolyName = "gsmsoilmu_a_" + areaSym + ".shp"
                 mulineName = "soilmu_l_" + areaSym + ".shp"
                 mupointName = "soilmu_p_" + areaSym + ".shp"
                 sflineName = "soilsf_l_" + areaSym + ".shp"
@@ -2385,6 +2459,22 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
                     extentList.append(sortValue)
                     areasymbolList.append(areaSym.upper())
 
+                elif arcpy.Exists(gsmupolyName):
+                    # Found STATSGO soil polygon shapefile...
+                    # Calculate the product of the centroid X and Y coordinates
+                    desc = arcpy.Describe(gsmupolyName)
+                    shpExtent = desc.extent
+                    
+                    if shpExtent is None:
+                        raise MyError, "Corrupt soil polygon shapefile for " + areaSym.upper() + "?"
+
+                    XCntr = ( shpExtent.XMin + shpExtent.XMax) / 2.0
+                    YCntr = ( shpExtent.YMin + shpExtent.YMax) / 2.0
+                    #sortValue = (areaSym, round(XCntr, 1),round(YCntr, 1))  # center of survey area
+                    sortValue = (areaSym, round(shpExtent.XMin, 1), round(shpExtent.YMax, 1)) # upper left corner of survey area
+                    extentList.append(sortValue)
+                    areasymbolList.append(areaSym.upper())
+                    
                 else:
                     # Need to remove this if tabular-only surveys are allowed
                     raise MyError, "Error. Missing soil polygon shapefile: " + mupolyName + " in " + os.path.join( inputFolder, os.path.join( subFolder, "spatial"))
@@ -2437,24 +2527,41 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
 
             # soil polygon shapefile
             mupolyName = "soilmu_a_" + areaSym + ".shp"
-            shpFile = os.path.join(shpPath, mupolyName)
+            gsmpolyName = "gsmsoilmu_a_" + areaSym + ".shp"
+            muShp = os.path.join(shpPath, mupolyName)
+            gsmuShp = os.path.join(shpPath, mupolyName)
 
-            if arcpy.Exists(shpFile):
+            if arcpy.Exists(muShp):
 
-                cnt = int(arcpy.GetCount_management(shpFile).getOutput(0))
+                cnt = int(arcpy.GetCount_management(muShp).getOutput(0))
 
                 if cnt > 0:
-                    if not shpFile in mupolyList:
+                    if not muShp in mupolyList:
                         mupolyCnt += cnt
-                        mupolyList.append(shpFile)
+                        mupolyList.append(muShp)
                         #PrintMsg("\tAdding '" + areaSym.upper() + "' survey to merge list", 0)
                         arcpy.SetProgressorLabel("Adding " + areaSym.upper() + " survey to merge list")
 
                 else:
                     raise MyError, "No features found in " + shpFile
 
+            elif arcpy.Exists(gsmuShp):
+
+                cnt = int(arcpy.GetCount_management(gsmuShp).getOutput(0))
+
+                if cnt > 0:
+                    if not gsmuShp in mupolyList:
+                        mupolyCnt += cnt
+                        mupolyList.append(gsmuShp)
+                        #PrintMsg("\tAdding '" + areaSym.upper() + "' survey to merge list", 0)
+                        arcpy.SetProgressorLabel("Adding " + areaSym.upper() + " survey to merge list")
+
+                else:
+                    raise MyError, "No features found in " + shpFile
+
+
             else:
-                raise MyError, "Shapefile " + shpFile + " not found"
+                raise MyError, "Shapefile " + muShp + " not found"
 
             # input soil polyline shapefile
             mulineName = "soilmu_l_" + areaSym + ".shp"
@@ -2602,6 +2709,10 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
 
             else:
                 return False
+
+            # In October 2018 it was reported that two of the DHS interps were missing from the sdv tables
+            # This is a patch to replace the 4 missing records
+            bFixed = IdentifyNewInterps(outputWS)
 
             # Create table relationships and indexes
             bRL = CreateTableRelationships(outputWS)

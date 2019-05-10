@@ -500,7 +500,7 @@ def ImportTables(inputMDB, newGDB, mukeyList):
 
                         else:
                             recCnt = int(arcpy.GetCount_management(tmpTbl).getOutput(0))
-                            PrintMsg("\tImporting all " + Number_Format(recCnt, 0, True) + " records for " + tblName, 0)
+                            #PrintMsg("\tImporting all " + Number_Format(recCnt, 0, True) + " records for " + tblName, 0)
                             wc = ""
                             fieldName = ""
                             keys = []
@@ -643,7 +643,7 @@ def ImportTables(inputMDB, newGDB, mukeyList):
 
 
 ## ===============================================================================================================
-def GetClipPolygons(fcName, newGDB, inputMDB, newMukeys, inputRaster):
+def GetClipPolygons(fcName, newGDB, inputMDB, shpFile, newMukeys, inputRaster):
     #
 
     try:
@@ -656,6 +656,7 @@ def GetClipPolygons(fcName, newGDB, inputMDB, newMukeys, inputRaster):
 
         # Get list of NOTCOM, NOTPUB and Denied Access map unit keys
         env.workspace = newGDB
+        env.outputCoordinateSystem = inputRaster
         mapunitTbl = os.path.join(newGDB, "mapunit")
         compTbl = os.path.join(newGDB, "component")
         hzTbl = os.path.join(newGDB, "chorizon")
@@ -666,85 +667,13 @@ def GetClipPolygons(fcName, newGDB, inputMDB, newMukeys, inputRaster):
 
         with arcpy.da.SearchCursor(mapunitTbl, ["mukey"], where_clause=wc) as cur:
             for rec in cur:
-                mukeyList.append(rec[0].encode('ascii'))
+                mukeyList.append(rec[0].encode('ascii'))     
 
 
-        if 1 == 0:
-            # Skipping this data quality check
-            #
-            # Determine whether the first horizon for each component has data for OM and AWC
-            sqlClause = (None, "ORDER BY cokey")
-            whereClause = "hzdept_r = 0 AND (om_r IS NULL OR awc_r IS NULL)"
-            #dComponents = dict()
-            nodataComponents = list()
-
-            with arcpy.da.SearchCursor(hzTbl, ["cokey"], sql_clause=sqlClause, where_clause=whereClause) as cur:
-                for rec in cur:
-                    #dComponents[rec[0]] = 1
-                    nodataComponents.append(rec[0])
-
-            # Find the dominant component based upon comppct_r and add to the list
-            sqlClause = (None, "ORDER BY mukey, comppct_r DESC, cokey")
-            lastKey = "xxxxxx"
-            
-            with arcpy.da.SearchCursor(compTbl, ["mukey", "cokey", "comppct_r", "compkind"], sql_clause=sqlClause) as cur:
-                for rec in cur:
-                    mukey, cokey, comppct, compkind = rec
-                    
-                    if not mukey == lastKey:
-                        # this is the dominant component
-                        lastKey = mukey
-
-                        if cokey in nodataComponents:
-                            # this component has little or no horizon data. Unless it is a Miscellaneous area, add it to the NOTCOM list of map units.
-                            if compkind != "Miscellaneous area":
-                                # Add it to the list
-                                mukeyList.append(mukey.encode('ascii'))
-
-
-            PrintMsg(" \nIdentified " + Number_Format(len(mukeyList), 0, True) + " map units lacking horizon data or labeled as NOTCOM...", 0)
-
-        # Get the STATSGO soil polygon featureclass
-        # Start with folder where mdb is stored
-        mdbPath = os.path.dirname(inputMDB)
-
-        if arcpy.Exists(os.path.join(mdbPath, "spatial")):
-            # database is in the soil_???? folder
-            shpPath = os.path.join(mdbPath, "spatial")
-            #PrintMsg(" \n1. Found " + shpPath + " folder", 1)
-            
-
-        elif os.path.basename(mdbPath) == "tabular":
-            # go up one directory to find spatial folder
-            shpPath = os.path.join(os.path.dirname(mdbPath), "spatial")
-            #PrintMsg(" \n2. Assuming " + shpPath, 1)
-
-        else:
-            # assume that mdb is in the parent directory
-            shpPath = os.path.join(os.path.dirname(mdbPath), "spatial")
-            #PrintMsg(" \n3. Assuming " +  shpPath, 1)
-
-        if arcpy.Exists(shpPath):
-            #PrintMsg(" \nSTATSGO Shapefile is in " + shpPath, 1)
-            pass
-
-        else:
-            raise MyError, "Could not find STATSGO shapefile associated with " + inputMDB + " database"
-
-        # find STATSGO polygon shapefile
-        env.workspace = shpPath
-        shpFiles = arcpy.ListFeatureClasses("gsmsoilmu_a*.shp", "POLYGON")
-        #PrintMsg(" \nNeed to improve the STATSGO shapefile search method...", 1)
-
-        if len(shpFiles) == 0:
-            shpFiles = arcpy.ListFeatureClasses("soilmu_a*.shp", "POLYGON")
-
-        if len(shpFiles) <> 1:
-            raise MyError, Number_Format(len(shpFiles), 0, True) + " STATSGO polygon shapefiles were found at " + shpPath
-
-        shpFile = shpFiles[0]
+        #shpFile = shpFiles[0]
         inputCS = arcpy.Describe(shpFile).spatialReference
         inputLayer = "gSSURGO Polygons"
+        
         outputFC = os.path.join(newGDB, fcName)
         outputCS = arcpy.Describe(outputFC).spatialReference
         env.outputCoordinateSystem = outputCS
@@ -785,6 +714,59 @@ def GetClipPolygons(fcName, newGDB, inputMDB, newMukeys, inputRaster):
 
             else:
                 raise MyError, "Failed to create clipped STATSGO polygons"
+
+            # Create STATSGO survey boundary ('US') polygons to update the gNATSGO SAPOLYGON featureclass
+            # 15970 is the LKEY for STATSGO
+            #PrintMsg(" \nNeed to get LKEY for STATSGO survey area of 'US'", 1)
+            statsgoSA = os.path.join(env.scratchGDB, "xxSA_Statsgo")
+            outputSA = os.path.join(newGDB, "SAPOLYGON")
+            tmpSA = os.path.join(newGDB, "newSAPOLYGON")
+            arcpy.Dissolve_management(newFC, statsgoSA, ["AREASYMBOL", "SPATIALVER"], "", "SINGLE_PART")
+            # Need to add LKEY column to statsgoSA featureclass
+            arcpy.AddField_management(statsgoSA, "LKEY", "TEXT", "#", "#", "30")
+            arcpy.AddField_management(statsgoSA, "SOURCE", "TEXT", "#", "#", "30")
+            arcpy.AddField_management(outputSA, "SOURCE", "TEXT", "#", "#", "30")
+
+            legendTbl = os.path.join(inputMDB, "legend")
+            dLegend = dict()
+            dAreasymbol = dict()
+
+            # Why do I need a whereclause for STATSGO download? Kyle's downloads do not have a 'US' areasymbol.
+            # where_clause="areasymbol='US'"
+
+            with arcpy.da.SearchCursor(legendTbl, ["lkey"]) as cur:
+                for rec in cur:
+                    statsgoLkey = rec[0]
+
+            with arcpy.da.UpdateCursor(statsgoSA, ["lkey", "source"]) as cur:
+                for rec in cur:
+                    rec = [statsgoLkey, "STATSGO2"]
+                    cur.updateRow(rec)
+                    
+
+            # Update gNATSGO using STATSGO SAPOLYGONs
+            arcpy.Update_analysis(outputSA, statsgoSA, tmpSA, "BORDERS", 0)
+
+            if arcpy.Exists(tmpSA):
+                arcpy.TruncateTable_management(outputSA)
+
+                with arcpy.da.InsertCursor(outputSA, ["shape@", "areasymbol", "spatialver", "lkey", "source"]) as udCur:
+                    sCur = arcpy.da.SearchCursor(tmpSA, ["shape@", "areasymbol", "spatialver", "lkey", "source"])
+                    
+                    for rec in sCur:
+                        newRec = list(rec)
+                        if newRec[-1] is None:
+                            newRec[-1] = "SSURGO"
+                        udCur.insertRow(newRec)
+
+                    del sCur
+
+                arcpy.Delete_management(tmpSA)
+                del tmpSA
+                
+            PrintMsg(" \nSurvey Boundary featureclass updated...", 0)
+                    
+                    
 
             # Delete the NOTCOM polygons from MUPOLYGON featureclass
             #PrintMsg(" \nDeleting NOTCOM polygons from output MUPOLYGON featureclass...", 1)
@@ -898,11 +880,12 @@ def MergeRasters(newGDB, statsgoPolys, inputRaster, newMukeys):
 
         #ListEnv()
         env.pyramid = "PYRAMIDS 0 NEAREST"
-        PrintMsg("\tConverting replacement STATSGO polygons to a temporary raster...", 0)
+        
         statsgoRas = os.path.join(env.scratchGDB, "statsgo_ras")
         rasDesc = arcpy.Describe(os.path.join(newGDB, inputRaster))
         iRaster = rasDesc.meanCellHeight
         rasPrj = rasDesc.spatialReference
+        PrintMsg("\tConverting replacement STATSGO polygons to a temporary raster (" + statsgoRas + "...", 0)
         arcpy.PolygonToRaster_conversion(tmpPolys, "Lookup.CELLVALUE", statsgoRas, "MAXIMUM_COMBINED_AREA", priorityFld, iRaster) # No priority field for single raster
 
         # immediately delete temporary polygon layer to free up memory for the rest of the process
@@ -937,41 +920,49 @@ def MergeRasters(newGDB, statsgoPolys, inputRaster, newMukeys):
         arcpy.ResetProgressor()
         newRaster = os.path.join(newGDB, "MergedRaster")
         ssurgoRaster = os.path.join(newGDB, inputRaster)
-        PrintMsg("\tMerging the gSSURGO and STATSGO rasters...", 0)
-        arcpy.SetProgressor("default", "Merging statsgo raster with gSSURGO raster...")
+        #PrintMsg(" \nssurgoRaster: " + ssurgoRaster, 1)
+        
+        
+        arcpy.SetProgressor("default", "Merging STATSGO raster with gSSURGO raster...")
         pixType = "32_BIT_UNSIGNED"
         #cellSize = 10
         nBands = 1
         mosaicMethod = "LAST"
 
-        arcpy.MosaicToNewRaster_management([ssurgoRaster, statsgoRas], os.path.dirname(newRaster), os.path.basename(newRaster), rasPrj, pixType, iRaster, nBands, mosaicMethod)
-        PrintMsg("\tBuilding attribute table for new raster", 0)
-        arcpy.SetProgressor("default", "Building raster attribute table...")
-        arcpy.BuildRasterAttributeTable_management(newRaster)
+        #PrintMsg("\tMerging the gSSURGO and STATSGO rasters to " + newRaster + "...", 0)
+        #arcpy.MosaicToNewRaster_management([ssurgoRaster, statsgoRas], os.path.dirname(newRaster), os.path.basename(newRaster), rasPrj, pixType, iRaster, nBands, mosaicMethod)
 
-        with arcpy.da.UpdateCursor(newRaster, ["VALUE", "MUKEY"]) as cur:
+        PrintMsg("\tMerging the gSSURGO and STATSGO rasters to " + ssurgoRaster + "...", 0)
+        arcpy.Mosaic_management([statsgoRas], ssurgoRaster, "LAST", "", "", "", "NONE", 0.5, "NONE")
+        PrintMsg("\tBuilding attribute table for the new combined raster (" + ssurgoRaster + ")", 0)
+        arcpy.SetProgressor("default", "Building raster attribute table for the new combined raster...")
+        #arcpy.BuildRasterAttributeTable_management(newRaster)
+        arcpy.BuildRasterAttributeTable_management(ssurgoRaster)
+
+        #with arcpy.da.UpdateCursor(newRaster, ["VALUE", "MUKEY"]) as cur:
+        with arcpy.da.UpdateCursor(ssurgoRaster, ["VALUE", "MUKEY"]) as cur:
             for rec in cur:
                 rec[1] = rec[0]
                 cur.updateRow(rec)
 
-        arcpy.CalculateStatistics_management (newRaster, 1, 1, "", "OVERWRITE" )
+        arcpy.CalculateStatistics_management (ssurgoRaster, 1, 1, "", "OVERWRITE" )
         arcpy.SetProgressor("default", "Building pyramids for new raster...")
         PrintMsg("\tBuilding pyramids for new raster", 0)
-        arcpy.BuildPyramids_management(newRaster, "-1", "NONE", "NEAREST", "DEFAULT", "", "SKIP_EXISTING")
+        arcpy.BuildPyramids_management(ssurgoRaster, "-1", "NONE", "NEAREST", "DEFAULT", "", "SKIP_EXISTING")
         arcpy.ResetProgressor()
 
-        PrintMsg("\tUpdating " + ssurgoRaster + " with STATSGO information...", 0)
-        arcpy.Delete_management(ssurgoRaster)
+        #PrintMsg("\tUpdating " + ssurgoRaster + " with STATSGO information...", 0)
+        # arcpy.Delete_management(ssurgoRaster)
 
-        if not arcpy.Exists(ssurgoRaster):
-            arcpy.Rename_management(newRaster, ssurgoRaster)
-            #PrintMsg(" \nCompacting database...", 1)
-            arcpy.SetProgressorLabel("Compacting database...")
-            arcpy.Compact_management(newGDB)
-            #PrintMsg(" \nFinished compacting database...", 1)
+        #if not arcpy.Exists(ssurgoRaster):
+        #    arcpy.Rename_management(newRaster, ssurgoRaster)
+        #    #PrintMsg(" \nCompacting database...", 1)
+        #    arcpy.SetProgressorLabel("Compacting database...")
+        arcpy.Compact_management(newGDB)
+        #    #PrintMsg(" \nFinished compacting database...", 1)
 
-        else:
-            PrintMsg("\tUnable to update " + ssurgoRaster + ", changes saved instead to " + newRaster, 1)
+        #else:
+        #    PrintMsg("\tUnable to update " + ssurgoRaster + ", changes saved instead to " + newRaster, 1)
 
         return True
 
@@ -1012,14 +1003,15 @@ from time import sleep
 #from _winreg import *
 
 try:
-    #inputFolder = arcpy.GetParameterAsText(0)   # location of SSURGO datasets containing tabular folders
-    #tabList = arcpy.GetParameter(1)             # list of SSURGO folder names to be proccessed
-    #inputDB = arcpy.GetParameterAsText(2)       # custom Template SSURGO database (check version date?)
-    #bImportTxt = arcpy.GetParameter(4)          # boolean. If true, import textfiles. if false, import from Access db.
-    inputLayer = arcpy.GetParameterAsText(0)       # original gSSURGO database (copy will be made)
-    inputRaster = arcpy.GetParameterAsText(1)    # original gSSURGO raster name. This raster will be the mosaic target in the output GDB.
-    inputMDB = arcpy.GetParameterAsText(2)       # original STATSGO Template database (mdb), read only
-    newGDB = arcpy.GetParameterAsText(3)         # new fullpath for output merged geodatabase
+    #inputFolder = arcpy.GetParameterAsText(0)           # location of SSURGO datasets containing tabular folders
+    #tabList = arcpy.GetParameter(1)                     # list of SSURGO folder names to be proccessed
+    #inputDB = arcpy.GetParameterAsText(2)               # custom Template SSURGO database (check version date?)
+    #bImportTxt = arcpy.GetParameter(4)                  # boolean. If true, import textfiles. if false, import from Access db.
+    inputLayer = arcpy.GetParameterAsText(0)             # original gSSURGO polygons (copy will be made)
+    inputRaster = arcpy.GetParameterAsText(1)            # original gSSURGO raster name. This raster will be the mosaic target in the output GDB.
+    inputMDB = arcpy.GetParameterAsText(2)               # original STATSGO Template database (mdb or gdb), read only
+    inputStatsgoPolygons = arcpy.GetParameterAsText(3)   # 
+    newGDB = arcpy.GetParameterAsText(4)                 # new fullpath for output merged geodatabase
 
 
     # copy archive version of gSSURGO database to newGDB
@@ -1042,7 +1034,7 @@ try:
     arcpy.SetProgressorLabel("Merging gSSURGO and STATSGO databases...")
     global newMukeys
     newMukeys = list()
-    bClipped = GetClipPolygons(fcName, newGDB, inputMDB, newMukeys, inputRaster)
+    bClipped = GetClipPolygons(fcName, newGDB, inputMDB, inputStatsgoPolygons, newMukeys, inputRaster)
 
     if bClipped == False:
         raise MyError, ""

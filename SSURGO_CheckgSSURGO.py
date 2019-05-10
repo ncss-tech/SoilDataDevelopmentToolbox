@@ -352,7 +352,7 @@ def Number_Format(num, places=0, bCommas=True):
         return False
 
 ## ===================================================================================
-def QuerySDA(sQuery):
+def QuerySDA(sQuery, tbl):
     # Pass a query (from GetSDMCount function) to Soil Data Access designed to get the count of the selected records
     import time, datetime, urllib2, json
 
@@ -412,10 +412,15 @@ def QuerySDA(sQuery):
         return 0
 
     except httplib.HTTPException, e:
-        PrintMsg("HTTP Error: " + str(e), 2)
+        PrintMsg("HTTP Error: " + str(e) + " for " + tbl, 2)
+        return -1
 
+    except urllib2.URLError:
+        PrintMsg(sQuery, 1)
+        raise MyError, "Connection error for " + tbl
+    
     except socket.error, e:
-        raise MyError, "Soil Data Access problem: " + str(e)
+        raise MyError, "Soil Data Access problem for " + tbl + ": " + str(e)
         return -1
 
     except:
@@ -441,7 +446,7 @@ def GetSDMCount(theInputDB):
             for rec in cur:
                 bigList.append("'" + rec[0] + "'")
 
-        size = 25  # limit to number of areasymbols in each
+        size = 4  # limit to number of areasymbols in each
         test = 0
         iterNum = len(bigList) / size
         if (len(bigList) % size) or (len(bigList) < size):
@@ -452,8 +457,13 @@ def GetSDMCount(theInputDB):
         for i in range(0, len(bigList), size):
             test += 1
             asList = bigList[i:i + size]
+            
+            if len(asList) > 1:
+                theAS = ",".join(asList)
 
-            theAS = ",".join(asList)
+            else:
+                theAS = asList[0]
+                
             subQuery = "SELECT MUKEY FROM MAPUNIT M, LEGEND L WHERE m.LKEY = L.LKEY AND L.AREASYMBOL IN (" + theAS + ")"
 
             arcpy.SetProgressor("step", "Getting record count from Soil Data Access...", 1, 55, 1)
@@ -462,7 +472,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if cnt == -1:
                 # return empty dictionary, which will let the calling function know there is a serious problem
@@ -483,7 +493,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chaashto.chkey AND component.cokey =  chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -500,7 +510,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chconsistence.chkey AND component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -516,7 +526,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chdesgnsuffix.chkey AND component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -532,7 +542,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chfrags.chkey AND  component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -548,7 +558,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chpores.chkey AND component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -564,7 +574,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chstructgrp.chkey AND component.cokey = chorizon.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -581,7 +591,7 @@ def GetSDMCount(theInputDB):
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chtext.chkey AND component.cokey = chorizon.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -597,7 +607,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chtexturegrp.chkey AND component.cokey = chorizon.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -613,7 +623,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( chorizon.chkey = chunified.chkey AND component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -630,7 +640,7 @@ def GetSDMCount(theInputDB):
             tb4 = "chorizon"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + ", " + tb4.upper() +" WHERE component.mukey IN (" + subQuery + ") AND ( chstructgrp.chstructgrpkey = chstruct.chstructgrpkey AND chorizon.chkey = chstructgrp.chkey AND component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -647,7 +657,7 @@ def GetSDMCount(theInputDB):
             tb4 = "chorizon"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + ", " + tb4.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( chtexturegrp.chtgkey = chtexture.chtgkey AND chorizon.chkey = chtexturegrp.chkey AND component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -665,7 +675,7 @@ def GetSDMCount(theInputDB):
             tb5 = "chorizon"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + ", " + tb4.upper() + ", " + tb5.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( chtexture.chtkey = chtexturemod.chtkey AND chtexturegrp.chtgkey = chtexture.chtgkey AND chorizon.chkey = chtexturegrp.chkey AND component.cokey = chorizon.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -680,7 +690,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cocanopycover.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -695,7 +705,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cocropyld.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -710,7 +720,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = codiagfeatures.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -725,7 +735,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = coecoclass.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -738,7 +748,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = coerosionacc.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -753,7 +763,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = coeplants.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -768,7 +778,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = coforprod.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -784,7 +794,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( coforprod.cofprodkey = coforprodo.cofprodkey AND component.cokey = coforprod.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -799,7 +809,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cogeomordesc.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -814,7 +824,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cohydriccriteria.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -829,7 +839,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cointerp.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -843,7 +853,7 @@ def GetSDMCount(theInputDB):
             tb1 = "comonth"
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey =  comonth.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -858,7 +868,7 @@ def GetSDMCount(theInputDB):
             tb1 = "component"
             sQuery = Q + tb1.upper() + " WHERE component.mukey IN (" + subQuery + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -874,7 +884,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( copmgrp.copmgrpkey = copm.copmgrpkey AND component.cokey = copmgrp.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -888,7 +898,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = copmgrp.cokey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -902,7 +912,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = copwindbreak.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -916,7 +926,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = corestrictions.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -931,7 +941,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( comonth.comonthkey = cosoilmoist.comonthkey AND component.cokey = comonth.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -946,7 +956,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( comonth.comonthkey = cosoiltemp.comonthkey AND component.cokey = comonth.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -960,7 +970,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cosurffrags.cokey) "
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -974,7 +984,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cotaxfmmin.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -988,7 +998,7 @@ def GetSDMCount(theInputDB):
             tb2 =  "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cotaxmoistcl.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1002,7 +1012,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() +  " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cotext.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1016,7 +1026,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cotreestomng.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1030,7 +1040,7 @@ def GetSDMCount(theInputDB):
             tb2 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cotxfmother.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1045,7 +1055,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( cogeomordesc.cogeomdkey = cosurfmorphgc.cogeomdkey AND component.cokey = cogeomordesc.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1060,7 +1070,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( cogeomordesc.cogeomdkey = cosurfmorphhpp.cogeomdkey AND component.cokey = cogeomordesc.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1075,7 +1085,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( cogeomordesc.cogeomdkey = cosurfmorphmr.cogeomdkey AND component.cokey = cogeomordesc.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1090,7 +1100,7 @@ def GetSDMCount(theInputDB):
             tb3 = "component"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE component.mukey IN (" + subQuery + ") AND (" + "cogeomordesc.cogeomdkey = cosurfmorphss.cogeomdkey AND component.cokey = cogeomordesc.cokey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1103,7 +1113,7 @@ def GetSDMCount(theInputDB):
             tb1 = "distmd"
             sQuery = Q + tb1.upper() + " WHERE distmd.areasymbol IN (" + theAS + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1118,7 +1128,7 @@ def GetSDMCount(theInputDB):
             tb2 = "distmd"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE distmd.areasymbol IN (" + theAS + ") AND ( distmd.distmdkey = distinterpmd.distmdkey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1133,7 +1143,7 @@ def GetSDMCount(theInputDB):
             tb2 = "distmd"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE distmd.areasymbol IN (" + theAS + ") AND ( distmd.distmdkey = distlegendmd.distmdkey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1147,7 +1157,7 @@ def GetSDMCount(theInputDB):
             tb1 = "featdesc"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + " WHERE featdesc.areasymbol IN (" + theAS + ")"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1162,7 +1172,7 @@ def GetSDMCount(theInputDB):
             tb2 = "legend"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE legend.areasymbol IN (" + theAS + ") AND ( legend.lkey = laoverlap.lkey )"
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1176,7 +1186,7 @@ def GetSDMCount(theInputDB):
             tb1 = "legend"
             sQuery = Q + tb1.upper() + " WHERE legend.areasymbol IN (" + theAS + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1191,7 +1201,7 @@ def GetSDMCount(theInputDB):
             tb2 = "legend"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE legend.areasymbol IN (" + theAS + ") AND ( legend.lkey = legendtext.lkey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1206,7 +1216,7 @@ def GetSDMCount(theInputDB):
             #sQuery = Q + tb1.upper() + " WHERE mapunit.mukey IN (" + theMU + ")"
             sQuery = Q + tb1.upper() + " WHERE mapunit.mukey IN (" + subQuery + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1222,7 +1232,7 @@ def GetSDMCount(theInputDB):
             tb3 = "mapunit"
             sQuery = Q + tb1.upper() + ", " + tb2.upper() + ", " + tb3.upper() + " WHERE legend.areasymbol IN (" + theAS + ") AND ( mapunit.lkey = legend.lkey AND muaoverlap.mukey = mapunit.mukey )"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1236,7 +1246,7 @@ def GetSDMCount(theInputDB):
             tb1 = "muaggatt"
             sQuery = Q + tb1.upper() + " WHERE muaggatt.mukey IN (" + subQuery + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1250,7 +1260,7 @@ def GetSDMCount(theInputDB):
             tb1 = "mucropyld"
             sQuery = Q + tb1.upper() + " WHERE SDM.DBO.mucropyld.mukey IN (" + subQuery + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1264,7 +1274,7 @@ def GetSDMCount(theInputDB):
             tb1 = "mutext"
             sQuery = Q + tb1.upper() + " WHERE mutext.mukey IN (" + subQuery + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1278,7 +1288,7 @@ def GetSDMCount(theInputDB):
             tb1 = "sacatalog"
             sQuery = Q + tb1.upper() + " WHERE SACATALOG.AREASYMBOL IN (" + theAS + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1292,7 +1302,7 @@ def GetSDMCount(theInputDB):
             tb1 = "sainterp"
             sQuery = Q + tb1.upper() +  " WHERE sainterp.areasymbol IN (" + theAS + ")"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
-            cnt = QuerySDA(sQuery)
+            cnt = QuerySDA(sQuery, tb1)
 
             if tb1 in dCount:
                 dCount[tb1] = dCount[tb1] + cnt
@@ -1379,7 +1389,7 @@ def GetGDBCount(theInputDB, dSDMCounts):
 
 ## ===================================================================================
 # main
-import string, os, sys, traceback, locale, arcpy
+import string, os, sys, traceback, locale, arcpy, httplib
 from arcpy import env
 
 from urllib2 import urlopen, URLError, HTTPError

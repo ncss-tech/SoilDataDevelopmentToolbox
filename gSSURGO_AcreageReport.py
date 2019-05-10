@@ -274,7 +274,13 @@ def CreateOutputTable(dAcres, domainValues):
                 #PrintMsg(" \nCreating graph using domain values", 1)
                 for rating in domainValues:
                     if rating is None:
-                        cur.insertRow(["Not rated", round(dAcres[rating], 0)])
+                        if fieldType == "TEXT":
+                            cur.insertRow(["Not rated", round(dAcres[rating], 0)])
+
+                        else:
+                            cur.insertRow([None, round(dAcres[rating], 0)])
+
+                            
                         PrintMsg("Not rated: " + str(round(dAcres[rating])), 1)
 
                     else:
@@ -290,8 +296,11 @@ def CreateOutputTable(dAcres, domainValues):
 
                 for rating in iterValues:
                     if rating is None:
-                        cur.insertRow(["Not rated", round(dAcres[rating], 0)])
-                        domainValues.append("Not rated")
+                        if fieldType == "TEXT":
+                            cur.insertRow(["Not rated", round(dAcres[rating], 0)])
+
+                        else:
+                            cur.insertRow([None, round(dAcres[rating], 0)])
 
                     else:
                         cur.insertRow([rating, round(dAcres[rating], 0)])

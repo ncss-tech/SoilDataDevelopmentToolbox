@@ -177,7 +177,7 @@ def SSURGOVersion(newDB, tabularFolder):
         if not arcpy.Exists(newDB):
             raise MyError, "Missing input database (" + newDB + ")"
 
-        if arcpy.Exists(versionTxt):
+        if os.path.isfile(versionTxt):
             # read just the first line of the version.txt file
             fh = open(versionTxt, "r")
             txtVersion = fh.readline().split(".")[0]
@@ -233,8 +233,7 @@ def GetTemplateDate(newDB):
     # Should be able to reformat to an integer value for comparison with filename-imbedded date.
     #
     try:
-        #if not arcpy.Exists(newDB):  # Check for existance before calling this function
-        #    return 0
+
         saCatalog = os.path.join(newDB, "SACATALOG")
         dbDate = 0
 
@@ -384,7 +383,7 @@ def GetReason(responseCode):
         return "Unknown error"
 
 ## ===================================================================================
-def GetDownload(areasym, surveyDate, importDB):
+def GetDownload(areasym, surveyDate, importDB, newFolder):
     # download survey from Web Soil Survey URL and return name of the zip file
     # want to set this up so that download will retry several times in case of error
     # return empty string in case of complete failure. Allow main to skip a failed
@@ -416,6 +415,7 @@ def GetDownload(areasym, surveyDate, importDB):
 
         # Incorporate the name of the Template database into the URL
         st = areaSym[0:2]
+        
         if st in dbInfo:
             db = "_soildb_" + dbInfo[st] + "_2003"
         else:
@@ -433,43 +433,125 @@ def GetDownload(areasym, surveyDate, importDB):
         # set the download's output location and filename
         local_zip = os.path.join(outputFolder, zipName)
 
+        if not os.path.isdir(outputFolder):
+            raise MyError, "Unable to open output folder (" + outputFolder + ") to save zip file"
+        
         # make sure the output zip file doesn't already exist
         if os.path.isfile(local_zip):
             os.remove(local_zip)
 
-        PrintMsg("\tDownloading survey " + areaSym + " from Web Soil Survey...", 0)
+        PrintMsg("\tDownloading " + areaSym + " from Web Soil Survey...", 0)
 
-        # Open request to Web Soil Survey for that zip file
-        # Below I am using the 'retrieve' method which doesn't seem to give me any kind of status
-        # Maybe I should try the 'open' method. But then I will have to save the zip file as a separate step.
-        downloader = urllib.FancyURLopener()
-        #msg = downloader.retrieve(zipURL, local_zip)
-        #responseCode = 200
+        # Test replacement for owbs code for getting SSURGO download-zip file
+        # The following code snippet seems to be a major improvement. Need to add status check though.
+        zipDL = urllib2.urlopen(zipURL)
+        time.sleep(1)
 
-        # This replacement code for 'retrieve' method is not working. Missing a step?
-        respObj = downloader.open(zipURL)
-        responseCode = respObj.code
-        #PrintMsg(" \n" + zipURL, 1)
-        #PrintMsg(local_zip, 1)
-        #PrintMsg(" \nResponse code: " + str(respObj.code), 1)
+        if zipDL is None:
+            raise MyError, "Empty download from URL"
+        
+        time.sleep(1)
+        zipCode = zipDL.code
+        zipMD = zipDL.info()
+        zipType = zipMD.subtype
+        zipSize = int(zipMD.get('Content-Length'))
+ 
+        #PrintMsg("\tZip Code: " + str(zipCode), 1)
 
-        if responseCode == 200:
-            # save the download file to the specified folder
-            output = open(local_zip, "wb")
-            output.write(respObj.read())
-            output.close()
-            del respObj
-            del output
+        if zipCode != 200:
+            raise MyError, "SSURGO zip file request failed. Error code: " + str(zipCode)
+        
+        if zipType != '.zip':
+            raise MyError, "Failed to get requested zipfile from Web Soil Survey"
 
-            if not os.path.isfile(local_zip):
-                PrintMsg("Failed to download zipfile", 1)
-                return ""
-
-            # if we get this far then the download succeeded
-            return zipName
+        if os.path.isdir(outputFolder):
+            # Sometimes it appears that I'm losing connection to our network share
+            
+            try:
+                fh = open(local_zip, 'wb')  # Getting some IOErrors. No such file or directory (zipfile path)
+                time.sleep(1)
+                
+            except IOError:
+                raise MyError, "\tUnable to write to " + local_zip
+            
+            if os.path.isfile(local_zip):
+                
+                try:
+                    fh.write(zipDL.read())
+                    fh.close()
+                    
+                except:
+                    raise MyError, "\tUnable to save requested zipfile"
 
         else:
-            raise MyError, GetReason(responseCode[1])
+            raise MyError, "\tUnable to reach output directory: " + outputFolder
+
+        del fh, zipDL   
+
+        zipfile.ZipFile.debug = 3
+
+        if os.path.isfile(local_zip):
+            # got a zip file, go ahead and extract it
+
+            zipSize = (os.stat(local_zip).st_size / (1024.0 * 1024.0))
+
+            if zipSize > 0:
+                
+                # Download appears to be successful
+                PrintMsg("\tUnzipping " + zipName + " (" + Number_Format(zipSize, 3, True) + " MB) to " + outputFolder + "...", 0)
+
+                try:
+                    z = zipfile.ZipFile(local_zip, "r")
+                    z.extractall(outputFolder)
+                    z.close()
+
+                except zipfile.BadZipfile:
+                    PrintMsg("Bad zip file?", 2)
+                    return False
+
+                except:
+                    PrintMsg(" \nUnhandled error unzipping " + local_zip, 2)
+                    return False
+
+                # remove zip file after it has been extracted,
+                # allowing a little extra time for file lock to clear
+                sleep(3)
+                os.remove(local_zip)
+
+                # rename output folder to NRCS Geodata Standard for Soils
+                if os.path.isdir(os.path.join(outputFolder, zipName[:-4])):
+                    # this is an older zip file that has the 'wss_' directory structure
+                    time.sleep(1)
+                    os.rename(os.path.join(outputFolder, zipName[:-4]), newFolder)
+
+                elif os.path.isdir(os.path.join(outputFolder, areaSym.upper())):
+                    # this must be a newer zip file using the uppercase AREASYMBOL directory
+                    time.sleep(1)
+                    os.rename(os.path.join(outputFolder, areaSym.upper()), newFolder)
+
+                elif os.path.isdir(newFolder):
+                    # this is a future zip file using the correct field office naming convention (soil_ne109)
+                    # it does not require renaming.
+                    pass
+
+                else:
+                    # none of the subfolders within the zip file match any of the expected names
+                    raise MyError, "Subfolder within the zip file does not match the standard naminig convention"
+
+            else:
+                # Downloaded a zero-byte zip file
+                # download for this survey failed, may try again
+                PrintMsg("\tEmpty zip file downloaded for " + areaSym + ": " + surveyName, 1)
+                os.remove(local_zip)
+
+            return True
+
+        else:
+            # Don't have a zip file, need to find out circumstances and document
+            # rename downloaded database using standard convention, skip import
+            raise MyError, "Missing zip file (" + local_zip + ")"
+            return False
+
 
     except MyError, e:
         # Example: raise MyError, "This is an error message"
@@ -521,7 +603,7 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
             # Check spatial first
             shpFile = os.path.join(os.path.join(newFolder, "spatial"), "soilmu_a_" + areaSym.lower() + ".shp")
             
-            if not arcpy.Exists(shpFile):
+            if not os.path.isfile(shpFile):
                 #PrintMsg(" \nMissing soil polygon shapefile: " + shpFile, 1)
 
                 # Delete entire dataset and replace with new one
@@ -534,7 +616,7 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
                 # PrintMsg(" \nGetting tabular date from text file", 1)
                 dbDate = GetTabularDate(newFolder)
 
-            elif os.path.isfile(newDB):
+            elif arcpy.Exists(newDB):
                 # Template database exists, get date from the SACATALOG table
                 # PrintMsg(" \nGetting tabular date from Access database", 1)
                 dbDate = GetTemplateDate(newDB)
@@ -556,13 +638,15 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
                 sleep(1)
                 bNewer = True
 
-                if arcpy.Exists(newFolder):
+                if os.path.isdir(newFolder):
                     # I see shutil fail when there is a file lock on the spatial\soilmu_a_ shapefile.
                     # Not sure why. lock file exists even without the addition of MUNAME and FARMLNDCL columns.
                     # Got the above problem fixed, but now failing to delete the parent soil_ folder
                     #shutil.rmtree(newFolder, ignore_errors=False) # Try, try again
-                    arcpy.Delete_management(newFolder)
-                    raise MyError, "1. Failed to delete old dataset (" + newFolder + ")"
+                    shutil.rmtree(newFolder, True)
+
+                    if os.path.isdir(newFolder):
+                        raise MyError, "1. Failed to delete old dataset (" + newFolder + ")"
 
             else:
                 # Compare SDM date with local database date
@@ -576,7 +660,7 @@ def CheckExistingDataset(areaSym, surveyDate, newFolder, newDB):
                     shutil.rmtree(newFolder, True)
                     sleep(3)
 
-                    if arcpy.Exists(newFolder):
+                    if os.path.isdir(newFolder):
                         raise MyError, "2. Failed to delete old dataset (" + newFolder + ")"
 
                 else:
@@ -617,7 +701,13 @@ def ProcessSurvey(outputFolder, importDB, areaSym, bImport, bRemoveTXT, iGet, iT
         bLast = False
 
         # get date string
-        surveyDate = int(surveyInfo[1].strip().replace("-", ""))
+        try:
+            surveyDate = int(surveyInfo[1].strip().replace("-", ""))
+            
+
+        except:
+            return "Failed"
+                
 
         # get survey name
         surveyName = surveyInfo[2].strip()
@@ -648,29 +738,29 @@ def ProcessSurvey(outputFolder, importDB, areaSym, bImport, bRemoveTXT, iGet, iT
             PrintMsg(" \nProcessing survey " + areaSym + " (" + str(iGet) + " of " + str(iTotal) + "):  " + surveyName, 0)
 
             # First attempt to download zip file
-            zipName = GetDownload(areaSym, surveyDate, importDB)
+            zipName = GetDownload(areaSym, surveyDate, importDB, newFolder)
 
-            if zipName == "" or zipName is None:
-                # Try downloading zip file a second time
+            if zipName == "":
+                # First download attempt failed, try downloading zip file a second time
                 sleep(5)
-                zipName = GetDownload(areaSym, surveyDate, importDB)
+                zipName = GetDownload(areaSym, surveyDate, importDB, newFolder)
 
-                if zipName == "" or zipName is None:
+                if zipName == "":
                     # Failed second attempt to download zip file
                     # Give up on this survey
                     raise MyError, ""
 
-            bZip = UnzipDownload(outputFolder, newFolder, importDB, zipName)
+            #bZip = UnzipDownload(outputFolder, newFolder, importDB, zipName)
 
-            if not bZip:
+            #if not bZip:
                 # Try unzipping a second time
-                sleep(1)
-                bZip = UnzipDownload(outputFolder, newFolder, importDB, zipName)
+            #    sleep(1)
+            #    bZip = UnzipDownload(outputFolder, newFolder, importDB, zipName)
 
-                if not bZip:
+            #    if not bZip:
                     # Failed second attempt to unzip
                     # Give up on this survey
-                    raise MyError, ""
+            #        raise MyError, ""
 
             # Import tabular. Only try once.
             if bImport:
@@ -857,6 +947,7 @@ def SortMapunits(newDB):
         # Find output SYSTEM table
         sysFields = ["lseq", "museq", "lkey", "mukey"]
         sysTbl = os.path.join(newDB, "SYSTEM - Mapunit Sort Specifications")
+        
         if not arcpy.Exists(sysTbl):
             raise MyError, "Could not find " + sysTbl
 
@@ -1216,7 +1307,7 @@ def AddMuName(newFolder, bLast, bMuName):
         spatialFolder = os.path.join(newFolder, "spatial")
         env.workspace = spatialFolder
 
-        if not arcpy.Exists(muTxt):
+        if not os.path.isfile(muTxt):
             raise MyError, "Cannot find " + muTxt
 
         # Some of the tabular only shapefiles on WSS were created as polyline instead of
@@ -1286,7 +1377,7 @@ def AddMuName(newFolder, bLast, bMuName):
                         PrintMsg(" \nWarning! Unable to update metadata when using background-mode geoprocessing", 1)
 
                     else:
-                        if not arcpy.Exists(metaData):
+                        if not os.path.isfile(metaData):
                             raise MyError, "SSURGO metadata file (" + metaData + ") not found"
 
                         # This ImportMetadata_conversion is leaving a lock file behind
@@ -1321,7 +1412,7 @@ def AddMuName(newFolder, bLast, bMuName):
                     # soil_metadata_ne137_xslttran.log
                     logFile = os.path.join(os.path.dirname(env.scratchFolder), "soil_metadata_" + areaSym.lower() + "_xslttran.log")
 
-                    if arcpy.Exists(logFile):
+                    if os.path.isfile(logFile):
                         arcpy.Delete_management(logFile, "File")
 
             except:
@@ -1346,7 +1437,7 @@ def AddMuName(newFolder, bLast, bMuName):
 ## ===================================================================================
 # main
 # Import system modules
-import arcpy, sys, os, locale, string, traceback, urllib, shutil, zipfile, subprocess, glob, socket, csv, re
+import arcpy, sys, os, locale, string, traceback, urllib, urllib2, shutil, zipfile, subprocess, glob, socket, csv, re
 import httplib
 
 from arcpy import env

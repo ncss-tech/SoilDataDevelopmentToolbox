@@ -177,26 +177,37 @@ try:
     tieBreaker = ""
     sRV = "Representative"
 
-    PrintMsg(" \nCreating a series of " + str(len(sdvAtts)) + " soil maps", 0)
-    arcpy.SetProgressor("step", "Creating series of soil maps...", 1, len(sdvAtts), 1)
-    num = 0
+    newAtts = list()
     
     for sdvAtt in sdvAtts:
-        num += 1
-        msg = "Creating map number " + str(num) + ":  " + sdvAtt
-        #arcpy.SetProgressorLabel(msg)
-        PrintMsg(" \n" + msg, 0)
-        time.sleep(2)
+        # Choice list in menu was modified to include folder names and tabbed attributenames. Need
+        # to clean up the list before processing.
+        if not sdvAtt.startswith("* "):
+            newAtts.append(sdvAtt.strip())
+            
+    PrintMsg(" \nCreating a series of " + str(len(newAtts)) + " soil maps", 0)
+    arcpy.SetProgressor("step", "Creating series of soil maps...", 1, len(newAtts), 1)
+    num = 0
+    
+    for sdvAtt in newAtts:
+        if not sdvAtt.startswith("* "):
+            sdvAtt = sdvAtt.strip()
+            num += 1
+            msg = "Creating map number " + str(num) + ":  " + sdvAtt
+            #arcpy.SetProgressorLabel(msg)
+            PrintMsg(" \n" + msg, 0)
+            time.sleep(2)
 
-        # Trying here to enter default values for most parameters and to modify CreateSoilMap.CreateSoilMap to use default aggregation method (aggMethod) when it is passed an empty string
-        bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
-        #arcpy.SetProgressorPosition()
-        
-        if bSoilMap == 2:
-            badList.append(sdvAtt)
+            # Trying here to enter default values for most parameters and to modify CreateSoilMap.CreateSoilMap to use default aggregation method (aggMethod) when it is passed an empty string
+            bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
+            #arcpy.SetProgressorPosition()
+            
+            if bSoilMap == 2:
+                badList.append(sdvAtt)
 
-        elif bSoilMap == 0:
-            PrintMsg("\tbSoilMap returned 0", 0)
+            elif bSoilMap == 0:
+                #PrintMsg("\tbSoilMap returned 0", 0)
+                badList.append(sdvAtt)
             
     del bSoilMap
     arcpy.RefreshActiveView()
@@ -209,9 +220,16 @@ try:
             PrintMsg(" \nUnable to create the following soil map layers: '" + "', '".join(badList) + "' \n ", 1)
 
     else:
-        PrintMsg(" \nCreateSoilMaps finished \ n ", 0)
+        PrintMsg(" \nCreateSoilMaps finished \n ", 0)
     
     del badList
 
 except:
     errorMsg()
+
+finally:
+    try:
+        del mxd, df
+
+    except:
+        pass

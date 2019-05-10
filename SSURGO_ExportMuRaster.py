@@ -85,6 +85,12 @@
 #           errors when trying to run all states at once.
 #
 # 2015-11-03 Fixed failure when indexing non-geodatabase rasters such as .IMG.
+#
+# 2018-07-12 Removed possibly unneccessary ArcINFO workspace creation because it requires an Advanced license - Olga
+
+# 2018-09-11 Removed 'ImportMetadata_conversion' because I suddenly started getting that Tool validation error. Possibly due
+#            to a Windows or IE update?
+
 
 ## ===================================================================================
 class MyError(Exception):
@@ -212,7 +218,7 @@ def SnapToNLCD(inputFC, iRaster):
             PrintMsg("Projected coordinate system is " + inputSRName + "; units = '" + theUnits + "'", 0)
             raise MyError, "Unable to align raster output with this coordinate system"
 
-        elif inputSRName == "Albers_Conical_Equal_Area":
+        elif inputSRName in ["Albers_Conical_Equal_Area", "USA_Contiguous_Albers_Equal_Area_Conic_USGS_version"]:
             # This used to be the Contiguous USGS version
             xNLCD = 532695
             yNLCD = 1550295
@@ -880,6 +886,8 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
         mdExport = os.path.join(xmlPath, "gSSURGO_MapunitRaster.xml") # original template metadata in script directory
         #PrintMsg(" \nParsing gSSURGO template metadata file: " + mdExport, 1)
 
+        #PrintMsg(" \nUsing SurveyInfo: " + str(surveyInfo), 1)
+
         # Cleanup output XML files from previous runs
         if os.path.isfile(mdImport):
             os.remove(mdImport)
@@ -903,6 +911,7 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
         #
         d = datetime.date.today()
         today = str(d.isoformat().replace("-",""))
+        #PrintMsg(" \nToday replacement string: " + today, 1)
 
         # Set fiscal year according to the current month. If run during January thru September,
         # set it to the current calendar year. Otherwise set it to the next calendar year.
@@ -912,6 +921,8 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
 
         else:
             fy = "FY" + str(d.year)
+
+        #PrintMsg(" \nFY replacement string: " + str(fy), 1)
 
         # Process gSSURGO_MapunitRaster.xml from script directory
         tree = ET.parse(mdExport)
@@ -1018,8 +1029,8 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
 
         # delete the temporary xml metadata file
         if os.path.isfile(mdImport):
-            #os.remove(mdImport)
-            pass
+            os.remove(mdImport)
+            #pass
 
         # delete metadata tool logs
         logFolder = os.path.dirname(env.scratchFolder)
@@ -1100,11 +1111,11 @@ def ConvertToRaster(target, iRaster, bTiled):
         # Create an ArcInfo workspace under the scratchFolder. Trying to prevent
         # 99999 errors for PolygonToRaster on very large databases
         #
-        aiWorkspace = env.scratchFolder
+        #aiWorkspace = env.scratchFolder
 
-        if not arcpy.Exists(os.path.join(aiWorkspace, "info")):
+        #if not arcpy.Exists(os.path.join(aiWorkspace, "info")):
             #PrintMsg(" \nCreating ArcInfo workspace (" + os.path.basename(aiWorkspace) + ") in: " + os.path.dirname(aiWorkspace), 1)
-            arcpy.CreateArcInfoWorkspace_management(os.path.dirname(aiWorkspace), os.path.basename(aiWorkspace))
+        #    arcpy.CreateArcInfoWorkspace_management(os.path.dirname(aiWorkspace), os.path.basename(aiWorkspace))
 
         # turn off automatic Pyramid creation and Statistics calculation
         env.rasterStatistics = "NONE"

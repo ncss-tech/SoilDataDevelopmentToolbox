@@ -1814,10 +1814,10 @@ def CalcSOC(inputDB, outputDB, theCompTable, theMuTable, dPct, dFrags, depthList
                                  
                             soc =  ( (hzT * ( ( om / 1.724 ) * db3 )) / 100.0 ) * ((100.0 - fragvol) / 100.0) * ( compPct * 100 )
 
-                            if td == 0 and bd == 5.0:
+                            #if td == 0 and bd == 5.0:
                                 # Everything here matches the other script
-                                test = [mukey, cokey, compPct, compName, localPhase, chkey, om, db3, top, bot, hzT, fragvol, round(soc, 2)]
-                                PrintMsg(str(test), 1)
+                            #    test = [mukey, cokey, compPct, compName, localPhase, chkey, om, db3, top, bot, hzT, fragvol, round(soc, 2)]
+                                #PrintMsg(str(test), 1)
 
                             if not cokey in dComp:
                                 # Create initial entry for this component using the first horizon CHK
@@ -2081,10 +2081,10 @@ def MakeNCCPIQueryTable(inputDB, qTable):
         if bRulekey:
             # Much better performance if COINTER.RULEKEY is indexed and can be used in the query
             if mainRuleName == 'NCCPI - National Commodity Crop Productivity Index (Ver 2.0)':
-                theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.RULEKEY = '34170'"
+                theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.MRULEKEY = '34170'"
 
             else:
-                theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.RULEKEY = '54955'"
+                theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.MRULEKEY = '54955'"
                 
         else:
             theSQL = "COMPONENT.MAJCOMPFLAG = 'Yes' AND COMPONENT.COKEY = COINTERP.COKEY  AND COINTERP.MRULENAME = '" + mainRuleName + "'"
@@ -2344,9 +2344,9 @@ def CalcNCCPI3(inputDB, theMuTable, qTable, dPct):
         iCnt = int(arcpy.GetCount_management(qTable).getOutput(0))
         noVal = list()  # Get a list of components with no overall index rating
 
-        #PrintMsg(" \n\tReading query table with " + Number_Format(iCnt, 0, True) + " records...", 0)
+        PrintMsg(" \n\tReading query table with " + Number_Format(iCnt, 0, True) + " records...", 0)
 
-        arcpy.SetProgressor("step", "Reading NCCPI query table...", 0,iCnt, 1)
+        arcpy.SetProgressor("step", "Reading NCCPI query table...", 0, iCnt, 1)
 
         with arcpy.da.SearchCursor(qTable, qFields, where_clause=querytblSQL, sql_clause=sqlClause) as qCursor:
 
@@ -2409,6 +2409,14 @@ def CalcNCCPI3(inputDB, theMuTable, qTable, dPct):
 
                         else:
                             dVals[mukey][4] = (oldVal + (fuzzyValue * comppct))
+
+                    #elif ruleName.startswith("NCCPI"):
+                    #    PrintMsg(" \n" + mukey + ":" + cokey + ", " + str(ruleName), 1)
+                    
+                    #else:
+                        # These would be rating reasons or impacted soils
+                    #    PrintMsg(" \n" + mukey + ":" + cokey + ", " + str(ruleName), 1)
+                        
 
                 elif ruleName.startswith("NCCPI - National Commodity Crop Productivity Index"):
                     # This component does not have an NCCPI rating
@@ -2503,7 +2511,7 @@ def CalcPWSL(inputDB, outputDB, theMuTable, dPct):
         # Using the same component horizon table as always
         queryTbl = os.path.join(outputDB, "QueryTable_Hz")
         numRows = int(arcpy.GetCount_management(queryTbl).getOutput(0))
-        PrintMsg(" \n\tCalculating Potential Wet Soil Landscapes using " + queryTbl + "...", 0)
+        PrintMsg(" \n\tCalculating Potential Wet Soil Landscapes using...", 0)
         qFieldNames = ["mukey", "muname", "cokey", "comppct_r",  "compname", "localphase", "otherph", "majcompflag", "compkind", "hydricrating", "drainagecl"]
         pwSQL = "COMPPCT_R > 0"
         compList = list()
@@ -3044,7 +3052,7 @@ def CreateValuTable(inputDB):
 
             indexList = [indx.name.upper() for indx in arcpy.ListIndexes(os.path.join(inputDB, "cointerp"))]
                          
-            if "INDX_COINTERPRULEKEY" in indexList:
+            if "INDX_COINTERPMRULEKEY" in indexList:
                 bRulekey = True
 
             else:
