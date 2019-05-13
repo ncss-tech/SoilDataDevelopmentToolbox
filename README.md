@@ -9,3 +9,6 @@ The Soil Data Development Tools for ArcGIS™ includes the toolset used by USDA-
 <a href="https://www.nrcs.usda.gov/wps/PA_NRCSConsumption/download?cid=nrcseprd362255&ext=pdf">Soil Data Development Toolbox - User Guide 5.0</a>
 
 <a href="https://www.nrcs.usda.gov/wps/PA_NRCSConsumption/download?cid=nrcseprd427806&ext=pdf">gSSURGO Mapping Quick Guide</a>
+
+
+<a href="https://youtu.be/PxzE1m2CXYo">gSSURGO - Standard Layers and Zones Explained on YouTube</a>
