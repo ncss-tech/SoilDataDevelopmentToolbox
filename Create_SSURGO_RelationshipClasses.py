@@ -216,22 +216,23 @@ def CreateRL(wksp, bOverwrite):
                         arcpy.CreateRelationshipClass_management("mapunit", fc, "zMapunit_" + fc, "SIMPLE", "> Mapunit Polygon Layer", "< Mapunit Table", "NONE", "ONE_TO_MANY", "NONE", "mukey", "MUKEY", "","")
 
                 elif dataType == "Mapunit Line":
-                    if bOverwrite or not arcpy.Exists("zMapunit_MULINE"):
+                    
+                    if bOverwrite or not arcpy.Exists("zMapunit_MULINE") and arcpy.Exists("MULINE"):
                         PrintMsg("    --> zMapunit_" + fc, 1)
                         arcpy.CreateRelationshipClass_management("mapunit", fc, "zMapunit_" + fc, "SIMPLE", "> Mapunit Line Layer", "< + Mapunit Table", "NONE", "ONE_TO_MANY", "NONE", "mukey", "MUKEY", "","")
 
                 elif dataType == "Mapunit Point":
-                    if bOverwrite or not arcpy.Exists("zMapunit_MUPOINT"):
+                    if bOverwrite or not arcpy.Exists("zMapunit_MUPOINT") and arcpy.Exists("MUPOINT"):
                         PrintMsg("    --> zMapunit_" + fc, 1)
                         arcpy.CreateRelationshipClass_management("mapunit", fc, "zMapunit_" + fc, "SIMPLE", "> MapUnit Point Layer", "< Mapunit Table", "NONE", "ONE_TO_MANY", "NONE", "mukey", "MUKEY", "","")
 
                 elif dataType == "Special Feature Point":
-                    if bOverwrite or not arcpy.Exists("zFeatdesc_FEATPOINT"):
+                    if bOverwrite or not arcpy.Exists("zFeatdesc_FEATPOINT") and arcpy.Exists("FEATPOINT"):
                         PrintMsg("    --> zFeatdesc_" + fc, 1)
                         arcpy.CreateRelationshipClass_management("featdesc", fc, "zFeatdesc_" + fc, "SIMPLE", "> SF Point", "< Featdesc Table", "NONE", "ONE_TO_MANY", "NONE", "featkey", "FEATKEY", "","")
 
                 elif dataType == "Special Feature Line":
-                    if bOverwrite or not arcpy.Exists("zFeatdesc_FEATLINE"):
+                    if bOverwrite or not arcpy.Exists("zFeatdesc_FEATLINE") and arcpy.Exists("FEATLINE"):
                         PrintMsg("    --> zFeatdesc_" + fc, 1)
                         arcpy.CreateRelationshipClass_management("featdesc", fc, "zFeatdesc_" + fc, "SIMPLE", "> SF Line Layer", "< Featdesc Table", "NONE", "ONE_TO_MANY", "NONE", "featkey", "FEATKEY", "","")
 
@@ -529,15 +530,15 @@ def CreateTableRelationships(wksp):
 
             tblCnt = int(arcpy.GetCount_management(queryTableName).getOutput(0))
             PrintMsg(" \nQuery table has " + str(tblCnt) + " records", 1)
-            # arcpy.CopyRows_management(queryTableName, r"c:\geodata\scratch.gdb\MdTable")
+            #arcpy.CopyRows_management(queryTableName, os.path.join(env.scratchGDB, "MdTable"))
 
-            fields = arcpy.Describe(queryTableName).fields
-            for fld in fields:
-                PrintMsg("\tQuery Table: " + fld.name, 1)
+            #fields = arcpy.Describe(queryTableName).fields
+            #for fld in fields:
+            #    PrintMsg("\tQuery Table: " + fld.name, 1)
 
 
             # Fields in RelshpInfo table view
-            # OBJECTID, LTABPHYNAME, RTABPHYNAME, RELATIONSHIPNAME, LTABCOLPHYNAME, RTABCOLPHYNAME, CARDINALITY
+            # OBJECTID, LTABPHYNAME, RTABPHYNAME, RELATIONSHIPNAME, LTABCOLPHYNAME, RTABCOLPHYNAME
             # Open table view and step through each record to retrieve relationshipclass parameters             
             with arcpy.da.SearchCursor(queryTableName, ["mdstatrshipmas_ltabphyname", "mdstatrshipmas_rtabphyname", "mdstatrshipdet_ltabcolphyname", "mdstatrshipdet_rtabcolphyname"]) as theCursor:
 
@@ -548,8 +549,9 @@ def CreateTableRelationships(wksp):
                     # message_direction, cardinality, attributed, origin_primary_key, 
                     # origin_foreign_key, destination_primary_key, destination_foreign_key)
                     #
-                    #AddMsgAndPrint("Reading record " + str(recNum), 1)
-                    originTable, destinationTable, originPKey, originFKey = rec
+                    #PrintMsg("\t" + str(rec), 1)
+                    #originTable, destinationTable, originPKey, originFKey = rec
+                    destinationTable, originTable, originFKey, originPKey = rec
                     
                     originTablePath = os.path.join(wksp, originTable)
                     destinationTablePath = os.path.join(wksp, destinationTable)
@@ -557,14 +559,17 @@ def CreateTableRelationships(wksp):
                     # Use table aliases for relationship labels
                     relName = "z" + originTable.title() + "_" + destinationTable.title()
 
+                    if bOverwrite and arcpy.Exists(relName):
+                        arcpy.Delete_management(relName)
+
                     # create Forward Label i.e. "> Horizon AASHTO Table"
-                    fwdLabel = destinationTable + " Table"
+                    fwdLabel = "< " + destinationTable.title() + " Table"
 
                     # create Backward Label i.e. "< Horizon Table"
-                    backLabel = "<  " + originTable + " Table"
+                    backLabel = ">  " + originTable.title() + " Table"
 
                     if arcpy.Exists(originTablePath) and arcpy.Exists(destinationTablePath):
-                        PrintMsg("\tCreating relationship for " + originTable + " and " + destinationTable, 1)
+                        PrintMsg("\tCreating relationship for " + originTable + " to " + destinationTable, 1)
                         
                         #if FindField(originTablePath, originPKey) and FindField(wksp + os.sep + destinationTablePath, originFKey):
                         arcpy.CreateRelationshipClass_management(originTablePath, destinationTablePath, relName, "SIMPLE", fwdLabel, backLabel, "NONE", "ONE_TO_MANY", "NONE", originPKey, originFKey, "","")
@@ -583,32 +588,167 @@ def CreateTableRelationships(wksp):
         PrintMsg(" \nCreating Relationships between Featureclasses and Tables:", 1)
 
         # Relationship between MUPOLYGON --> Mapunit Table            
-        arcpy.CreateRelationshipClass_management(wksp + os.sep + "MUPOLYGON", wksp + os.sep + "mapunit", wksp + os.sep + "xSpatial_MUPOLYGON_Mapunit", "SIMPLE", "> Mapunit Table", "< MUPOLYGON_Spatial", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
+        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MUPOLYGON"), os.path.join(wksp, "zSpatial_MUPOLYGON_Mapunit"), "SIMPLE", "< MUPOLYGON", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
         #AddMsgAndPrint("\t" + soilsFC + formatTabLength1 + "mapunit" + "            --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_MUPOLYGON_Mapunit", 1)
 
         # Relationship between MUPOLYGON --> Mapunit Aggregate Table
-        arcpy.CreateRelationshipClass_management(wksp + os.sep + "MUPOLYGON", wksp + os.sep + "muaggatt", wksp + os.sep + "xSpatial_MUPOLYGON_Muaggatt", "SIMPLE", "> Mapunit Aggregate Table", "< MUPOLYGON_Spatial", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
+        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "muaggatt"), os.path.join(wksp, "MUPOLYGON"), os.path.join(wksp, "zSpatial_MUPOLYGON_Muaggatt"), "SIMPLE", "< MUPOLYGON", "> Mapunit Aggregate Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
         #AddMsgAndPrint("\t" + soilsFC + formatTabLength1 + "muaggatt" + "           --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_MUPOLYGON_Muaggatt", 1)
 
         # Relationship between SAPOLYGON --> Legend Table
-        arcpy.CreateRelationshipClass_management(wksp + os.sep + "SAPOLYGON", wksp + os.sep + "legend", wksp + os.sep + "xSpatial_SAPOLYGON_Legend", "SIMPLE", "> Legend Table", "< SAPOLYGON_Spatial", "NONE","ONE_TO_MANY", "NONE","LKEY","lkey", "","")
+        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "legend"), os.path.join(wksp, "SAPOLYGON"), os.path.join(wksp, "zSpatial_SAPOLYGON_Legend"), "SIMPLE", "< SAPOLYGON", "> Legend Table", "NONE","ONE_TO_MANY", "NONE","LKEY","lkey", "","")
         #AddMsgAndPrint("\t" + ssaFC + formatTabLength1 + "legend" + "             --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_SAPOLYGON_Legend", 1)
 
-        # Relationship between MULINE --> Mapunit Table          
-        arcpy.CreateRelationshipClass_management(wksp + os.sep + "MULINE", wksp + os.sep + "mapunit", wksp + os.sep + "xSpatial_MULINE_Mapunit", "SIMPLE", "> Mapunit Table", "< MULINE_Spatial", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
-        #AddMsgAndPrint("\t" + soilsmuLineFC + "         --> mapunit" + "            --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_MULINE_Mapunit", 1)
+        # Relationship between MULINE --> Mapunit Table
+        if arcpy.Exists("MULINE"):
+            arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MULINE"), os.path.join(wksp, "zSpatial_MULINE_Mapunit"), "SIMPLE", "< MULINE", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
+            #AddMsgAndPrint("\t" + soilsmuLineFC + "         --> mapunit" + "            --> " + "ONE_TO_ONE" + "  --> " + "zSpatial_MULINE_Mapunit", 1)
 
-        # Relationship between MUPOINT --> Mapunit Table            
-        arcpy.CreateRelationshipClass_management(wksp + os.sep + "MUPOINT", wksp + os.sep + "mapunit", wksp + os.sep + "xSpatial_MUPOINT_Mapunit", "SIMPLE", "> Mapunit Table", "< MUPOINT_Spatial", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
-        #AddMsgAndPrint("\t" + soilsmuPointFC + "        --> mapunit" + "            --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_MUPOINT_Mapunit", 1)
+        # Relationship between MUPOINT --> Mapunit Table
+        if arcpy.Exists("MUPOINT"):
+            arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MUPOINT"), os.path.join(wksp, "zSpatial_MUPOINT_Mapunit"), "SIMPLE", "< MUPOINT", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
+            #AddMsgAndPrint("\t" + soilsmuPointFC + "        --> mapunit" + "            --> " + "ONE_TO_ONE" + "  --> " + "zSpatial_MUPOINT_Mapunit", 1)
 
-        # Relationship between FEATLINE --> Featdesc Table            
-        arcpy.CreateRelationshipClass_management(wksp + os.sep + "FEATLINE", wksp + os.sep + "featdesc", wksp + os.sep + "xSpatial_SPECLINE_Featdesc", "SIMPLE", "> Featdesc Table", "< SPECLINE_Spatial", "NONE","ONE_TO_MANY", "NONE","FEATKEY","featkey", "","")
-        #AddMsgAndPrint("\t" + specLineFC + "       --> featdesc" + "           --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_SPECLINE_Featdesc", 1)
+        # Relationship between FEATLINE --> Featdesc Table
+        if arcpy.Exists("FEATLINE"):
+            arcpy.CreateRelationshipClass_management(os.path.join(wksp, "featdesc"), os.path.join(wksp, "FEATLINE"), os.path.join(wksp, "zSpatial_FEATLINE_Featdesc"), "SIMPLE", "< FEATLINE", "> Featdesc Table", "NONE","ONE_TO_MANY", "NONE","FEATKEY","featkey", "","")
+            #AddMsgAndPrint("\t" + specLineFC + "       --> featdesc" + "           --> " + "ONE_TO_ONE" + "  --> " + "zSpatial_SPECLINE_Featdesc", 1)
 
         # Relationship between FEATPOINT --> Featdesc Table
-        arcpy.CreateRelationshipClass_management(wksp + os.sep + "FEATPOINT", wksp + os.sep + "featdesc", wksp + os.sep + "xSpatial_SPECPOINT_Featdesc", "SIMPLE", "> Featdesc Table", "< SPECPOINT_Spatial", "NONE","ONE_TO_MANY", "NONE","FEATKEY","featkey", "","")
-        #AddMsgAndPrint("\t" + specPointFC + formatTabLength1 + "featdesc" + "           --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_SPECPOINT_Featdesc", 1)
+        if arcpy.Exists("FEATPOINT"):
+            arcpy.CreateRelationshipClass_management(os.path.join(wksp, "featdesc"), os.path.join(wksp, "FEATPOINT"), os.path.join(wksp, "zSpatial_FEATPOINT_Featdesc"), "SIMPLE", "< FEATPOINT", "> Featdesc Table", "NONE","ONE_TO_MANY", "NONE","FEATKEY","featkey", "","")
+            #AddMsgAndPrint("\t" + specPointFC + formatTabLength1 + "featdesc" + "           --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_SPECPOINT_Featdesc", 1)
+
+        PrintMsg("\nSuccessfully Created featureclass and table relationships", 1)
+        return True
+
+
+    except:
+        errorMsg()
+        return False
+
+
+## ===============================================================================================================
+def CreateTableRelationships2(wksp):
+    # Create relationship classes between standalone attribute tables.
+    # Relate parameters are pulled from the mdstatrhipdet and mdstatrshipmas tables,
+    # thus it is required that the tables must have been copied from the template database.
+    #
+    # Seem to be having problems with component to chorizon relationships. Try reversing tables.
+
+    try:
+
+        PrintMsg(" \nCreating Relationships between tables:",1)
+        env.workspace = wksp
+        
+        if arcpy.Exists(os.path.join(wksp, "mdstatrshipdet")) and arcpy.Exists(os.path.join(wksp, "mdstatrshipmas")):
+
+            # Create new Table View to contain results of join between relationship metadata tables
+
+            tbl1 = os.path.join(wksp, "mdstatrshipmas")
+            tbl2 = os.path.join("mdstatrshipdet")
+            tblList = [tbl1, tbl2]
+            queryTableName = "TblRelationships"
+
+            sql = "mdstatrshipdet.ltabphyname = mdstatrshipmas.ltabphyname AND mdstatrshipdet.rtabphyname = mdstatrshipmas.rtabphyname AND mdstatrshipdet.relationshipname = mdstatrshipmas.relationshipname"
+
+            fldList = [["mdstatrshipmas.ltabphyname","LTABPHYNAME"],["mdstatrshipmas.rtabphyname", "RTABPHYNAME"],["mdstatrshipdet.relationshipname", "RELATIONSHIPNAME"], ["mdstatrshipdet.ltabcolphyname", "LTABCOLPHYNAME"],["mdstatrshipdet.rtabcolphyname",  "RTABCOLPHYNAME"]]
+
+            arcpy.MakeQueryTable_management (tblList, queryTableName, "ADD_VIRTUAL_KEY_FIELD", "", fldList, sql)
+
+            if not arcpy.Exists(queryTableName):
+                raise MyError, "Failed to create metadata table required for creation of relationshipclasses"
+
+            tblCnt = int(arcpy.GetCount_management(queryTableName).getOutput(0))
+            PrintMsg(" \nQuery table has " + str(tblCnt) + " records", 1)
+            #arcpy.CopyRows_management(queryTableName, os.path.join(env.scratchGDB, "MdTable"))
+
+            #fields = arcpy.Describe(queryTableName).fields
+            #for fld in fields:
+            #    PrintMsg("\tQuery Table: " + fld.name, 1)
+
+
+            # Fields in RelshpInfo table view
+            # OBJECTID, LTABPHYNAME, RTABPHYNAME, RELATIONSHIPNAME, LTABCOLPHYNAME, RTABCOLPHYNAME
+            # Open table view and step through each record to retrieve relationshipclass parameters             
+            with arcpy.da.SearchCursor(queryTableName, ["mdstatrshipmas_ltabphyname", "mdstatrshipmas_rtabphyname", "mdstatrshipdet_ltabcolphyname", "mdstatrshipdet_rtabcolphyname"]) as theCursor:
+
+                for rec in theCursor:
+                    # Get relationshipclass parameters from current table row
+                    # Syntax for CreateRelationshipClass_management (origin_table, destination_table, 
+                    # out_relationship_class, relationship_type, forward_label, backward_label, 
+                    # message_direction, cardinality, attributed, origin_primary_key, 
+                    # origin_foreign_key, destination_primary_key, destination_foreign_key)
+                    #
+                    #PrintMsg("\t" + str(rec), 1)
+                    originTable, destinationTable, originPKey, originFKey = rec
+                    #destinationTable, originTable, originFKey, originPKey = rec
+                    
+                    originTablePath = os.path.join(wksp, originTable)
+                    destinationTablePath = os.path.join(wksp, destinationTable)
+
+                    # Use table aliases for relationship labels
+                    relName = "z" + originTable.title() + "_" + destinationTable.title()
+
+                    if bOverwrite and arcpy.Exists(relName):
+                        arcpy.Delete_management(relName)
+
+                    # create Forward Label i.e. "> Horizon AASHTO Table"
+                    fwdLabel = "< " + destinationTable.title() + " Table"
+
+                    # create Backward Label i.e. "< Horizon Table"
+                    backLabel = ">  " + originTable.title() + " Table"
+
+                    if arcpy.Exists(originTablePath) and arcpy.Exists(destinationTablePath):
+                        PrintMsg("\tCreating relationship for " + originTable + " to " + destinationTable, 1)
+                        
+                        #if FindField(originTablePath, originPKey) and FindField(wksp + os.sep + destinationTablePath, originFKey):
+                        arcpy.CreateRelationshipClass_management(originTablePath, destinationTablePath, relName, "SIMPLE", fwdLabel, backLabel, "NONE", "ONE_TO_MANY", "NONE", originPKey, originFKey, "","")
+
+
+        else:
+            raise MyError, "Missing one or more of the metadata tables"
+
+
+        # Establish Relationship between tables and Spatial layers
+
+        # The following lines are for formatting only
+        #formatTab1 = 15 - len(soilsFC)
+        #formatTabLength1 = " " * formatTab1 + "--> "
+
+        PrintMsg(" \nCreating Relationships between Featureclasses and Tables:", 1)
+
+        # Relationship between MUPOLYGON --> Mapunit Table            
+        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MUPOLYGON"), os.path.join(wksp, "zSpatial_MUPOLYGON_Mapunit"), "SIMPLE", "< MUPOLYGON", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
+        #AddMsgAndPrint("\t" + soilsFC + formatTabLength1 + "mapunit" + "            --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_MUPOLYGON_Mapunit", 1)
+
+        # Relationship between MUPOLYGON --> Mapunit Aggregate Table
+        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "muaggatt"), os.path.join(wksp, "MUPOLYGON"), os.path.join(wksp, "zSpatial_MUPOLYGON_Muaggatt"), "SIMPLE", "< MUPOLYGON", "> Mapunit Aggregate Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
+        #AddMsgAndPrint("\t" + soilsFC + formatTabLength1 + "muaggatt" + "           --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_MUPOLYGON_Muaggatt", 1)
+
+        # Relationship between SAPOLYGON --> Legend Table
+        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "legend"), os.path.join(wksp, "SAPOLYGON"), os.path.join(wksp, "zSpatial_SAPOLYGON_Legend"), "SIMPLE", "< SAPOLYGON", "> Legend Table", "NONE","ONE_TO_MANY", "NONE","LKEY","lkey", "","")
+        #AddMsgAndPrint("\t" + ssaFC + formatTabLength1 + "legend" + "             --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_SAPOLYGON_Legend", 1)
+
+        # Relationship between MULINE --> Mapunit Table
+        if arcpy.Exists(os.path.join(wksp, "MULINE")):
+            arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MULINE"), os.path.join(wksp, "zSpatial_MULINE_Mapunit"), "SIMPLE", "< MULINE", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
+            #AddMsgAndPrint("\t" + soilsmuLineFC + "         --> mapunit" + "            --> " + "ONE_TO_ONE" + "  --> " + "zSpatial_MULINE_Mapunit", 1)
+
+        # Relationship between MUPOINT --> Mapunit Table
+        if arcpy.Exists(os.path.join(wksp, "MUPOINT")):
+            arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MUPOINT"), os.path.join(wksp, "zSpatial_MUPOINT_Mapunit"), "SIMPLE", "< MUPOINT", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
+            #AddMsgAndPrint("\t" + soilsmuPointFC + "        --> mapunit" + "            --> " + "ONE_TO_ONE" + "  --> " + "zSpatial_MUPOINT_Mapunit", 1)
+
+        # Relationship between FEATLINE --> Featdesc Table
+        if arcpy.Exists(os.path.join(wksp, "FEATLINE")):
+            arcpy.CreateRelationshipClass_management(os.path.join(wksp, "featdesc"), os.path.join(wksp, "FEATLINE"), os.path.join(wksp, "zSpatial_FEATLINE_Featdesc"), "SIMPLE", "< FEATLINE", "> Featdesc Table", "NONE","ONE_TO_MANY", "NONE","FEATKEY","featkey", "","")
+            #AddMsgAndPrint("\t" + specLineFC + "       --> featdesc" + "           --> " + "ONE_TO_ONE" + "  --> " + "zSpatial_SPECLINE_Featdesc", 1)
+
+        # Relationship between FEATPOINT --> Featdesc Table
+        if arcpy.Exists(os.path.join(wksp, "FEATPOINT")):
+            arcpy.CreateRelationshipClass_management(os.path.join(wksp, "featdesc"), os.path.join(wksp, "FEATPOINT"), os.path.join(wksp, "zSpatial_FEATPOINT_Featdesc"), "SIMPLE", "< FEATPOINT", "> Featdesc Table", "NONE","ONE_TO_MANY", "NONE","FEATKEY","featkey", "","")
+            #AddMsgAndPrint("\t" + specPointFC + formatTabLength1 + "featdesc" + "           --> " + "ONE_TO_ONE" + "  --> " + "xSpatial_SPECPOINT_Featdesc", 1)
 
         PrintMsg("\nSuccessfully Created featureclass and table relationships", 1)
         return True
@@ -727,7 +867,7 @@ try:
             env.overwriteOutput = True
 
         #bRL = CreateRL(wksp, bOverwrite)
-        bRL = CreateTableRelationships(wksp)
+        bRL = CreateTableRelationships2(wksp)
 
         theMsg = " \n" + os.path.basename(scriptname) + " finished in " + elapsedTime(begin)
         PrintMsg(theMsg, 1)

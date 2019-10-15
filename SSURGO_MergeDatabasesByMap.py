@@ -268,7 +268,9 @@ def SSURGOVersion(newDB, tabularFolder):
             # Unable to open SYSTEM table in existing dataset
             # Warn user but continue
             PrintMsg("Unable to find Template database table: " + systemInfo, 1)
-            return False
+            PrintMsg("Remove the pass below ", 1)
+            pass
+            #return False
 
         return True
 
@@ -428,6 +430,9 @@ def ImportTabular(inputFolder, subFolder, newDB, areaSym, iCnt):
         "chfrags","chpores","chstrgrp","chtext","chtexgrp","chunifie","cfprodo","cpmat","csmoist", \
         "cstemp","csmorgc","csmorhpp","csmormr","csmorss","chstr","chtextur", \
         "chtexmod","sacatlog","sainterp","sdvalgorithm","sdvattribute","sdvfolder","sdvfolderattribute"]
+
+        PrintMsg(" \nProcessing only COINTERP table...", 1)
+        txtFiles = ["cinterp"]
         # Need to add featdesc import as a separate item (ie. spatial\soilsf_t_al001.txt: featdesc)
 
         # set progressor object which allows progress information to be passed for every merge complete
@@ -469,6 +474,8 @@ def ImportTabular(inputFolder, subFolder, newDB, areaSym, iCnt):
         for txtFile in txtFiles:
 
             # Get table name and alias from dictionary
+            
+            
             if txtFile in tblInfo:
 
                 # Get the table name from the dictionary
@@ -483,6 +490,9 @@ def ImportTabular(inputFolder, subFolder, newDB, areaSym, iCnt):
             txtPath = os.path.join(tabularFolder, txtFile + ".txt")
             if not arcpy.Exists(txtPath):
                 raise MyError, "Could not find textfile: " + txtPath
+
+            #if iCnt == 75: # SDP
+            #    break
 
             # Process existing table
             if arcpy.Exists(os.path.join(newDB, tblName)):

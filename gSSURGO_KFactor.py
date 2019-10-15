@@ -9,7 +9,7 @@
 #           Taxsubgrp like 'Histic%', set KFFACT_RUSLE to '.02'
 #           Skip horizons with texture of 'HPM', 'MPM' or 'SPM'. if this goes down past 25cm, set to '.02'
 #
-# 2016-03-27
+# Intermediate tables: KF_Horizons, KF_Component
 
 ## ===================================================================================
 class MyError(Exception):
@@ -158,10 +158,6 @@ def CreateQueryTables(inputDB, tempDB, KfHorizons):
         PrintMsg(" \n\tHORIZON table...", 0)
         fldHz = [["COKEY", "COKEY"], ["CHKEY", "CHKEY"], ["HZNAME", "HZNAME"], ["DESGNMASTER", "DESGNMASTER"], \
         ["HZDEPT_R", "HZDEPT_R"], ["HZDEPB_R", "HZDEPB_R"], ["OM_R", "OM_R"], ["KFFACT", "KFFACT"]]
-        #fldHz = [["COKEY", "COKEY"], ["CHKEY", "CHKEY"], ["HZNAME", "HZNAME"], ["DESGNMASTER", "DESGNMASTER"], \
-        #["HZDEPT_R", "HZDEPT_R"], ["HZDEPB_R", "HZDEPB_R"], ["OM_R", "OM_R"], ["KFFACT", "KFFACT"], ["SIEVENO10_R", "SIEVENO10_R"]]
-        #fldHz = [["COKEY", "COKEY"], ["CHKEY", "CHKEY"], ["HZNAME", "HZNAME"], ["DESGNMASTER", "DESGNMASTER"], \
-        #["HZDEPT_R", "HZDEPT_R"], ["HZDEPB_R", "HZDEPB_R"], ["OM_R", "OM_R"], ["KFFACT", "KFFACT"], ["ROCKFRAG", "ROCKFRAG"]]
 
         fldHz2 = list()
         dHz = dict()

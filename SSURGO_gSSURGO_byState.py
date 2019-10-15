@@ -390,7 +390,7 @@ def GetFolders(inputFolder, valList, bRequired, theTile):
 
             else:
                 # Missing soil polygon shapefile for a required SSURGO dataset
-                PrintMsg("\t" + shpPath, 1)
+                #PrintMsg("\t" + shpPath, 1)
                 missingList.append(shpAS)
 
         if len(missingList) > 0 and bRequired:
@@ -664,11 +664,6 @@ try:
                 PrintMsg("\tAdding " + theTile + " to list if failed conversions", 0)
                 badExports.append(theTile)
                 err = "Passed - Export failed for " + theTile
-
-                #if arcpy.Exists(outputWS):
-                    # Delete failed geodatabase which is probably empty
-                    #arcpy.Delete_management(outputWS)
-                #    pass
 
             else:
                 # Successful export of the current tile

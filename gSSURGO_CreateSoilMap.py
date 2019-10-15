@@ -11,7 +11,8 @@
 # to the total in the source featureclass. If there is a significant difference, consider
 # applying a query filter using AREASYMBOL to limit the size of the master query table.
 #
-#
+# 0. Need to look at WTA for Depth to Any Restrictive Layer. Customer reported problem. The
+#    201 values are being used in the weighting.
 #
 # 1.  Aggregation method "Weighted Average" can now be used for non-class soil interpretations.
 #
@@ -210,7 +211,7 @@ def elapsedTime(start):
 def get_random_color(pastel_factor=0.5):
     # Part of generate_random_color
     try:
-        newColor = [int(255 *(x+pastel_factor)/(1.0+pastel_factor)) for x in [random.uniform(0,1.0) for i in [1,2,3]]]
+        newColor = [int(255 *(x + pastel_factor)/(1.0 + pastel_factor)) for x in [random.uniform(0,1.0) for i in [1,2,3]]]
 
         return newColor
 
@@ -221,7 +222,7 @@ def get_random_color(pastel_factor=0.5):
 ## ===================================================================================
 def color_distance(c1,c2):
     # Part of generate_random_color
-    return sum([abs(x[0]-x[1]) for x in zip(c1,c2)])
+    return sum([abs(x[0] - x[1]) for x in zip(c1,c2)])
 
 ## ===================================================================================
 def generate_new_color(existing_colors, pastel_factor=0.5):
@@ -311,8 +312,8 @@ def fact(n):
 ## ===================================================================================
 def bernstein(t,n,i):
   ''' Bernstein coefficient '''
-  binom = fact(n)/float(fact(i)*fact(n - i))
-  return binom*((1-t)**(n-i))*(t**i)
+  binom = fact(n) / float(fact(i) * fact(n - i))
+  return binom *( (1-t)**(n-i)) * (t**i)
 
 ## ===================================================================================
 def bezier_gradient(colors, n_out=100):
@@ -333,7 +334,7 @@ def bezier_gradient(colors, n_out=100):
       for i, c in enumerate(RGB_list)
     ]
     # Output color
-    out = [0,0,0]
+    out = [ 0, 0, 0]
     # Add components of each summand together
     for vector in summands:
       for c in range(3):
@@ -342,7 +343,7 @@ def bezier_gradient(colors, n_out=100):
     return out
 
   gradient = [
-    bezier_interp(float(t)/(n_out-1))
+    bezier_interp(float(t)/(n_out - 1))
     for t in range(n_out)
   ]
   # Return all points requested for gradient
@@ -447,17 +448,18 @@ def ColorRamp(dLabels, lowerColor, upperColor):
 
         labelCnt = len(dLabels)
         #PrintMsg(" \nCreating color ramp based upon " + str(labelCnt) + " legend items", 1)
+        #PrintMsg("dLabels: " + str(dLabels), 1)
 
         dColorID = dict()
         dRGB = dict()
 
         # Use dColorID to identify the Lower and Upper Colors
-        dColorID[(255,0,0)] = "Red"
-        dColorID[(255,255,0)] = "Yellow"
-        dColorID[(0,255,0)] ="Green"  # not being used in slope color ramp
-        dColorID[(0,255,255)] = "Cyan"
-        dColorID[(0,0,255)] = "Blue"
-        dColorID[(255,0,255)] = "Magenta"   # not being used in slope color ramp
+        dColorID[(255, 0, 0)] = "Red"
+        dColorID[(255, 255, 0)] = "Yellow"
+        dColorID[(0, 255, 0)] ="Green"  # not being used in slope color ramp
+        dColorID[(0, 255, 255)] = "Cyan"
+        dColorID[(0, 0, 255)] = "Blue"
+        dColorID[(255, 0, 255)] = "Magenta"   # not being used in slope color ramp
 
         dRGB["red"] = (255, 0, 0)
         dRGB["yellow"] = (255, 255, 0)
@@ -475,7 +477,7 @@ def ColorRamp(dLabels, lowerColor, upperColor):
         dColors = dict()
 
         j = -1
-        lastclr = (-1,-1,-1)
+        lastclr = (-1, -1, -1)
 
         for i in range(len(lowerColor)):
 
@@ -495,6 +497,8 @@ def ColorRamp(dLabels, lowerColor, upperColor):
                 colorList.append(dColorID[clr])
                 lastclr = clr
 
+        #PrintMsg(" \nBezierColorRamp inputs: labelCnt (" + str(labelCnt) + ") ,  " + str(colorList), 1)
+        
         newColors = BezierColorRamp.Process(labelCnt, colorList)
 
         for i in range(len(newColors)):
@@ -1169,7 +1173,7 @@ def CreateNumericLayer(sdvLyrFile, dLegend, outputValues, classBV, classBL):
         return None
 
 ## ===================================================================================
-def GetNumericLegend(dLegend, outputValues):
+def GetNumericLegend(outputValues):
     #
     # For Raster layers only...
     # Create final class break values and labels that can be used to create legend
@@ -1197,8 +1201,8 @@ def GetNumericLegend(dLegend, outputValues):
     # maplegendkey 8: random unique values with domain values and legend text. Used for HSG, Irrigated Capability Subclass, AASHTO.
 
     try:
-        #arcpy.SetProgressorLabel("Setting up layer for numeric data")
-        #bVerbose = True
+        arcpy.SetProgressorLabel("Setting up layer for numeric data")
+        bVerbose = True
 
         if bVerbose:
             PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
@@ -1415,7 +1419,7 @@ def GetNumericLegend(dLegend, outputValues):
         if not dSDV["attributeuomabbrev"] is None and len(classBL) == 0:
             if bVerbose:
                 PrintMsg(" \nNo class break labels for " + sdvAtt + " with uom: " + dSDV["attributeuomabbrev"], 1)
-
+        
         return classBV, classBL
 
     except MyError, e:
@@ -1494,6 +1498,7 @@ def CreateJSONLegend(dLegend, outputTbl, outputValues, ratingField, sdvAtt, bFuz
             badLabels = list()
 
             for labelIndx, labelItem in dLegend["labels"].items():
+                #PrintMsg("\tLine 1498. Adding info to legendLabels: " + str(labelIndx) + ", " + str(labelItem), 1)
                 legendLabels.append(labelItem["value"])
 
             for outputValue in outputValues:
@@ -1826,10 +1831,16 @@ def CreateJSONLegend(dLegend, outputTbl, outputValues, ratingField, sdvAtt, bFuz
                         try:
                             #PrintMsg("Getting legend info for legend item #" + str(item), 1)
                             rgb = [dLegend["colors"][item]["red"], dLegend["colors"][item]["green"], dLegend["colors"][item]["blue"], 255]
-                            rating = dLegend["labels"][item]["value"]
-                            legendLabel = dLegend["labels"][item]["label"]
-                            legendList.append([rating, legendLabel, rgb])
-                            #PrintMsg(str(item) + ". '" + str(rating) + "',  '" + str(legendLabel) + "'", 1)
+
+                            try: # SDP 9/28/2019 error for 'Ground-based Solar Arrays, Ballast Anchor Systems'
+                                # This method only includes a value in the legend if it exists in the data
+                                rating = dLegend["labels"][item]["value"]
+                                legendLabel = dLegend["labels"][item]["label"]
+                                legendList.append([rating, legendLabel, rgb])
+                                #PrintMsg(str(item) + ". '" + str(rating) + "',  '" + str(legendLabel) + "'", 1)
+
+                            except:
+                                pass
 
                         except:
                             errorMsg()
@@ -2253,7 +2264,7 @@ def ClassBreaksJSON(outputTbl, outputValues, ratingField, bFuzzy):
         dLayerDef["drawingInfo"] = dRenderer
 
         #PrintMsg(" \n2. dLayerDef: \n" + str(dLayerDef), 0)  # For NCCPI this is WRONG
-        test = dLayerDef['drawingInfo']['renderer']['classBreakInfos']
+        #test = dLayerDef['drawingInfo']['renderer']['classBreakInfos']
         #PrintMsg(" \nclassBreakInfos in ClassBreaksJSON: " + str(test), 1)
 
         return dLayerDef
@@ -3036,13 +3047,17 @@ def CreateMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, outputVa
             #
             #PrintMsg(" \nUpdating layer symbology using JSON method", 1)
             #PrintMsg(" \nJSON layer update: " + str(dLayerDefinition) + " \n ", 1)
+
+            # Let's check the symbology settings before and after running the update
+            beforeSymType = finalMapLayer.symbologyType
+            #beforeSym = finalMapLayer.symbology
+            #beforeValFld = beforeSym.valueField
+            #beforeValues = beforeSym.classValues
+            #PrintMsg(" \nBefore symbology: " + beforeSymType + "; " + beforeValFld + "; " + ", ".join(beforeValues), 1)
+            #PrintMsg(" \ndLayerDefinition: " + str(dLayerDefinition), 1)
+            
             finalMapLayer.updateLayerFromJSON(dLayerDefinition)
 
-            # Might consider turning off 'showOtherValues' for the layer symbology here. However it doesn't seem to work!
-            # Perhaps I've broken the symbology object after updatingFromJSON??
-            # finalMapLayer.symbology.showOtherValues = False
-            #
-            #
 
         # Remove join on original map unit polygon layer
         arcpy.RemoveJoin_management(inputLayer, os.path.basename(outputTbl))
@@ -3108,7 +3123,7 @@ def CreateRasterMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, ou
     try:
         arcpy.SetProgressorLabel("Preparing raster soil map layer")
 
-        #bVerbose = True
+        # bVerbose = True
 
         if bVerbose:
             PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
@@ -3131,17 +3146,20 @@ def CreateRasterMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, ou
         First legend color is: ['0', '128', '0', 255] and last color is ['255', '0', '0', 255]
         """
         legendType = ""
+        # PrintMsg(" \ndLayerDefinition keys: " + str(dLayerDefinition.keys()), 1)
 
         if "drawingInfo" in dLayerDefinition:
             dInfo = dLayerDefinition["drawingInfo"]
+            #PrintMsg(" \ndrawingInfo: " + str(dInfo), 1)
 
             if "renderer" in dInfo:
                 dRender = dInfo["renderer"]
+                legendType = dRender["type"].lower()
 
                 if "classBreakInfos" in dRender:
                     # Get first color
 
-                    legendType = "ClassBreaks"
+                    #legendType = "ClassBreaks"
                     dBreakFirst = dRender["classBreakInfos"][0]
                     dBreakLast = dRender["classBreakInfos"][-1]
 
@@ -3173,7 +3191,9 @@ def CreateRasterMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, ou
 
                 else:
                     if "uniqueValueInfos" in dRender:
-                        legendType = "UniqueValues"
+                        legendType = "uniquevalues"
+                        classLayerFile = os.path.join(os.path.dirname(sys.argv[0]), "SDV_RasterUnique.lyr")
+                        classLayer = arcpy.mapping.Layer(classLayerFile)
                         #PrintMsg(" \nUniqueValueInfos in dRender", 1)
 
                     else:
@@ -3189,16 +3209,11 @@ def CreateRasterMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, ou
             #PrintMsg(str(dLayerDefinition), 1)
             pass
 
-
-
-
-
         # Identify possible symbology mapping layer from template layer file in script directory
         uniqueLayerFile = os.path.join(os.path.dirname(sys.argv[0]), "SDV_RasterUnique.lyr")
         uniqueLayer = arcpy.mapping.Layer(uniqueLayerFile)  # At 10.5 the symbology property is not supported at all. Had to add a check.
 
         # Probably need to create these layers further down the road. May not use them for TEXT values
-
 
         tmpLayerFile = os.path.join(env.scratchFolder, "tmpSDVLayer.lyr")
 
@@ -3225,11 +3240,12 @@ def CreateRasterMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, ou
         if bVerbose:
             PrintMsg(" \nCreating raster layer with join (" + tmpLayerFile +  ")", 1)
             PrintMsg("\tAttributeLogicalDatatype = " + dSDV["attributelogicaldatatype"].lower(), 1)
-            PrintMsg("\tOutput Table Rating Field: " + dFieldInfo[dSDV["resultcolumnname"].upper()][0], 1)
+            PrintMsg("\tOutput Table Rating Field: " + dFieldInfo[dSDV["resultcolumnname"].upper()][0] + " (" + str(dFieldInfo[dSDV["resultcolumnname"].upper()][1]) + " wide)", 1)
             PrintMsg("\tSymbology layer file: " + classLayerFile, 1)
 
         symField = os.path.basename(outputTbl) + "." + dSDV["resultcolumnname"]
         tmpField = os.path.basename(fc) + "." + "SPATIALVER"
+        #fldLen = dFieldInfo[dSDV["resultcolumnname"].upper()][1]
         #
         # Create temporary layer file using input layer with join.
         # This is only neccessary so that I can add it back in as an arcpy.mapping layer
@@ -3246,9 +3262,12 @@ def CreateRasterMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, ou
             PrintMsg(" \nCreated '" + outputLayer + "' using " + tmpLayerFile, 1)
         #
 
-        # Get UNIQUE_VALUES legend information for 5, 7, 8 (non-numeric?)
+        # Get UNIQUE_VALUES legend information
         #
-        if dFieldInfo[dSDV["resultcolumnname"].upper()][0] == "TEXT" or legendType == "UniqueValues":
+        if 1 == 2 and (dFieldInfo[dSDV["resultcolumnname"].upper()][0] == "TEXT" or legendType == "uniquevalues"):
+            #
+            # Skip this unique values symbology until I can figure out how to make it work
+            #
             # iterate through dLabels using the key 'order' to determine sequence within the map legend
             # Added method to handle Not rated for interps
             # Need to add method to handle NULL in interps
@@ -3256,50 +3275,50 @@ def CreateRasterMapLayer(inputLayer, outputTbl, outputLayer, outputLayerFile, ou
             # Includes Soil Taxonomy  4, 0, Random
             #
 
-            # Problem with TFactor
+            # Problem in that the Unique Values renderer does not seem to work with joined rasters
+            #
             #PrintMsg(" \ndLayerDefinition: " + str(dLayerDefinition), 1)
+            #PrintMsg(" \nProcessing symbology for uniquevalues \n ", 1)
+            #PrintMsg(" \nChecking dLabels dict: " + str(dLabels),1 )
+            fldLen = dFieldInfo[dSDV["resultcolumnname"].upper()][1]
 
-            labelText = list()
-            dOrder = dict()    # test. create dictionary with key = uppercase(value) and contains a tuple (order, labeltext)
-            classBV = list()
-            classBL = list()
-            i = 1
 
-            for i in range(1, len(dLabels) + 1):
-                label = dLabels[i]["label"]
-                value = str(dLabels[i]["value"])
-                labelText.append(label)
-                dOrder[value.upper()] = (i, value, label)
-                classBV.append(value) # 10-02 Added this because of TFactor failure
-                classBL.append(label) # 10-02 Added this because of TFactor failure
+            dLegendInfo = dict()
 
-            if "Not Rated" in outputValues:
-                dOrder["NOT RATED"] = (i + 1, "Not Rated", "Not Rated")
+            if not 'uniqueValueInfos' in dRender:
+                raise MyError, "not 'uniqueValueInfos' in dRender"
 
-            elif "Not rated" in outputValues:
-                dOrder["NOT RATED"] = (i + 1, "Not rated", "Not rated")
+            for valInfos in dRender['uniqueValueInfos']:
+                cRed, cGreen, cBlue, opacity = valInfos['symbol']['color']
+                #PrintMsg(" \nvalInfos: " + str(valInfos['symbol']), 1)
+                
+                dLegendInfo[valInfos['value']] = (valInfos['label'], (float(cRed) / 255.0), (float(cGreen) / 255.0), (float(cBlue) / 255.0), 1)
+            
+            arcpy.AddField_management(outputTbl, "CLASS_NAME", "TEXT", "", "", fldLen)
+            arcpy.AddField_management(outputTbl, "RED", "FLOAT")
+            arcpy.AddField_management(outputTbl, "GREEN", "FLOAT")
+            arcpy.AddField_management(outputTbl, "BLUE", "FLOAT")
+            arcpy.AddField_management(outputTbl, "OPACITY", "SHORT")
 
-            if finalMapLayer.supports("symbology") == False or finalMapLayer.symbologyType.upper() == "OTHER":
-                # Failed to get UNIQUE_VALUES renderer for raster. Print help message instead.
-                PrintMsg("\tPlease set 'Unique Values' symbology for this raster layer using the '" + symField + "' field", 1)
+            with arcpy.da.UpdateCursor(outputTbl, [dSDV["resultcolumnname"], "class_name", "red", "green", "blue", "opacity"]) as cur:
+                #PrintMsg(" \nAdding RGB info to raster attribute table", 1)
+                
+                for rec in cur:
+                    keyValue = rec[0]
+                     
+                    if keyValue in dLegendInfo:
+                        label, red, green, blue, opacity = dLegendInfo[keyValue]
+                        rec = [keyValue, label, red, green, blue, opacity]
+                        cur.updateRow(rec)
 
-            else:
-                if bVerbose:
-                    PrintMsg(" \nUpdating raster layer symbology to " + symbologyType + "...", 1)
 
-                finalMapLayer.symbology.valueField = symField
-                finalMapLayer.symbology.classValues = classBV
-
-                if len(classBL)> 0:
-                    finalMapLayer.symbology.classLabels = classBL # Got comppct symbology without this line
-
-        else:
+        elif legendType == 'classbreaks':
             # CLASSIFIED (numeric values)
 
             # Get legend values and labels
             #PrintMsg(" \noutputValues before GetNumericLegend function: " + str(outputValues), 1)
 
-            classBV, classBL = GetNumericLegend(dLegend, outputValues)
+            classBV, classBL = GetNumericLegend(outputValues)
 
             #PrintMsg(" \nOutput values (" + dFieldInfo[dSDV["resultcolumnname"].upper()][0] + ") " + str(classBV), 1)
 
@@ -3480,7 +3499,7 @@ def ReadTable(tbl, flds, wc, level, sql):
     # to handle aggregation methods and tie-handling
     # ReadTable(dSDV["attributetablename"].upper(), flds, primSQL, level, sql)
     try:
-        #bVerbose = False
+        bVerbose = False
 
         arcpy.SetProgressorLabel("Reading input data (" + tbl.lower() +")")
         start = time.time()
@@ -3497,12 +3516,8 @@ def ReadTable(tbl, flds, wc, level, sql):
 
         with arcpy.da.SearchCursor(tbl, flds, where_clause=wc, sql_clause=sql) as cur:
             for rec in cur:
-
                 val = list(rec[1:])
-
-                #if tbl == "CORESTRICTIONS":
-                #    PrintMsg(" \tCR: " + rec[0] + "  " + str(val), 1)
-
+                
                 try:
                     dTbl[rec[0]].append(val)
 
@@ -3765,7 +3780,7 @@ def GetRatingDomain(gdb):
         domainValues = list()
 
         if dSDV["tiebreakdomainname"] is not None:
-            wc = "domainname = '" + dSDV["tiebreakdomainname"] + "'"
+            wc = "domainname = '" + dSDV["tiebreakdomainname"] + "' and choiceobsolete = 'No'"
 
             sc = (None, "ORDER BY choicesequence ASC")
 
@@ -3775,6 +3790,10 @@ def GetRatingDomain(gdb):
 
                     if not val in domainValues:
                         domainValues.append(val)
+
+            #if not None in domainValues:
+            #    domainValues.append(None)
+                
 
         return domainValues
 
@@ -3797,8 +3816,8 @@ def GetValuesFromLegend(dLegend):
 
         else:
 
-            PrintMsg(" \nChanging legend name to 'Progressive'", 1)
-            PrintMsg(" \ndLegend: " + str(dLegend["name"]), 1)
+            #PrintMsg(" \nChanging legend name to 'Progressive'", 1)
+            #PrintMsg(" \ndLegend: " + str(dLegend["name"]), 1)
             legendValues = list()
             #dLegend["name"] = "Progressive"  # bFuzzy
             dLegend["type"] = "1"
@@ -3884,7 +3903,6 @@ def CreateInitialTable(gdb, allFields, dFieldInfo):
 
     except:
         errorMsg()
-
         return None
 
 ## ===================================================================================
@@ -4315,7 +4333,7 @@ def CreateRatingInterps(tblList, sdvTbl, dComponent, dTbl, initialTbl):
                                     newrec = [dAreasymbols[lkey], mukey, musym, muname]
                                     newrec.extend(corec)
                                     newrec.extend(sdvrec)
-                                    #PrintMsg(str(newrec), 1)
+                                    #PrintMsg(str(newrec), 0)
                                     ocur.insertRow(newrec)
 
                             except:
@@ -4331,7 +4349,7 @@ def CreateRatingInterps(tblList, sdvTbl, dComponent, dTbl, initialTbl):
                             newrec = [dAreasymbols[lkey], mukey, musym, muname]
                             newrec.extend(dMissing["COMPONENT"])
                             newrec.extend(dMissing[sdvTbl])
-                            #PrintMsg(str(newrec), 1)
+                            #PrintMsg("*" + str(newrec), 1)
                             ocur.insertRow(newrec)
 
                         except:
@@ -4513,7 +4531,7 @@ def CreateSoilMoistureTable(tblList, sdvTbl, dComponent, dMonth, dTbl, initialTb
     # Create level 4 table (mapunit, component, cmonth, cosoilmoist)
     #
     # Problem 2017-07-24 Steve Campbell found Yolo County mapunits where dominant component,
-    # Depth to Water Table map is reporting 201cm for 459272 where the correctg result should be 91cm.
+    # Depth to Water Table map is reporting 201cm for 459272 where the correct result should be 91cm.
     # My guess is that because there are some months in COSOILMOIST table that are Null, this function
     # is using that value instead of the other months that are 91cm. Try removing NULLs in query that
     # creates the SDV_Data table.
@@ -4656,7 +4674,7 @@ def Aggregate1(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker):
 
             if iMin == None and iMax == -999999999:
                 # No data
-                #raise MyError, "No data for " + sdvAtt
+                #raise MyError, "8. No data for " + sdvAtt
                 raise MyError, ""
 
 
@@ -4839,7 +4857,8 @@ def AggregateCo_DCP(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker,
         if outputValues[0] == -999999999.0 or outputValues[1] == 999999999.0:
             # Sometimes no data can skip through the max min test
             outputValues = [0.0, 0.0]
-            raise MyError, "No data for " + sdvAtt
+            #raise MyError, "No data for " + sdvAtt
+            raise MyError, ""
 
         #if (bZero and outputValues ==  [0.0, 0.0]):
         #    PrintMsg(" \nNo data for " + sdvAtt, 1)
@@ -5501,7 +5520,7 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker,
             if bNulls and not "NONE" in dValues:
                 # Add Null value to domain
                 dValues["NONE"] = [[len(dValues), None]]
-                domainValues.append("NONE")
+                #domainValues.append("NONE")
 
                 if bVerbose:
                     PrintMsg(" \nDomain Values: " + str(domainValues), 1)
@@ -5687,7 +5706,8 @@ def AggregateCo_DCD(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker,
         outputValues.sort()
 
         if (bZero and outputValues ==  [0.0, 0.0]):
-            PrintMsg(" \nNo data for " + sdvAtt, 1)
+            #PrintMsg(" \n1. No data for " + sdvAtt, 1)
+            raise MyError, ""
 
         # Problem with integer or float data below
 
@@ -6187,7 +6207,8 @@ def AggregateCo_Mo_DCD(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreak
 
                 except:
                     dMapunit[mukey] = [cokey]
-                    dAreasymbols[mukey] = areasym
+                    dAreasym[mukey] = areasym
+                    PrintMsg(" \nCheck dAreasymbols setting", 1)
 
                 try:
                     # if the rating value meets the tiebreak rule, save the rating value along with comppct for each component
@@ -6229,7 +6250,7 @@ def AggregateCo_Mo_DCD(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreak
             # Write final ratings to output table
             for mukey in sorted(dFinalRatings):
                 compPct, rating = dFinalRatings[mukey]
-                rec = mukey, compPct, rating, dAreasymbols[mukey]
+                rec = mukey, compPct, rating, dAreasym[mukey]
                 ocur.insertRow(rec)
 
                 if not rating is None and not rating in outputValues:
@@ -6495,6 +6516,412 @@ def AggregateCo_Mo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, t
     #
     # Need to modify this function to correctly sum the comppct_r for the final output table.
 
+    # Using global dValues[key = uppercase-domain value] value = [sequence, domain value]
+
+    try:
+        arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
+
+        #
+        #bVerbose = False
+
+        if bVerbose:
+            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
+
+        # Create final output table with MUKEY, COMPPCT_R and sdvFld
+        outputTbl = os.path.join(gdb, tblName)
+
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
+
+        if bNulls:
+            whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " IS NOT NULL"
+
+        else:
+            whereClause = "COMPPCT_R >=  " + str(cutOff)
+
+        # initialTbl must be in a file geodatabase to support ORDER_BY
+        # Do I really need to sort by attribucolumn when it will be replaced by Domain values later?
+        sqlClause =  (None, " ORDER BY MUKEY ASC, COMPPCT_R DESC")
+
+        if arcpy.Exists(outputTbl):
+            arcpy.Delete_management(outputTbl)
+
+        outputTbl = CreateOutputTable(initialTbl, outputTbl, dFieldInfo)
+        outputValues = list()
+
+        if outputTbl == "":
+            return outputTbl, outputValues
+
+        dComp = dict()     # Try replacing this and dCompPct with dCompRating
+        dCompPct = dict()
+        dCompRating = dict()  # Dictionary with cokey as key, tuple(compPct, ratingIndx)
+        
+        dMapunit = dict()
+        missingDomain = list()
+        dAreasym = dict()
+        #dCase = dict()
+
+        # Read initial table for non-numeric soil properties. Capture domain values and all component ratings.
+        #
+        if not dSDV["attributetype"].lower() == "interpretation" and dSDV["attributelogicaldatatype"].lower() in ["string", "vtext"]:  # Changed here 2016-04-28
+            #
+            # No domain values for non-interp string ratings
+            # !!! Probably never using this section of code.
+            #
+            if bVerbose:
+                PrintMsg((40 * '*'), 1)
+                PrintMsg(" \n*dValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(dValues), 1)
+                PrintMsg("domainValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(domainValues), 1)
+                PrintMsg((40 * '*'), 1)
+
+            with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
+
+                if bVerbose:
+                    PrintMsg(" \nReading initial data...", 1)
+
+                for rec in cur:
+                    # "MUKEY", "COKEY", "COMPPCT_R", RATING
+                    mukey, cokey, compPct, rating, areasym = rec
+                    dAreasym[mukey] = areasym
+                    #dComp[cokey] = rating
+                    #dCompPct[cokey] = compPct
+                    dCompRating[cokey] = [compPct, rating]
+                    #dCase[str(rating).upper()] = rating  # save original value using uppercase key
+
+                    # save list of components for each mapunit
+                    try:
+                        dMapunit[mukey].append(cokey)
+
+                    except:
+                        dMapunit[mukey] = [cokey]
+
+        elif dSDV["attributelogicaldatatype"].lower() in ["string", "float", "integer", "choice"]:
+            # Interp or numeric soil properties
+            # Flooding and Ponding Frequency would fall in the second section below that has a domain
+
+            if len(domainValues) > 1 and not "None" in domainValues:
+                PrintMsg(" \n******************* Immediately adding 'None' to dValues ****************" , 1)
+                #dValues["<NULL>"] = [len(dValues), None]
+                #domainValues.append("None")
+
+            if bVerbose:
+                PrintMsg(" \n**domainValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(domainValues) + " \n ", 1)
+                PrintMsg(" \n**dValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(dValues), 1)
+
+
+            if  dSDV["tiebreakdomainname"] is None:
+                # There are no domain values. We must make sure that the legend values are the same as
+                # the output values.
+                # 
+                PrintMsg(" \nNo domain name for this property", 1)
+
+                with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
+
+                    if bVerbose:
+                        PrintMsg(" \nReading initial data...", 1)
+
+                    for rec in cur:
+                        mukey, cokey, compPct, rating, areasym = rec
+                        dAreasym[mukey] = areasym
+                        # "MUKEY", "COKEY", "COMPPCT_R", RATING
+                        #PrintMsg("\t" + str(rec), 1)
+                        # save list of components for each mapunit
+                        try:
+                            dMapunit[mukey].append(cokey)
+
+                        except:
+                            dMapunit[mukey] = [cokey]
+
+                        # this is a new component record. create a new dictionary item.
+                        #
+                        if not cokey in dComp:
+
+                            if not rating is None:
+                                dCase[str(rating).upper()] = rating
+
+                                if str(rating).upper() in dValues:
+                                    #if mukey == '2780145':
+                                    #    PrintMsg("\t*Target mapunit rating '" + rating + "' assigning index '" + str(dValues[str(rating).upper()][0]) + "' to dComp", 1)
+                                    #dComp[cokey] = rating
+                                    dValues[str(rating).upper()][1] = rating
+                                    #dCompPct[cokey] = compPct
+                                    dCompRating[cokey] = [compPct, dValues[str(rating).upper()][0]]
+
+                                    # compare actual rating value to domainValues to make sure case is correct
+                                    #
+                                    # This does not make sense. domainValues must be coming from maplegendxml.
+                                    #
+                                    if not rating in domainValues: # this is a case problem
+                                        # replace the original dValue item
+                                        dValues[str(rating).upper()][1] = rating
+
+                                        # replace the value in domainValues list
+                                        for i in range(len(domainValues)):
+                                            if str(domainValues[i]).upper() == str(rating).upper():
+                                                domainValues[i] = rating
+
+
+                                else:
+                                    # dValues is keyed on uppercase string rating or is Null
+                                    #
+                                    # Conservation Tree Shrub has some values not found in the domain.
+                                    # How can this be? Need to check with George?
+                                    #
+                                    #PrintMsg("\tdValue not found for: " + str(rec), 1)
+                                    if not str(rating) in missingDomain:
+                                        # Try to add missing value to dDomainValues dict and domainValues list
+                                        #dComp[cokey] = len(dValues)
+                                        dValues[str(rating).upper()] = [len(dValues), rating]
+                                        domainValues.append(rating)
+                                        #domainValuesUp.append(str(rating).upper())
+                                        missingDomain.append(str(rating))
+                                        #dCompPct[cokey] = compPct
+                                        dCompRating[cokey] = [compPct, rating]
+                                                          
+
+                                        #PrintMsg("\tAdding value '" + str(rating) + "' to domainValues", 1)
+
+                            else:
+                                # Rating is Null
+                                #dComp[cokey] = dValues["<Null>"][0]
+                                #dComp[cokey] = rating
+                                #dValues[str(rating).upper()][1] = rating
+                                #dCompPct[cokey] = compPct
+                                dCompRating[cokey] = [compPct, None]
+
+                                #if mukey == '2780145':
+                                #    PrintMsg("\t***Target mapunit rating '" + rating + "' assigning index '" + str(dValues["<Null>"][0]) + "' to dComp", 1)
+
+
+
+
+            else:
+                # New code for Ponding Frequency which has a domain
+                #
+                #PrintMsg(" \nDomain name for this property: '" + dSDV["tiebreakdomainname"] + "'", 1)
+                #PrintMsg(" \ndomainValues: " + str(domainValues) + " \n ", 1)
+                #PrintMsg(" \ndValues: " + str(dValues), 1)
+
+                if tieBreaker == dSDV["tiebreakhighlabel"]:
+                    
+                    with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
+                        if bVerbose:
+                            PrintMsg(" \nReading initial data from " + initialTbl + "...", 1)
+
+                        for rec in cur:
+                            mukey, cokey, compPct, ratingClass, areasym = rec
+                            mukey = int(mukey)
+                            cokey = int(cokey)
+                            dAreasym[mukey] = areasym
+
+                            if not ratingClass is None:
+
+                                # Get the rating sequence number from the ordered domain
+                                try:
+                                    ratingIndx = dValues[str(ratingClass).upper()][0]
+
+                                    # this is a new component record. create a new dictionary item.
+                                    #
+                                    if not cokey in dCompRating:
+                                        # save list of components for each mapunit
+                                        dCompRating[cokey] = [compPct, ratingIndx]
+                                        
+                                        try:
+                                            # existing mapunit
+                                            dMapunit[mukey].append(cokey)
+
+                                        except:
+                                            # new mapunit
+                                            dMapunit[mukey] = [cokey]
+
+                                    else:
+                                        # other months for this component
+                                        # if this new index is greater than the old one, keep  it
+                                        oldIndx = dCompRating[cokey][1]
+                                        
+                                        if oldIndx < ratingIndx:
+                                            dCompRating[cokey][1] = ratingIndx
+
+                                except KeyError:
+                                    # encountered value that is not a member of the domain
+                                    # Example: "Common" is obsolete value in the Ponding Frequency Class
+                                    pass
+
+                                    
+                elif tieBreaker == dSDV["tiebreaklowlabel"]:
+
+                    with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
+                        if bVerbose:
+                            PrintMsg(" \nReading initial data from " + initialTbl + "...", 1)
+
+                        for rec in cur:
+                            mukey, cokey, compPct, ratingClass, areasym = rec
+                            mukey = int(mukey)
+                            cokey = int(cokey)
+                            dAreasym[mukey] = areasym
+
+                            if not ratingClass is None:
+
+                                # Get the rating sequence number from the ordered domain
+                                try:
+                                    ratingIndx = dValues[str(ratingClass).upper()][0]
+
+                                    # this is a new component record. create a new dictionary item.
+                                    #
+                                    if not cokey in dCompRating:
+                                        # save list of components for each mapunit
+                                        dCompRating[cokey] = [compPct, ratingIndx]
+                                        
+                                        try:
+                                            # existing mapunit
+                                            dMapunit[mukey].append(cokey)
+
+                                        except:
+                                            # new mapunit
+                                            dMapunit[mukey] = [cokey]
+
+                                    else:
+                                        # other months for this component
+                                        # if this new index is greater than the old one, keep  it
+                                        oldIndx = dCompRating[cokey][1]
+                                        
+                                        if oldIndx > ratingIndx:
+                                            dCompRating[cokey][1] = ratingIndx
+
+                                except KeyError:
+                                    # encountered value that is not a member of the domain
+                                    # Example: "Common" is obsolete value in the Ponding Frequency Class
+                                    pass
+                    
+
+        else:
+            raise MyError, "Problem with handling domain values of type '" + dSDV["attributelogicaldatatype"]
+
+        # Aggregate monthly index values to a single value for each component??? Would it not be better to
+        # create a new function for COMONTH-DCD? Then I could simplify this function.
+        #
+        # Sort depending upon tiebreak setting
+        # Update dictionary with a single index value for each component
+        #if not dSDV["attributelogicaldatatype"].lower() in ["string", "vText"]:
+
+        if bVerbose:
+            PrintMsg(" \nAggregating to a single value per component which would generally only apply to COMONTH properties?", 1)
+
+
+        # Save list of component rating data to each mapunit, sort and write out
+        # a single map unit rating
+        #
+        dRatings = dict()
+
+        if bVerbose:
+            PrintMsg(" \nWriting map unit rating data to final output table", 1)
+            PrintMsg(" \nUsing tiebreaker '" + tieBreaker + "' (where choices are " + dSDV["tiebreaklowlabel"] + " or " + dSDV["tiebreakhighlabel"] + ")", 1)
+
+        if tieBreaker == dSDV["tiebreakhighlabel"]:
+            with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
+
+                for mukey, cokeys in dMapunit.items():
+                    # Since this is COMONTH data, each cokey could be listed 12X.
+                    dRating = dict()  # save sum of comppct for each rating within a mapunit
+                    muVals = list()   # may not need this for DCD
+
+                    for cokey in cokeys:
+
+                        compPct, ratingIndx = dCompRating[cokey]
+                            
+                        if ratingIndx in dRating:
+                            dRating[ratingIndx] += compPct
+
+                        else:
+                            dRating[ratingIndx] = compPct
+                        
+                    for ratingIndx, compPct in dRating.items():
+                        muVals.append([compPct, ratingIndx])
+
+                    if len(muVals) > 0:
+                        #This is the final aggregation from component to map unit rating
+                        muVal = SortData(muVals, 0, 1, True, True)  # high
+                        #muVal = SortData(muVals, 0, 1, True, False) # low
+                        del dRating
+
+                        try:
+                            # Get final rating class value using index
+                            ratingClass = domainValues[muVal[1]]
+                            compPct = muVal[0]
+
+                        except:
+                            raise MyError, "Failed to get rating for muVals: " + str(muVals)
+                        
+                        newrec = [mukey, compPct, ratingClass, dAreasym[mukey]]
+                        ocur.insertRow(newrec)
+
+                        if not ratingClass is None and not ratingClass in outputValues:
+                            outputValues.append(ratingClass)
+
+        elif tieBreaker == dSDV["tiebreaklowlabel"]:
+            with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
+
+                for mukey, cokeys in dMapunit.items():
+                    # Since this is COMONTH data, each cokey could be listed 12X.
+                    dRating = dict()  # save sum of comppct for each rating within a mapunit
+                    muVals = list()   # may not need this for DCD
+
+                    for cokey in cokeys:
+
+                        compPct, ratingIndx = dCompRating[cokey]
+                            
+                        if ratingIndx in dRating:
+                            dRating[ratingIndx] += compPct
+
+                        else:
+                            dRating[ratingIndx] = compPct
+                        
+                    for ratingIndx, compPct in dRating.items():
+                        muVals.append([compPct, ratingIndx])
+
+                    if len(muVals) > 0:
+                        #This is the final aggregation from component to map unit rating
+                        muVal = SortData(muVals, 0, 1, True, False) # low
+                        del dRating
+
+                        try:
+                            # Get final rating class value using index
+                            ratingClass = domainValues[muVal[1]]
+                            compPct = muVal[0]
+
+                        except:
+                            raise MyError, "Failed to get rating for muVals: " + str(muVals)
+                        
+                        newrec = [mukey, compPct, ratingClass, dAreasym[mukey]]
+                        ocur.insertRow(newrec)
+
+                        if not ratingClass is None and not ratingClass in outputValues:
+                            outputValues.append(ratingClass)
+
+        del dComp
+        del dCompPct
+        del dAreasym
+        outputValues.sort()
+        return outputTbl, outputValues
+
+    except MyError, e:
+        PrintMsg(str(e), 2)
+        return outputTbl, outputValues
+
+    except:
+        errorMsg()
+        return outputTbl, outputValues
+
+## ===================================================================================
+def AggregateCo_Mo_DCD_DomainBak(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker):
+    #
+    # Flooding or ponding frequency, dominant condition
+    #
+    # Aggregate mapunit-component data to the map unit level using dominant condition.
+    # Use domain values to determine sort order for tiebreaker
+    #
+    # Need to modify this function to correctly sum the comppct_r for the final output table.
+
     try:
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -6550,8 +6977,6 @@ def AggregateCo_Mo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, t
                 PrintMsg("domainValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(domainValues), 1)
                 PrintMsg((40 * '*'), 1)
 
-
-
             with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
 
                 if bVerbose:
@@ -6577,7 +7002,7 @@ def AggregateCo_Mo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, t
             # Flooding and Ponding would fall in this section
 
             if len(domainValues) > 1 and not "None" in domainValues:
-                PrintMsg(" \n******************* Immedidately adding 'None' to dValues ****************" , 1)
+                PrintMsg(" \n******************* Immediately adding 'None' to dValues ****************" , 1)
                 dValues["<Null>"] = [len(dValues), None]
                 #domainValues.append("None")
 
@@ -6638,7 +7063,6 @@ def AggregateCo_Mo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, t
                                             if str(domainValues[i]).upper() == str(rating).upper():
                                                 domainValues[i] = rating
 
-
                                 else:
                                     # dValues is keyed on uppercase string rating or is Null
                                     #
@@ -6671,11 +7095,9 @@ def AggregateCo_Mo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, t
                                 #    PrintMsg("\t***Target mapunit rating '" + rating + "' assigning index '" + str(dValues["<Null>"][0]) + "' to dComp", 1)
 
 
-
-
             else:
                 # New code
-                #PrintMsg(" \nDomain name for this property: '" + dSDV["tiebreakdomainname"] + "'", 1)
+                PrintMsg(" \nDomain name for this property: '" + dSDV["tiebreakdomainname"] + "'", 1)
 
                 with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
                     if bVerbose:
@@ -6696,18 +7118,30 @@ def AggregateCo_Mo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, t
                         # this is a new component record. create a new dictionary item.
                         #
                         if not cokey in dComp:
-                            #dCase[str(rating).upper()] = rating
 
                             if not rating is None:
 
-                                if str(rating).upper() in dValues:
-                                    #PrintMsg("\tNew rating '" + rating + "' assigning index'" + str(dValues[str(rating).upper()][0]) + "' to dComp", 1)
-                                    dComp[cokey] = dValues[str(rating).upper()][0]  # think this is bad
-                                    dCompPct[cokey] = compPct
 
-                                    #if mukey == '2780145':
-                                    #    PrintMsg("\t****Target mapunit rating '" + rating + "' assigning index '" + str(dValues[str(rating).upper()][0]) + "' to dComp", 1)
-                                    #    PrintMsg("\tCokey for target mapunit: " + cokey, 1)
+
+
+                                if str(rating).upper() in dValues:
+                                    
+                                    ratingIndx = dValues[str(rating).upper()][0]
+                                    
+                                    try:
+                                        #PrintMsg("\tNew rating '" + rating + "' assigning index'" + str(dValues[str(rating).upper()][0]) + "' to dComp", 1)
+                                        PrintMsg("\tMapunit " + mukey +  " component " + cokey + " assigned rating of '" + rating + "' using index " + str(dValues[str(rating).upper()][0]) + " for component " + cokey, 0)
+                                        dComp[cokey] = dValues[str(rating).upper()][0]  # CONUS memory error in CONUS: cokey 15106347
+                                        dCompPct[cokey] = compPct
+
+                                    except:
+                                        # Here's where I'm running out of memory on CONUS Ponding Frequency
+                                        #
+                                        PrintMsg("\tFailed at Mapunit rating of '" + rating + "' assigned using index '" + str(dValues[str(rating).upper()][0]) + " cokey " + cokey, 1)
+                                        raise MyError, "MemoryError: Cokey for target mapunit: " + cokey
+
+
+
 
                                     # compare actual rating value to domainValues to make sure case is correct
                                     if not rating in domainValues: # this is a case problem
@@ -7205,6 +7639,7 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
         outputValues = list()
 
         if outputTbl == "":
+            #PrintMsg("\nCreateOutputTable returned nothing", 1)
             return outputTbl, outputValues
 
         lastCokey = "xxxx"
@@ -7222,19 +7657,25 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
         if bVerbose:
             PrintMsg(" \nReading initial data...", 1)
             PrintMsg(whereClause, 1)
+            initCnt = int(arcpy.GetCount_management(initialTbl).getOutput(0))
+            PrintMsg("\nInput table contains " + Number_Format(initCnt, 0, True) + " records", 1)
+            PrintMsg("Data is from " + dSDV["attributecolumnname"].upper() + " column", 1)
+            PrintMsg(dSDV["attributetype"] + " attribute logical data type: " + dSDV["attributelogicaldatatype"].lower(), 1)
 
         if not dSDV["attributetype"].lower() == "interpretation" and dSDV["attributelogicaldatatype"].lower() in ["string", "vtext"]:  # Changed here 2016-04-28
             # No domain values for non-interp string ratings
             # Probably not using this section of code.
             #
             if bVerbose:
-                PrintMsg(" \ndValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(dValues), 1)
+                PrintMsg(" \n" + dSDV["attributetype"] + " values for " + dSDV["attributelogicaldatatype"] + " data type: " + str(dValues), 1)
                 PrintMsg(" \ndomainValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(domainValues), 1)
+
 
             with arcpy.da.SearchCursor(initialTbl, inFlds, sql_clause=sqlClause, where_clause=whereClause) as cur:
 
                 for rec in cur:
                     # "MUKEY", "COKEY", "COMPPCT_R", RATING
+                    # PrintMsg("\t" + str(rec), 1)
                     mukey, cokey, compPct, rating, areasym = rec
                     dAreasym[mukey] = areasym
                     dComp[cokey] = rating
@@ -7258,12 +7699,12 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
 
                 if tieBreaker == dSDV["tiebreakhighlabel"]:
                     # Put the null value at the beginning of the domain
-                    dValues["<None>"] = [0, None]
+                    dValues[None] = [0, None]
                     #domainValues.insert(0, None)
 
                 else:
                     # Put the null value at the end of the domain
-                    dValues["<None>"] = [len(dValues), None]
+                    dValues[None] = [len(dValues), None]
                     #domainValues.append(None)
 
             # PrintMsg(" \ntiebreakdomainname: " + str(dSDV["tiebreakdomainname"]), 1)
@@ -7271,7 +7712,7 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
             if bVerbose:
                 # ********************** GPR Problem here
                 #
-                PrintMsg(" \ndValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(dValues), 1)
+                PrintMsg(" \n" + dSDV["attributetype"] + " values for " + dSDV["attributelogicaldatatype"] + " data type: " + str(dValues), 1)
                 PrintMsg(" \ndomainValues for " + dSDV["attributelogicaldatatype"] + " values: " + str(domainValues) + " \n ", 1)
                 PrintMsg("tiebreakdomainname: " + str(dSDV["tiebreakdomainname"]), 1)
 
@@ -7283,6 +7724,7 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
 
                     for rec in cur:
                         mukey, cokey, compPct, rating, areasym = rec
+                        #PrintMsg("\t" + str(rec), 1)
                         dAreasym[mukey] = areasym
 
                         #if bVerbose and mukey == '397784':
@@ -7311,21 +7753,13 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
                                     # Get the index from dValues for this component rating and save it to dComp by cokey
                                     dComp[cokey] = dValues[str(rating).upper()][0]  #
 
-                                    #dValues[str(rating).upper()][1] = rating  # not sure why this line is needed
-
                                 else:
                                     # Get the index from dValues for <Null> and save it to dComp by cokey
-                                    dComp[cokey] = dValues["<Null>"][0]
+                                    #dComp[cokey] = dValues["<Null>"][0]
+                                    dComp[cokey] = dValues["NONE"][0]
 
-                                    # dValues[str(rating).upper()][1] = rating  # not sure why this line is needed
-
-                                #dComp[cokey] = rating
 
                                 dCompPct[cokey] = compPct
-
-                                #if mukey in ('2780146', '294959'):
-                                #    PrintMsg("\tRating for " + mukey + " (" + str(rating) + ") assigned to index '" + str(dComp[cokey]) + "' in dComp", 1)
-
 
                                 # compare actual rating value to domainValues to make sure case is correct
                                 #
@@ -7367,11 +7801,6 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
                     for rec in cur:
                         mukey, cokey, compPct, rating, areasym = rec
                         dAreasym[mukey] = areasym
-                        # "MUKEY", "COKEY", "COMPPCT_R", RATING
-
-                        #if bVerbose and mukey == '397784':
-                        #    PrintMsg("\tRECORD:  " + str(rec), 1)
-
 
                         # save list of components for each mapunit
                         try:
@@ -7407,7 +7836,7 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
                                 # Conservation Tree Shrub has some values not found in the domain.
                                 # How can this be? Need to check with George?
                                 #
-                                #PrintMsg("\tdValue not found for: " + str(rec), 1)
+                                PrintMsg("\tdValue not found for: " + str(rec), 1)
                                 if not str(rating) in missingDomain:
                                     # Try to add missing value to dDomainValues dict and domainValues list
                                     dComp[cokey] = len(dValues)
@@ -7461,26 +7890,21 @@ def AggregateCo_DCD_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
                         except:
                             pass
 
-                    #for rating, compPct in dRating.items():
-                    #    muVals.append([compPct, rating])
-
                     for ratingIndx, compPct in dRating.items():
                         muVals.append([compPct, ratingIndx])  # This muVal is not being populated
 
                     #This is the final aggregation from component to map unit rating
 
-                    #muVal = SortData(muVals, 0, 1, True, True)
-                    #newrec = [mukey, muVal[0], domainValues[muVal[1]], dAreasym[mukey]]
-                    #ocur.insertRow(newrec)
-
-                    #if not newrec[2] is None and not newrec[2] in outputValues:
-                    #    outputValues.append(newrec[2])
-
-                    #PrintMsg("\t" + str(dRating), 1)
                     if len(muVals) > 0:
                         muVal = SortData(muVals, 0, 1, True, True)
                         compPct, ratingIndx = muVal
-                        rating = domainValues[ratingIndx]
+
+                        try:
+                            rating = domainValues[ratingIndx]
+                            #PrintMsg("\tRating: " + str(rating) + "(index=" + str(ratingIndx) + ")", 1)
+
+                        except:
+                            raise MyError, "domainValues missing value for index (" + str(ratingIndx) + "): " + str(domainValues)
 
                         #if bVerbose and mukey == '397784':
                         #    PrintMsg("\tmuVal for mukey: " + mukey + ", " + str(muVal), 1)
@@ -7797,8 +8221,18 @@ def AggregateCo_DCP_Domain(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
 def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker, bZero):
     # Aggregate mapunit-component data to the map unit level using a weighted average
     #
+    # Possible problem with Depth to Restriction and the null replacement values of 201. nullRating
+    # Should be calculating 'BrD' mapunit using [ (66/(66 + 15) X 38cm) + (15/(66 + 15) X 0cm) ]
+
+    # Another question. For depth to any restriction, there could be multiple restrictions per
+    # component. Do I need to sort on depth according to tieBreaker setting?
+    
     try:
-        # bVerbose = True
+        #bVerbose = True
+
+        # TEST CODE FOR nullRating handling
+        if bVerbose:
+            PrintMsg(" \nnullRating: " + str(nullRating), 1)
 
         arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
 
@@ -7814,6 +8248,226 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker,
         inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
         outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
 
+        # sort order of value is important
+        if tieBreaker == "Lower":
+            sOrder = " DESC"
+
+        else:
+            sOrder = " ASC"
+
+        sqlClause =  (None, "ORDER BY MUKEY ASC, COMPPCT_R DESC, " + dSDV["attributecolumnname"].upper() + sOrder)
+
+        if bZero == False and nullRating is None:
+            # ignore any null values
+            whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " IS NOT NULL"
+
+        else:
+            # ignore values = null replacement value. Trying to fix Depth to Restriction WTA problem.
+            #
+            if not nullRating is None:
+                #whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " IS NOT NULL AND " + dSDV["attributecolumnname"].upper() + " <> " + str(nullRating)
+                #whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " <> " + str(nullRating)
+                whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " IS NOT NULL"
+
+            else:
+                # retrieve null values and convert to zeros during the iteration process
+                whereClause = "COMPPCT_R >=  " + str(cutOff)
+
+        if arcpy.Exists(outputTbl):
+            arcpy.Delete_management(outputTbl)
+
+        if bVerbose:
+            PrintMsg(" \nSQL: " + whereClause, 1)
+            PrintMsg("Input table (" + initialTbl + ") has " + str(int(arcpy.GetCount_management(initialTbl).getOutput(0))) + " records", 1)
+
+        outputTbl = CreateOutputTable(initialTbl, outputTbl, dFieldInfo)
+        outputValues = list()
+
+        if outputTbl == "":
+            return outputTbl, outputValues
+
+        lastMukey = "xxxx"
+        dRating = dict()
+        # reset variables for cursor
+        sumPct = 0
+        sumProd = 0
+        meanVal = 0
+        #prec = dSDV["attributeprecision"]
+        outputValues = [999999999, -999999999]
+        recCnt = 0
+        areasym = ""
+        dPct = dict()  # sum of comppct_r for each map unit
+        dMapunit = dict()
+
+        with arcpy.da.SearchCursor(initialTbl, inFlds, where_clause=whereClause, sql_clause=sqlClause) as cur:
+            with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
+                for rec in cur:
+                    recCnt += 1
+                    mukey, cokey, comppct, val, areasym = rec
+                    #PrintMsg(str(recCnt) + ". " + str(rec), 1)
+
+                    # Capture component list for each mapunit
+                    try:
+                        if not cokey in dMapunit[mukey]:
+                            dMapunit[mukey].append(cokey)
+                            
+                            if not val == nullRating:
+                                dPct[mukey] += comppct
+
+                    except:
+                        dMapunit[mukey] = [cokey]
+
+                        if not val == nullRating:
+                            dPct[mukey] = comppct
+
+                    if val is None and bZero:
+                        # convert null values to zero
+                        val = 0.0
+
+                    if val == nullRating:
+                        # 
+                        val = None
+                        
+                        
+
+                    #if bVerbose and mukey in ['374414', '374451']:
+                    #    PrintMsg("\t\tMukey " + mukey + ":" + cokey + ";  " + str(comppct) + "%;  " + str(val), 1)
+
+                    if mukey != lastMukey and lastMukey != "xxxx":
+                        # I'm losing an output value when there is only one rated component and bZeros == True
+                        # This is because only the non-Null ratings are being processed for things like Range Production (Normal Year) in Batch Mode.
+                        #
+                        try:
+                            sumPct = dPct[lastMukey]
+
+                        except:
+                            dPct[lastMukey] = 0
+                            sumPct = 0
+                        
+                        if (sumPct > 0 and sumProd is not None):
+                            # write out record for previous mapunit
+
+                            meanVal = round(float(sumProd) / sumPct, fldPrecision)
+                            newrec = [lastMukey, sumPct, meanVal, areasym]
+                            ocur.insertRow(newrec)
+
+                            #if bVerbose and lastMukey in ['374414', '374451']:
+                            #    PrintMsg("\tTest mapunit1 " + lastMukey + ": " + str(meanVal) + ";  " + str(sumPct) + "%", 1)
+
+                            # reset variables for the next mapunit record
+                            sumPct = 0
+                            sumProd = None
+
+                            # save max-min values
+                            if not meanVal is None:
+                                outputValues[0] = min(meanVal, outputValues[0])
+                                outputValues[1] = max(meanVal, outputValues[1])
+
+                        else:
+                        #    Tried to bring back null rating replacement value (201), but that didn't work because those
+                        #    are being excluded from the entire process by the sql_clause.
+                        #
+                            newrec = [lastMukey, sumPct, nullRating, areasym]
+                            #if bVerbose and lastMukey in ['374414', '374451']:
+                            #    PrintMsg("\tTest mapunit2 " + lastMukey + ": " + str(nullRating) + ";  " + str(sumPct) + "%", 1)
+                                
+                            ocur.insertRow(newrec)
+                            # reset variables for the next mapunit record
+                            sumPct = 0
+                            sumProd = None
+                            dPct[lastMukey] = 0
+
+                    # accumulate data for this mapunit
+                    #PrintMsg("\tFollowup summary", 1)
+                    #sumPct += comppct
+
+                    if val is not None:
+                        prod = comppct * float(val)
+                        try:
+                            sumProd += prod
+
+                        except:
+                            sumProd = prod
+
+                    # set new mapunit flag
+                    lastMukey = mukey
+
+                # Add final record
+                try:
+                    sumPct = dPct[lastMukey]
+
+                except:
+                    dPct[lastMukey] = 0
+                
+                if areasym != "" and sumPct != 0:  # 
+                    if sumProd is None:
+                        meanVal = nullRating
+
+                    else:
+                        meanVal = round(float(sumProd) / sumPct, fldPrecision)
+                        
+                    newrec = [lastMukey, sumPct, meanVal, areasym]  # if there is no data, this will error
+                    ocur.insertRow(newrec)
+
+                    if dSDV["resultcolumnname"].upper().startswith("NCCPI"):
+                        # For NCCPI, hardcode the range of values from 0.0 to 1.0 for a consistent map legend
+                        outputValues = [0.0, 1.0]
+
+                    elif not meanVal is None:
+                        outputValues[0] = min(meanVal, outputValues[0])
+                        outputValues[1] = max(meanVal, outputValues[1])
+
+        outputValues.sort()
+        del sumPct
+        del sumProd
+        del meanVal
+
+        if outputValues[0] == -999999999 or outputValues[1] == 999999999:
+            # Sometimes no data can skip through the max min test
+            outputValues = [0.0, 0.0]
+
+        return outputTbl, outputValues
+
+    except MyError, e:
+        PrintMsg(str(e), 2)
+        outputTbl, outputValues
+
+    except:
+        errorMsg()
+        return outputTbl, outputValues
+
+## ===================================================================================
+def AggregateCo_WTA_Old(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker, bZero):
+    # Aggregate mapunit-component data to the map unit level using a weighted average
+    #
+    # Possible problem with Depth to Restriction and the null replacement values of 201. nullRating
+    # Should be calculating 'BrD' mapunit using [ (66/(66 + 15) X 38cm) + (15/(66 + 15) X 0cm) ]
+
+    # Another question. For depth to any restriction, there could be multiple restrictions per
+    # component. Do I need to sort on depth according to tieBreaker setting?
+    
+    try:
+        bVerbose = True
+
+        # TEST CODE FOR nullRating handling
+        if bVerbose:
+            PrintMsg(" \nnullRating: " + str(nullRating), 1)
+
+        arcpy.SetProgressorLabel("Aggregating rating information to the map unit level")
+
+        # Create final output table with MUKEY, COMPPCT_R and sdvFld
+        if bVerbose:
+            PrintMsg(" \nCurrent function : " + sys._getframe().f_code.co_name, 1)
+
+        outputTbl = os.path.join(gdb, tblName)
+        #attribcolumn = dSDV["attributecolumnname"].upper()
+        #resultcolumn = dSDV["resultcolumnname"].upper()
+        fldPrecision = max(0, dSDV["attributeprecision"])
+
+        inFlds = ["MUKEY", "COKEY", "COMPPCT_R", dSDV["attributecolumnname"].upper(), "AREASYMBOL"]
+        outFlds = ["MUKEY", "COMPPCT_R", dSDV["resultcolumnname"].upper(), "AREASYMBOL"]
+
+
         sqlClause =  (None, "ORDER BY MUKEY ASC, COMPPCT_R DESC, " + dSDV["attributecolumnname"].upper() + " DESC")
 
         if bZero == False:
@@ -7821,8 +8475,14 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker,
             whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " IS NOT NULL"
 
         else:
-            # retrieve null values and convert to zeros during the iteration process
-            whereClause = "COMPPCT_R >=  " + str(cutOff)
+            # ignore values = null replacement value. Trying to fix Depth to Restriction WTA problem.
+            #
+            if not nullRating is None:
+                whereClause = "COMPPCT_R >=  " + str(cutOff) + " AND " + dSDV["attributecolumnname"].upper() + " != " + str(nullRating)
+
+            else:
+                # retrieve null values and convert to zeros during the iteration process
+                whereClause = "COMPPCT_R >=  " + str(cutOff)
 
         if arcpy.Exists(outputTbl):
             arcpy.Delete_management(outputTbl)
@@ -7847,6 +8507,8 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker,
         outputValues = [999999999, -999999999]
         recCnt = 0
         areasym = ""
+        dPct = dict()  # sum of comppct_r for each map unit
+        #dMapunit = dict()
 
         with arcpy.da.SearchCursor(initialTbl, inFlds, where_clause=whereClause, sql_clause=sqlClause) as cur:
             with arcpy.da.InsertCursor(outputTbl, outFlds) as ocur:
@@ -7864,6 +8526,9 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker,
                         # I'm losing an output value when there is only one rated component and bZeros == True
                         # This is because only the non-Null ratings are being processed for things like Range Production (Normal Year) in Batch Mode.
                         #
+                        cokeyList = [cokey] # first component
+                        dPct[mukey] = comppct
+                        
                         if (sumPct > 0 and sumProd is not None):
                             # write out record for previous mapunit
 
@@ -7879,6 +8544,12 @@ def AggregateCo_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBreaker,
                             if not meanVal is None:
                                 outputValues[0] = min(meanVal, outputValues[0])
                                 outputValues[1] = max(meanVal, outputValues[1])
+
+                    if not cokey in cokeyList:  # other components
+                        cokeyList.append(cokey)
+                        dPct[mukey] += comppct
+                        
+    
 
                     # accumulate data for this mapunit
                     #PrintMsg("\tFollowup summary", 1)
@@ -8195,8 +8866,8 @@ def AggregateHz_WTA_SUM(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBrea
 
         outputValues.sort()
 
-        if (bZero and outputValues ==  [0.0, 0.0]):
-            PrintMsg(" \nNo data for " + sdvAtt, 1)
+        #if (bZero and outputValues ==  [0.0, 0.0]):
+            #PrintMsg(" \n2. No data for " + sdvAtt, 1)
 
         return outputTbl, outputValues
 
@@ -8351,8 +9022,9 @@ def AggregateHz_WTA_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBrea
 
         outputValues.sort()
 
-        if (bZero and outputValues ==  [0.0, 0.0]):
-            PrintMsg(" \nNo data for " + sdvAtt, 1)
+        #if (bZero and outputValues ==  [0.0, 0.0]):
+        #    PrintMsg(" \nNo data for " + sdvAtt, 1)
+
 
         return outputTbl, outputValues
 
@@ -8523,8 +9195,9 @@ def AggregateHz_DCP_WTA_Old(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tie
 
         outputValues.sort()
 
-        if (bZero and outputValues ==  [0.0, 0.0]):
-            PrintMsg(" \nNo data for " + sdvAtt, 1)
+        #if (bZero and outputValues ==  [0.0, 0.0]):
+        #    PrintMsg(" \nNo data for " + sdvAtt, 1)
+            
 
         return outputTbl, outputValues
 
@@ -8719,8 +9392,8 @@ def AggregateHz_DCP_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieBrea
 
         outputValues.sort()
 
-        if (bZero and outputValues ==  [0.0, 0.0]):
-            PrintMsg(" \nNo data for " + sdvAtt, 1)
+        #if (bZero and outputValues ==  [0.0, 0.0]):
+        #    PrintMsg("No data for " + sdvAtt, 1)
 
         return outputTbl, outputValues
 
@@ -8876,8 +9549,8 @@ def AggregateHz_MaxMin_WTA(gdb, sdvAtt, sdvFld, initialTbl, bNulls, cutOff, tieB
                             outputValues[0] = min(rating, outputValues[0])
                             outputValues[1] = max(rating, outputValues[1])
 
-        if (bZero and outputValues ==  [0.0, 0.0]):
-            PrintMsg(" \nNo data for " + sdvAtt, 1)
+        #if (bZero and outputValues ==  [0.0, 0.0]):
+        #    PrintMsg(" \n7. No data for " + sdvAtt, 1)
 
         return outputTbl, outputValues
 
@@ -9221,7 +9894,7 @@ def UpdateMetadata(outputWS, target, parameterString, creditsString, aggMethod, 
         #
 
         # Determine whether this script is running in 32 or 64 bit mode
-        arcpy.SetProgressorLabel("Updating metadata for " + target)
+        arcpy.SetProgressorLabel("Updating metadata for " + os.path.basename(target))
         pythonVersion = sys.version
         fy = "2018"
 
@@ -9279,7 +9952,7 @@ def UpdateMetadata(outputWS, target, parameterString, creditsString, aggMethod, 
         # Currently in this script, only the metadata title, summary, description, credits and the new rating field description are updated.
         #
         dMetadata = dict()  # dictionary key is the search term that exists in the template metadata. Dictionary value is the replacement.
-        dMetadata["SDV_Title"] = dSDV["attributename"] + "' - " + aggMethod
+        dMetadata["SDV_Title"] = dSDV["attributename"] + " - " + aggMethod
         dMetadata["SDV_Description"] = "Map unit rating table for '" + dSDV["attributename"] +"'" + "\r" + dSDV["attributedescription"] + "\r" + parameterString
         dMetadata["SDV_Credits"] = "USDA-Natural Resources Conservation Service; " + creditsString
         dMetadata["SDV_Summary"] = "Map the '" + sdvAtt + "' soil " + dSDV["attributetype"].lower() + " by joining this rating table to the soil layer (polygon or raster) using the mukey field."
@@ -9335,133 +10008,12 @@ def UpdateMetadata(outputWS, target, parameterString, creditsString, aggMethod, 
 
         #if os.path.isfile(mdExport):
         #    os.remove(mdExport)
-        arcpy.SetProgressorLabel("Finished updating metadata for " + target)
+        arcpy.SetProgressorLabel("Finished updating metadata for " + os.path.basename(target))
         return True
 
     except MyError, e:
         # Example: raise MyError("this is an error message")
         PrintMsg(str(e) + " \n", 2)
-        return False
-
-    except:
-        errorMsg()
-        return False
-
-## ===================================================================================
-def UpdateMetadata_Orig(outputWS, target, parameterString, creditsString, aggMethod, sdvAtt):
-    #
-    # Used for non-ISO metadata
-    #
-    # Search words:  xxSTATExx, xxSURVEYSxx, xxTODAYxx, xxFYxx
-    #
-    try:
-        PrintMsg("\tUpdating metadata for the final rating table (" + os.path.basename(target) + ")...", 0)
-        arcpy.SetProgressor("default", "Updating metadata")
-
-        # Set metadata translator file
-        dInstall = arcpy.GetInstallInfo()
-        installPath = dInstall["InstallDir"]
-        prod = r"Metadata/Translator/ARCGIS2FGDC.xml"
-        mdTranslator = os.path.join(installPath, prod)
-
-        # Define input and output XML files
-        xmlPath = os.path.dirname(sys.argv[0])  # script directory
-        mdExport = os.path.join(xmlPath, "SDV_Metadata2.xml")        # original template metadata in script directory
-        mdImport = os.path.join(env.scratchFolder, "xxImport.xml")  # the temporary copy that will be edited
-
-        # Cleanup output XML files from previous runs
-        if os.path.isfile(mdImport):
-            os.remove(mdImport)
-
-        # Convert XML to tree format
-        tree = ET.parse(mdExport)
-        root = tree.getroot()
-
-        titleElem = root.findall("citeinfo")
-
-        if not titleElem is None:
-            #PrintMsg(" \nElement found: " + titleElem.tag + ", " + str(titleElem.text), 0)
-
-            for elem in titleElem:
-                PrintMsg("\t" + str(elem.tag) + ": " + str(elem.text), 1)
-
-        else:
-            PrintMsg(" \nTitle not found in root", 1)
-
-        # BEGIN ORIGINAL ISO CODE METADATA
-        #
-        # List of items to be edited
-        #  <identificationInfo><MD_DataIdentification><citation><CI_Citation><title><gco:CharacterString> SDV_Title
-        #  <identificationInfo><MD_DataIdentification><abstract><gco:CharacterString> SDV_Description
-        #  <identificationInfo><MD_DataIdentification><purpose><gco:CharacterString> SDV_Summary
-        #  <identificationInfo><MD_DataIdentification><credit><gco:CharacterString>  SDV_Credits
-
-        ns = "{http://www.isotc211.org/2005/gmd}"
-        idInfo = ns + "identificationInfo"
-        idElem = root.findall(idInfo)
-
-        # Create dictionary containing output information
-        # These are strings placed in the SDV_Metadata.xml file that will allow for search and replace.
-        # To my disappointment, the Description metadata is not displayed in the ArcMap table description, only
-        # in ArcCatalog metadata. Need to double-check to see if this is true in ArcGIS 10.3.
-        #
-        #PrintMsg(" \nAttributeDescription: \n " + dSDV["attributedescription"], 1)
-        dMetadata = dict()
-        dMetadata["SDV_Title"] = "Rating table for '" + dSDV["attributename"] + "' - " + aggMethod
-        dMetadata["SDV_Description"] = "Map unit rating table for '" + dSDV["attributename"] +"'" + "\r" + dSDV["attributedescription"] + "\r" + parameterString
-        dMetadata["SDV_Credits"] = "USDA-Natural Resources Conservation Service; " + creditsString
-        dMetadata["SDV_Summary"] = "Map the '" + sdvAtt + "' soil " + dSDV["attributetype"].lower() + " by joining this rating table to the soil layer (polygon or raster) using the mukey field."
-        abstract = ns + "abstract"
-
-        for id in idElem:
-            md = id.find(ns + "MD_DataIdentification")
-
-            for s in md.iter():
-                if s.tag.endswith("CharacterString"):
-                    PrintMsg("\t" + s.tag + ": " + s.text, 1)
-
-                    if s.text in dMetadata:
-                        s.text = dMetadata[s.text]
-
-        # END OF ORIGINAL ISO Code
-
-
-
-
-        #  create new xml file with edits
-        tree.write(mdImport, encoding="utf-8", xml_declaration=None, default_namespace=None, method="xml")
-
-        # import updated metadata to the geodatabase table
-        if not arcpy.Exists(mdImport):
-            raise MyError, "Missing metadata template file (" + mdImport + ")"
-
-        #else:
-        #    PrintMsg("Found metadata template file (" + mdImport + ")", 0)
-
-        arcpy.MetadataImporter_conversion (mdImport, target)
-
-        # delete the temporary xml metadata file
-        if os.path.isfile(mdImport):
-            os.remove(mdImport)
-            #pass
-
-        # delete metadata tool logs
-        logFolder = os.path.dirname(env.scratchFolder)
-        logFile = os.path.basename(mdImport).split(".")[0] + "*"
-
-        currentWS = env.workspace
-        env.workspace = logFolder
-        logList = arcpy.ListFiles(logFile)
-
-        for lg in logList:
-            arcpy.Delete_management(lg)
-
-        env.workspace = currentWS
-
-        return True
-
-    except MyError, e:
-        PrintMsg(str(e), 2)
         return False
 
     except:
@@ -9490,7 +10042,7 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
 
         import datetime
 
-        if not version[0:4] in ["10.3", "10.4", "10.5"]:
+        if not version[0:4] in ["10.3", "10.4", "10.5", "10.6", "10.7", "10.8"]:
             PrintMsg(" \nArcGIS Desktop version " + version + " does not support the map symbology functions in this tool", 1)
 
         # Get target gSSURGO database
@@ -9521,6 +10073,12 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
 
         # Get active data frame object
         df = mxd.activeDataFrame
+
+        # Create a dictionary based upon domainValues or legendValues.
+        # This dictionary will use an uppercase-string version of the original value as the key
+        #
+        global dValues
+        dValues = dict()  # Try creating a new dictionary. Key is uppercase-string value. Value = [order, original value]
 
         # Dictionary for aggregation method abbreviations
         #
@@ -9610,7 +10168,7 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
         # Create dictionary containing substitute values for missing data
         global dMissing
         dMissing = dict()
-        dMissing[dSDV["attributetablename"].upper()] = [nullRating]
+        dMissing[dSDV["attributetablename"].upper()] = [nullRating]  
         dMissing["MAPUNIT"] = [None] * len(dFields["MAPUNIT"])
         dMissing["COMPONENT"] = [None] * (len(dFields["COMPONENT"]) - 1)  # adjusted number down because of mukey
         dMissing["CHORIZON"] = [None] * (len(dFields["CHORIZON"]) - 1)
@@ -9758,8 +10316,6 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
                 PrintMsg(" \nUsing map legend values to populate domainValues", 1)
                 domainValues = legendValues
 
-
-
         # Some problems with the 'Not rated' data value, legend value and sdvattribute setting ("notratedphrase")
         # No perfect solution.
         #
@@ -9789,46 +10345,34 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
                 domainValues.insert(0, dSDV["notratedphrase"])
 
 
-        if not None in domainValues and len(domainValues) > 0:
-            # Insert None at beginning or end of domainValues
-            #PrintMsg(" \nAdding <Null> to domainValues in CreateSoilMap function", 1)
-
-            if tieBreaker == dSDV["tiebreakhighlabel"]:
-                # Put the null value at the beginning of the domain
-                #dValues["<None>"] = [0, None]
-                domainValues.insert(0, None)
-
-            else:
-                # Put the null value at the end of the domain
-                #dValues["<None>"] = [len(dValues), None]
-                domainValues.append(None)
-
-
-
         if dSDV["ruledesign"] == 2:
             # Flip legend (including Not rated) for suitability interps
             domainValues.reverse()
+            
+        if not None in domainValues and len(domainValues) > 0:
+            # Insert None at beginning or end of domainValues
+            #PrintMsg(" \nAdding None to domainValues in CreateSoilMap function", 1)
 
+            if tieBreaker == dSDV["tiebreakhighlabel"]:
+                # Put the null value at the beginning of the domain
+                #dValues["NONE"] = [0, None]
+                domainValues.insert(0, None)
+                #pass
 
-        # Create a dictionary based upon domainValues or legendValues.
-        # This dictionary will use an uppercase-string version of the original value as the key
-        #
-        global dValues
-        dValues = dict()  # Try creating a new dictionary. Key is uppercase-string value. Value = [order, original value]
+            else:
+                # Put the null value at the end of the domain
+                #dValues["NONE"] = [len(dValues), None]
+                domainValues.append(None)
+                #pass
 
-        # if still no domainValues...
-        # Populate dValues dictionary using domainValues
-        #
-        if len(domainValues) > 0:
-            #PrintMsg(" \ndomainValues looks like: " + str(domainValues), 1)
-
+            # Update dValues dictionary
+            i = 0
+            
             for val in domainValues:
-                if not val is None:
-                    #PrintMsg("\tAdding value (" + val + ") with index of " + str(len(dValues)) + " to dValues dictionary", 1)
-                    dValues[str(val).upper()] = [len(dValues), val]  # new 02/03
+                dValues[str(val).upper()] = [i, val]
+                i += 1
 
-                else:
-                    dValues["<Null>"] = [len(dValues), None]
+
 
         #PrintMsg(" \ndValues: " + str(dValues), 1)
 
@@ -9850,7 +10394,6 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
         elif dSDV["attributelogicaldatatype"].lower() == "narrative text":
             dFieldInfo[dSDV["attributecolumnname"].upper()] = ["TEXT", 1024]
             
-
         else:
             raise MyError, "Failed to set dFieldInfo for " + dSDV["attributecolumnname"].upper()
 
@@ -9906,7 +10449,8 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
                 hzQuery = "((" + tf + " = " + str(top) + " or " + bf + " = " + str(bot) + ") or ( " + tf + " <= " + str(top) + " and " + bf + " >= " + str(bot) + " ) )"
 
             else:
-                rng = str(tuple(range(top, (bot + 1))))
+                #rng = str(tuple(range(top, (bot + 1))))
+                rng = str(tuple(range(top, bot)))
                 hzQuery = "((" + tf + " in " + rng + " or " + bf + " in " + rng + ") or ( " + tf + " <= " + str(top) + " and " + bf + " >= " + str(bot) + " ) )"
 
 
@@ -10125,10 +10669,15 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
 
                         if rtabphyname == "MAPUNIT" and aggMethod != "No Aggregation Necessary":
                             # No aggregation necessary?
+                            PrintMsg(" \n" + sdvAtt + " aggregation method set to: " + aggMethod, 1)
+                            
                             dMapunit = ReadTable(rtabphyname, flds, primSQL, level, sql)
 
-                            if len(dMapunit) == 0:
-                                raise MyError, "No mapunit test data for " + sdvAtt
+                        elif rtabphyname == "MUTEXT" and aggMethod == "No Aggregation Necessary":
+                            # No aggregation necessary?
+                            #dMapunit = ReadTable(rtabphyname, flds, primSQL, level, sql)
+                            primSQL = dSDV["sqlwhereclause"]
+                            dTbl = ReadTable(rtabphyname, flds, primSQL, level, sql)
 
                         elif rtabphyname == "COMPONENT":
                             #if cutOff is not None:
@@ -10167,6 +10716,9 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
                             #
                             cokeyList = list()  # Try using this to pare down the COINTERP table record count
                             #cokeyList = dComponent.keys()  # Won't work. dComponent isn't populated yet
+
+                            #PrintMsg(" \nReading " + dSDV["attributetablename"] + " table, using " + ", ".join(flds), 1)
+                            #PrintMsg("Using primSQL: " + str(primSQL) + ";  " + " sql: " + str(sql), 1)
 
                             dTbl = ReadTable(dSDV["attributetablename"].upper(), flds, primSQL, level, sql)
 
@@ -10329,7 +10881,7 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
                 raise MyError, "xxx CreateRatingTable failed"
             del dComponent, dHorizon
 
-        elif tblList in [['MAPUNIT', "MUAGGATT"], ['MAPUNIT', "MUCROPYLD"]]:
+        elif tblList in [['MAPUNIT', "MUAGGATT"], ['MAPUNIT', "MUCROPYLD"], ['MAPUNIT', 'MUTEXT']]:
             if CreateRatingTable1S(tblList, dSDV["attributetablename"].upper(), dTbl, initialTbl, dAreasymbols) == False:
                 raise MyError, "xxx CreateRatingTable failed"
 
@@ -10453,9 +11005,12 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
         #
         if dSDV["attributetype"] == "Property":
             # These are all Soil Properties
+            # Added addtional logic for Minnesota Crop Index. It has a problem in that mapunitlevelattribflag is set to zero.
 
-            if dSDV["mapunitlevelattribflag"] == 1:
-                # This is a Map unit Level Soil Property
+            if dSDV["mapunitlevelattribflag"] == 1 or \
+               (dSDV["mapunitlevelattribflag"] == 0 and dSDV["complevelattribflag"] == 0 \
+                and dSDV["cmonthlevelattribflag"] == 0 and dSDV["horzlevelattribflag"] == 0 ) :
+                # This is a Map unit Level Soil Property or it is Minnesota Crop Index in the MUTEXT table
                 #PrintMsg("Map unit level, no aggregation neccessary", 1)
                 outputTbl, outputValues = Aggregate1(gdb, sdvAtt, dSDV["attributecolumnname"].upper(), initialTbl, bNulls, cutOff, tieBreaker)
 
@@ -10653,7 +11208,7 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
 
             else:
                 # Should never hit this
-                raise MyError, "Unknown depth level '" + aggMethod + "' aggregation method for " + sdvAtt + " has not been developed"
+                raise MyError, "Unable to handle assigned aggregation method (" + aggMethod + ") for " + sdvAtt
 
         elif dSDV["attributetype"].lower() == "interpretation":
 
@@ -10762,23 +11317,26 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
         # quit if no data is available for selected property or interp
         if outputValues == [0.0, 0.0] or len(outputValues) == 0 or (len(outputValues) == 1 and (outputValues[0] == None or outputValues[0] == "")):
 
-            PrintMsg("\tNo data available for '" + sdvAtt + "'", 1)
+            if bot > 0:
+                PrintMsg("\tNo data available for '" + sdvAtt + " " + str(top) + " to " + str(bot) + "cm'", 1)
+
+            else:
+                PrintMsg("\tNo data available for '" + sdvAtt + "'", 1)
+                
             return 2
             #raise MyError, "No data available for '" + sdvAtt + "'"
             #PrintMsg("No data available for '" + sdvAtt + "'", 1)
 
         elif BadTable(outputTbl):
             #PrintMsg("\tBadTable check, No data available for '" + sdvAtt + "'", 1)
-            PrintMsg("\tNo data available for '" + sdvAtt + "'", 1)
+
+            if bot > 0:
+                PrintMsg("\tNo data available for '" + sdvAtt + " " + str(top) + " to " + str(bot) + "cm'", 1)
+
+            else:
+                PrintMsg("\tNo data available for '" + sdvAtt + "'", 1)
+                
             return 2
-
-
-        #else:
-        #    PrintMsg(" \noutputValues: " + str(outputValues), 1)  # This is a problem only in Batch mode. Why?
-
-        #if not bVerbose:  # Need to keep output table for reports
-            # delete sdv_initial table
-        #    arcpy.Delete_management(initialTbl)
 
 
         #
@@ -10793,9 +11351,48 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
         #
         # Symbology Code Begins Below
         #
-        #
+
+   
+        try:
+            #if dSDV["tiebreakdomainname"] is not None and not sdvAtt.startswith("K Factor"):
+            if not dSDV["tiebreakdomainname"] is None and sdvAtt.startswith("Conservation Tree and Shrub Group") and not sdvAtt.startswith("K Factor"):
+                # Possible problem for true Progressive legend. Need all those values to create the correct color ramp.
+                # Not sure why KFactor is having problems since the DE example has a range of values.
+
+                #PrintMsg("\tComparing legend values with output values: " + dLegend["name"] + "; " + dLegend["maplegendkey"], 1)
+                # Try removing the unused domain values from dLegend['labels']
+                iLegend = len(dLegend["labels"])
+
+                for i in range(iLegend):
+                    dLabel = dLegend["labels"][i + 1]
+                    #PrintMsg("\tChecking label found in legend: " + str(dLabel), 1)
+
+                    # An error below means that this probably is a class breaks legend with lower_value and upper_value
+                    val = dLegend["labels"][i + 1]["value"]
+                    
+                    if not val in outputValues:
+                        #PrintMsg("\tNo matching label found in legend: " + str(val), 0)
+                        del dLegend["labels"][i + 1]
+
+                dNewLabels = dict()
+
+                i = 0
+                
+                for key, val in sorted(dLabels.items()):
+                    i += 1
+                    val["order"] = i
+                    dNewLabels[i] = val
+
+
+                dLegend["labels"] = dNewLabels        
+                #PrintMsg(" \nResulting dLabels: " + str(dLegend["labels"]) + " \n ", 0)
+
+        except:
+            pass
+            
         if bVerbose:
             PrintMsg(" \noutputValues: " + str(outputValues) + " \n ", 1)
+            PrintMsg(" \ndLegend labels: " + str(dLegend["labels"]), 1)
 
             for param in sorted(dSDV):
                 setting = dSDV[param]
@@ -10814,7 +11411,6 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
 
             if bVerbose:
                 try:
-                    # PrintMsg(" \nSTOPPED HERE", 1)
                     PrintMsg(" \n" + dSDV["attributename"] + "; MapLegendKey: " + dLegend["maplegendkey"] + "; Type: " + dLegend["type"] + " \n ", 1)
 
                 except:
@@ -11017,11 +11613,99 @@ def CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begM
                     PrintMsg("\tFailed to create soil map layer ", 0)
                     return 0
 
-                del df, mxd
-                arcpy.SetProgressorLabel("")
+                #PrintMsg(" \ndLayerDefinition: " + str( dLayerDefinition), 1)
+                maxLegend = 20480
 
-                #PrintMsg("\tSuccess", 0)
-                return 1
+                if len(dLayerDefinition) > 0:
+
+                    symTbl = os.path.join(gdb, "SDV_Symbology")
+                    sLegend = json.dumps(dLayerDefinition['drawingInfo']['renderer'])
+                    # Please Note! If the legend is too long (like Conservation Trees and Shrubs) it won't fit in the table
+                    # and probably is longer than is really needed. Either there are more values in the domain than there are
+                    # in the actual data, or it really should be an automatically generated unique values legend.
+                    #
+                    #PrintMsg(" \ndLegend contains " + Number_Format(len(sLegend), 0, True) + " characters", 1)
+                    #PrintMsg(sLegend, 1)
+                    if len(sLegend) < maxLegend:
+                        if arcpy.Exists(symTbl):
+
+                            # Open table with SearchCursor, selecting for "layer = '<outputLayer'"
+                            bLayer = False
+                            wc = "layername = '" + outputLayer + "'"
+                            
+                            with arcpy.da.UpdateCursor(symTbl, ["layername", "maplegend"], where_clause=wc) as cur:
+                                for rec in cur:
+                                    bLayer = True
+                                    rec = [outputLayer, sLegend]
+
+                            if bLayer == False:
+                                with arcpy.da.InsertCursor(symTbl, ["layername", "maplegend"]) as cur:
+                                    # Ksat standard classes error
+                                    # 'exceptions.RuntimeError'>: The row contains a bad value. [layername]
+
+                                    try:
+                                        cur.insertRow([outputLayer, sLegend])
+
+                                    except:
+                                        PrintMsg("\tFailed to write outputLayer value (" + outputLayer + ") to table", 1)
+                                        #PrintMsg("\t'" + sLegend + "'", 1)
+                                        PrintMsg("\t'" + outputLayer + "'", 1)
+                                        #errorMsg()
+                                        raise MyError, "EARLY OUT"
+                                        
+
+
+                        else:
+                            # Create new table here and then write to it
+                            arcpy.CreateTable_management(os.path.dirname(symTbl), os.path.basename(symTbl))
+                            arcpy.AddField_management(symTbl, "layername", "TEXT", "", "", 96)
+                            arcpy.AddField_management(symTbl, "maplegend", "TEXT", "", "", maxLegend)
+
+                            with arcpy.da.InsertCursor(symTbl, ["layername", "maplegend"]) as cur:
+                                # 'exceptions.RuntimeError'>: The row contains a bad value. [layername]
+
+                                try:
+                                    cur.insertRow([outputLayer, sLegend])
+
+                                except:
+                                    PrintMsg("\tFailed to write layer symbology (" + outputLayer + ") to table", 1)
+                                    #PrintMsg("\t" + sLegend, 1)
+                                    
+
+                    else:
+                        PrintMsg("\tUnable to write layer symbology (" + outputLayer + ") to SDV_Symbology table", 1)
+
+                    # Background information needed to create raster symbology through .dbf or .clr file
+                    #
+                    # A .clr file can be used where the integer cell value is known for each attribute and each has its own rgb values.
+                    # Certain raster formats support color maps: BIL, BMP, IMG, FGDBRaster, TIF
+                    # There are two tools for colormaps: AddColorMap_management, DeleteColorMap_manageement
+                    # AddColormap_management (in_raster, {in_template_raster}, {input_CLR_file})
+                    # 1 255 255 0
+                    # 2 64 0 128
+                    # 3 255 32 32
+                    # 4 0 255 0
+                    # 5 0 0 255
+
+                    # In 10.6.1, I can create a joined raster and preserve classified renderer symbology using a .lyr file.
+                    #
+                    # documentation for symTbl
+                    # uniqueValueInfos:
+                    # legend['drawingInfo']['renderer']['uniqueValueInfos'][0] = {'symbol': {'color': [255, 0, 0, 255], 'style': 'esriSFSSolid', 'type': 'esriSFS', 'outline': {'color': [0, 0, 0, 0], 'width': 0.4, 'style': 'esriSLSSolid', 'type': 'esriSLS'}}, 'description': '', 'value': 'Excessively drained', 'label': 'Excessively drained'}
+                    # legendSym = legend['drawingInfo']['renderer']['uniqueValueInfos'][0..n]
+                    # legendSym.keys() = ['symbol', 'description', 'value', 'label']
+                    # r, g, b, t = legendSym['symbol']['color']
+                    #
+                    # classBreakInfos:
+                    # legend['drawingInfo']['renderer']['classBreakInfos'][0] = {'classMaxValue': 3.4, 'description': '', 'symbol': {'color': [255, 0, 0, 255], 'style': 'esriSFSSolid', 'type': 'esriSFS', 'outline': {'color': [0, 0, 0, 0], 'width': 0.4, 'style': 'esriSLSSolid', 'type': 'esriSLS'}}, 'label': 'Ultra acid (ph < 3.5)', 'classMinValue': 1.8, 'outline': {'color': [0, 0, 0, 0], 'width': 0.4, 'style': 'esriSLSSolid', 'type': 'esriSLS'}}
+
+                    
+
+                    del df, mxd
+                    arcpy.SetProgressorLabel("")
+
+                    #PrintMsg("\tSuccess", 0)
+                    return 1
 
             else:
                 raise MyError, "Failed to create summary table and map layer \n "

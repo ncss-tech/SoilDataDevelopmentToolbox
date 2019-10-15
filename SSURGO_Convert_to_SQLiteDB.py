@@ -1,74 +1,12 @@
-# SSURGO_Convert_to_Geodatabase.py
-#
+# SSURGO_Convert_to_SQLiteDB.py
+
+# Import SSURGO export files  (.txt) to an SQLite database.
+# XML workspace import doesn't seem to work with SQLite;
+# instead try using a template database 
 # ArcGIS 10.1 (10.2 mostly works except for automtically updating metadata)
 #
 # Steve Peaslee, National Soil Survey Center, Lincoln, Nebraska
 #
-# Purpose: allow batch appending of SSURGO soil shapefiles and soil attribute tables into a single file geodatabase (10.0).
-
-# Requires input dataset structure to follow the NRCS standard for Geospatial data (eg. soil_ne109\spatial and soil_ne109/tabular)
-#
-# Merge order is based upon sorted extent coordinates
-
-# For the attribute data, we use an XML workspace document to define FGDB schema and read the tables from the SSURGO template database.
-# These xml files should reside in the same folder as this script. See the GetML function for more info.
-#
-# Things yet to do:
-#
-# 1. Update metadata for each XML workspace document
-# 2. Test implementation of ITRF00 datum transformation
-
-# 11-15-2013 Added 'bailout' if one of the input template database tables is not found
-# 11-22-2013
-# 12-09-2013 Added option for automatically inserting featureclass alias for ArcGIS 10.1 and above
-#
-# 12-13-2013 Changed datum transformation method to always use ITRF00
-#
-# 01-04-2014 Added tabular metadata and automated the inclusion of state name and soil survey areas to metadata.
-# 01-08-2014 Still need to automate metadata dates and gSSURGO process steps
-# 01-09-2014 Removed hard-coded path to XML metadata translator file to make it 10.2 compatible
-# 2014-09-27
-# 2014-10-31 Added text file import to this script. Need to clean this up and make
-#            it an option to the normal Access database import.
-#
-# In 2014, the folders within the WSS-SSURGO Download zipfiles were renamed to AREASYMBOL (uppercase)
-# instead of soil_[AREASYMBOL]
-# 2015-10-21 Modified tabular import to truncate string values to match field length
-#
-# 2015-11-13 Added import for metadata files so that up-to-date information will be used. These
-#            tables have information about tables, columns, relationships and domain values.
-#
-# 2015-12-08 Added check for SSURGO version number (schema version). Hardcoded as 2 for gSSURGO.
-#
-# 2015-12-15 Incorporated primary key unique value constraint on sdv* tables as is done for the Access databases.
-#
-# 2016-03-15 Tabular import now uses CP1252 so that csv import of ESIS data won't error.
-#
-# 2017-06-28 Problem with metadata import.
-
-#    arcpy.ExportMetadata_conversion (target, mdTranslator, mdExport)
-#    <class 'arcgisscripting.ExecuteError'>: Failed to execute. Parameters are not valid.
-#    ERROR 000584: Implementation of this Tool's Validate is invalid
-#
-# 2017-08-16 Added attribute index on rulekey, mrulekey for cointerp table.
-
-# Need to remove DVD option from Transfer in XML Workspace document and
-# replace with hard drive option.
-
-# Offline media: External Drive
-# Recording format: NTFS 3.0
-
-# 2018-11-27. Fixed recent problem with relationshipclasses. Origin and destination tables were switched resulting in key-null errors if
-# an attempt was made to delete any records.
-
-# 2019-09-24. Remove the following columns from cointerp table and modified the .csv import:
-#
-# interpll
-# interpllc
-# interplr
-# interplrc
-# interphh
-# interphhc
 
 
 ## ===================================================================================
@@ -124,180 +62,6 @@ def Number_Format(num, places=0, bCommas=True):
         errorMsg()
         #PrintMsg("Unhandled exception in Number_Format function (" + str(num) + ")", 2)
         return "???"
-    
-## ===================================================================================
-def AddNewFields(outputShp, columnNames, columnInfo):
-    # TEMPORARY CODE
-    #
-    # Create the empty output table that will contain the data from Soil Data Access
-    #
-    # ColumnNames and columnInfo come from the Attribute query JSON string
-    # MUKEY would normally be included in the list, but it should already exist in the output featureclass
-    #
-    # Problem using temporary, IN_MEMORY table and JoinField with shapefiles to add new columns. Really slow performance.
-
-    try:
-        # Dictionary: SQL Server to FGDB
-        #PrintMsg(" \nAddNewFields function begins", 1)
-        dType = dict()
-
-        dType["int"] = "long"
-        dType["smallint"] = "short"
-        dType["bit"] = "short"
-        dType["varbinary"] = "blob"
-        dType["nvarchar"] = "text"
-        dType["varchar"] = "text"
-        dType["char"] = "text"
-        dType["datetime"] = "date"
-        dType["datetime2"] = "date"
-        dType["smalldatetime"] = "date"
-        dType["decimal"] = "double"
-        dType["numeric"] = "double"
-        dType["float"] ="double"
-
-        # numeric type conversion depends upon the precision and scale
-        dType["numeric"] = "float"  # 4 bytes
-        dType["real"] = "double" # 8 bytes
-
-        # Iterate through list of field names and add them to the output table
-        i = 0
-
-        # ColumnInfo contains:
-        # ColumnOrdinal, ColumnSize, NumericPrecision, NumericScale, ProviderType, IsLong, ProviderSpecificDataType, DataTypeName
-        #PrintMsg(" \nFieldName, Length, Precision, Scale, Type", 1)
-
-        joinedFields = list() # new fields that need to be added to the output table
-        dataFields = list()   # fields that need to be updated in the AttributeRequest function
-        outputTbl = os.path.join("IN_MEMORY", "Template")
-        #arcpy.CreateTable_management(os.path.dirname(outputTbl), os.path.basename(outputTbl))
-
-        # Get a list of fields that already exist in outputShp
-        outFields = arcpy.Describe(outputShp).fields
-        existingFields = [fld.name.lower() for fld in outFields]
-
-
-        # Using JoinField to add the NATMUSYM column to the outputTbl (but not the data)
-        #
-        for i, fldName in enumerate(columnNames):
-            # Get new field definition from columnInfo dictionary
-            vals = columnInfo[i].split(",")
-            length = int(vals[1].split("=")[1])
-            precision = int(vals[2].split("=")[1])
-            scale = int(vals[3].split("=")[1])
-            dataType = dType[vals[4].lower().split("=")[1]]
-
-            #if not fldName.lower() == "mukey":
-            #    joinedFields.append(fldName)
-
-            if not fldName.lower() in existingFields:
-                # This is a new data field that needs to be added to the output table.
-                #arcpy.AddField_management(outputTbl, fldName, dataType, precision, scale, length) # add to IN_MEMORY table
-                arcpy.AddField_management(outputShp, fldName, dataType, precision, scale, length) # add direct to featureclass
-                joinedFields.append(fldName)
-                dataFields.append(fldName)
-
-            elif fldName.lower() in existingFields and fldName.lower() != "mukey":
-                # This is an existing data field in the output table.
-                dataFields.append(fldName)
-
-            elif fldName.lower() == "mukey":
-                #arcpy.AddField_management(outputTbl, fldName, dataType, precision, scale, length)
-                pass
-
-        if arcpy.Exists(outputTbl) and len(joinedFields) > 0:
-            #PrintMsg(" \nAdded these new fields to " + os.path.basename(outputShp) + ": " + ", ".join(joinedFields), 1)
-            #arcpy.JoinField_management(outputShp, "mukey", outputTbl, "mukey", joinedFields) # instead add directly to output featureclass
-            arcpy.Delete_management(outputTbl)
-            return dataFields
-
-        else:
-            #PrintMsg(" \nThese fields already exist in the output table: " + ", ".join(dataFields), 1)
-            arcpy.Delete_management(outputTbl)
-            return dataFields
-
-    except:
-        errorMsg()
-        return ["Error"]
-
-## ===================================================================================
-def GetSDMInfo(theURL, tblName):
-    # TEMPORARY CODE
-    #
-    # POST REST which uses urllib and JSON
-    #
-    # Send query to SDM Tabular Service, returning data in JSON format
-
-    try:
-        if theURL == "":
-            theURL = "https://sdmdataaccess.sc.egov.usda.gov"
-
-        sQuery = """SELECT TOP 1 * FROM """ + tblName
-
-        #PrintMsg(" \nRequesting tabular data for " + Number_Format(len(keyList), 0, True) + " soil survey areas...")
-        arcpy.SetProgressorLabel("Sending tabular request for " + tblName + " to Soil Data Access...")
-
-        if sQuery == "":
-            raise MyError, ""
-
-        # Tabular service to append to SDA URL
-        url = theURL + "/Tabular/SDMTabularService/post.rest"
-        dRequest = dict()
-        dRequest["format"] = "JSON+COLUMNNAME+METADATA"
-        dRequest["query"] = sQuery
-
-        #PrintMsg(" \nURL: " + url)
-        #PrintMsg("FORMAT: " + dRequest["FORMAT"])
-        #PrintMsg("QUERY: " + sQuery)
-
-        # Create SDM connection to service using HTTP
-        jData = json.dumps(dRequest)
-
-        # Send request to SDA Tabular service
-        req = urllib2.Request(url, jData)
-        resp = urllib2.urlopen(req)
-
-        #PrintMsg(" \nImporting attribute data...", 0)
-        #PrintMsg(" \nGot back requested data...", 0)
-
-        # Read the response from SDA into a string
-        jsonString = resp.read()
-
-        #PrintMsg(" \njsonString: " + str(jsonString), 1)
-        data = json.loads(jsonString)
-        del jsonString, resp, req
-
-        if not "Table" in data:
-            raise MyError, "Query failed to select anything: \n " + sQuery
-
-        dataList = data["Table"]     # Data as a list of lists. Service returns everything as string.
-        arcpy.SetProgressorLabel("Adding new fields to output table...")
-        PrintMsg(" \nRequested data consists of " + Number_Format(len(dataList), 0, True) + " records", 0)
-
-        # Get column metadata from first two records
-        columnNames = dataList.pop(0)
-        columnInfo = dataList.pop(0)
-
-        if len(noMatch) > 0:
-            PrintMsg(" \nNo attribute data for mukeys: " + str(noMatch), 1)
-
-        arcpy.SetProgressorLabel("Finished importing attribute data")
-        PrintMsg(" \nImport complete... \n ", 0)
-
-        return True
-
-    except MyError, e:
-        # Example: raise MyError, "This is an error message"
-        PrintMsg(str(e), 2)
-        return False
-
-    except urllib2.HTTPError:
-        errorMsg()
-        PrintMsg(" \n" + sQuery, 1)
-        return False
-
-    except:
-        errorMsg()
-        return False
 
 ## ===================================================================================
 def SetScratch():
@@ -412,13 +176,10 @@ def SetOutputCoordinateSystem(inLayer, AOI):
         return False
 
 ## ===================================================================================
-def CreateSSURGO_DB(outputWS, inputXML, areasymbolList, aliasName):
-    # Create new 10.0 File Geodatabase using XML workspace document
+def CreateSSURGO_DB(outputWS, areasymbolList, aliasName, databaseType):
+    # Copy the appropriate version of SQLite database from the scripts folder to the new location and name.
     #
     try:
-        if not arcpy.Exists(inputXML):
-            PrintMsg(" \nMissing input file: " + inputXML, 2)
-            return False
 
         outputFolder = os.path.dirname(outputWS)
         gdbName = os.path.basename(outputWS)
@@ -426,20 +187,28 @@ def CreateSSURGO_DB(outputWS, inputXML, areasymbolList, aliasName):
         if arcpy.Exists(os.path.join(outputFolder, gdbName)):
             arcpy.Delete_management(os.path.join(outputFolder, gdbName))
 
-        PrintMsg(" \nCreating new geodatabase (" + gdbName + ") in " + outputFolder, 0)
+        PrintMsg(" \nCreating new SQLite database (" + gdbName + ") in " + outputFolder, 0)
 
-        arcpy.CreateFileGDB_management(outputFolder, gdbName, "10.0")
+        if databaseType == "ST_GEOMETRY":
+            templateDB = os.path.join(os.path.dirname(sys.argv[0]), "SSURGO_STGeom2019.sqlite")
 
-        # The following command will fail when the user only has a Basic license
-        arcpy.ImportXMLWorkspaceDocument_management(os.path.join(outputFolder, gdbName), inputXML, "SCHEMA_ONLY")
+        elif databaseType == "GEOPACKAGE_1.2":                      
+            templateDB = os.path.join(os.path.dirname(sys.argv[0]), "SSURGO_Template2019.gpkg")
 
-        # Create indexes for cointerp here.
-        # If it works OK, incorporate these indexes into the xml workspace document
-        try:
-            pass
+        elif databaseType == "SPATIALITE":    
+            templateDB = os.path.join(os.path.dirname(sys.argv[0]), "SSURGO_Template2019.sqlite")  # has ST_Geometry
 
-        except:
-            PrintMsg(" \nUnable to index the cointerp table", 1)
+        elif databaseType == "STEVE":
+            # This one was created manually with an empty GCS WGS1984 gSSURGO database and
+            # the 'Create SQLite Soils Database' tool in ArcGIS.
+            templateDB = os.path.join(os.path.dirname(sys.argv[0]), "Steve_Geopackage_OID.gpkg")
+
+        elif databaseType == "GEOPACKAGE_X":
+            templateDB = os.path.join(os.path.dirname(sys.argv[0]), "SSURGO_Empty1.sqlite")
+            PrintMsg(" \nUsing template database: " + templateDB, 1)
+
+
+        shutil.copy2(templateDB, outputWS)
 
         if not arcpy.Exists(os.path.join(outputFolder, gdbName)):
             raise MyError, "Failed to create new geodatabase"
@@ -448,20 +217,24 @@ def CreateSSURGO_DB(outputWS, inputXML, areasymbolList, aliasName):
         tblList = arcpy.ListTables()
 
         if len(tblList) < 50:
-            raise MyError, "Output geodatabase has only " + str(len(tblList)) + " tables"
+            if len(tblList) > 0:
+                raise MyError, "Output geodatabase has only " + str(len(tblList)) + " tables"
+
+            else:
+                raise MyError, "Output geodatabase (" + outputWS + ") has no tables"
 
         # Alter aliases for featureclasses
-        if aliasName != "":
-            try:
-                arcpy.AlterAliasName("MUPOLYGON", "Map Unit Polygons - " + aliasName)
-                arcpy.AlterAliasName("MUPOINT", "Map Unit Points - " + aliasName)
-                arcpy.AlterAliasName("MULINE", "Map Unit Lines - " + aliasName)
-                arcpy.AlterAliasName("FEATPOINT", "Special Feature Points - " + aliasName)
-                arcpy.AlterAliasName("FEATLINE", "Special Feature Lines - " + aliasName)
-                arcpy.AlterAliasName("SAPOLYGON", "Survey Boundaries - " + aliasName)
-
-            except:
-                pass
+        #if aliasName != "":
+        #    try:
+        #        arcpy.AlterAliasName("MUPOLYGON", "Map Unit Polygons - " + aliasName)
+        #        arcpy.AlterAliasName("MUPOINT", "Map Unit Points - " + aliasName)
+        #        arcpy.AlterAliasName("MULINE", "Map Unit Lines - " + aliasName)
+        #        arcpy.AlterAliasName("FEATPOINT", "Special Feature Points - " + aliasName)
+        #        arcpy.AlterAliasName("FEATLINE", "Special Feature Lines - " + aliasName)
+        #        arcpy.AlterAliasName("SAPOLYGON", "Survey Boundaries - " + aliasName)
+        #
+        #    except:
+        #        pass
 
         arcpy.RefreshCatalog(outputFolder)
 
@@ -706,6 +479,66 @@ def GetTableInfo(newDB):
         errorMsg()
         return dict()
 
+## ===============================================================================================================
+def GetTableIndexes(newDB):
+    #
+    # Retrieve physical and alias names from mdstatidxdet table and assigns them to a blank dictionary.
+    # tabphyname, idxphyname, idxcolsequence, colphyname
+    # indxphyname prefixes: PK_, DI_
+
+    try:
+        tblIndexes = dict()  # key = table name, values are a list containing [primaryKey, foreignKey]
+
+        # Open mdstattabs table containing information for other SSURGO tables
+        theMDTable = "mdstatidxdet"
+        env.workspace = newDB
+
+        # Get primary and foreign keys for each table using mdstatidxdet table.
+        #
+        if arcpy.Exists(os.path.join(newDB, theMDTable)):
+
+            fldNames = ["tabphyname", "idxphyname", "colphyname"]
+
+            with arcpy.da.SearchCursor(os.path.join(newDB, theMDTable), fldNames, sql_clause=(None, "ORDER BY idxphyname DESC"), where_clause="idxphyname NOT LIKE 'UC_%'") as rows:
+
+                for row in rows:
+                    # read each table record and assign 'tabphyname' and 'tablabel' to 2 variables
+                    tblName, indexName, columnName = row
+
+                    if indexName[0:3] == "PK_":
+                        # primary key
+                        if tblName in tblIndexes:
+                            tblIndexes[tblName][0] = columnName
+
+                        else:
+                            tblIndexes[tblName] = [columnName, None]
+
+                    elif indexName[0:3] == "DI_":
+                        # foreign key
+                        if tblName in tblIndexes:
+                            tblIndexes[tblName][1] = columnName
+
+                        else:
+                            tblIndexes[tblName] = [None, columnName]
+
+            del theMDTable
+
+            return tblIndexes
+
+        else:
+            # The mdstattabs table was not found
+            raise MyError, "Missing mdstattabs table"
+            return dict()
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return dict()
+
+    except:
+        errorMsg()
+        return dict()
+                                       
 ## ===================================================================================
 def ImportMDTables(newDB, dbList):
     # Import as single set of metadata tables from first survey area's Access database
@@ -855,7 +688,7 @@ def ImportMDTabular(newDB, tabularFolder, codePage):
                 # Create cursor for all fields to populate the current table
                 #
                 # For a geodatabase, I need to remove OBJECTID from the fields list
-                fldList = arcpy.Describe(os.path.join(newDB, tbl)).fields
+                fldList = arcpy.Describe(tbl).fields
                 fldNames = list()
                 fldLengths = list()
 
@@ -872,9 +705,14 @@ def ImportMDTabular(newDB, tabularFolder, codePage):
                 if len(fldNames) == 0:
                     raise MyError, "Failed to get field names for " + tbl
 
+                #if tbl == "mdstattabcols":
+                #    PrintMsg(" \nMDSTATTABLCOLS: \n" + ", ".join(fldNames), 1)
+
                 with arcpy.da.InsertCursor(os.path.join(newDB, tbl), fldNames) as cursor:
                     # counter for current record number
                     iRows = 1  # input textfile line number
+
+                    
 
                     if os.path.isfile(txtPath):
 
@@ -887,9 +725,10 @@ def ImportMDTabular(newDB, tabularFolder, codePage):
                             newRow = list()
                             fldNo = 0
                             fixedRow = [x.decode(codePage) for x in rowInFile]  # handle non-utf8 characters
-                            #.decode('iso-8859-1').encode('utf8')
-                            #fixedRow = [x.decode('iso-8859-1').encode('utf8') for x in rowInFile]
-                            #fixedRow = [x.decode('iso-8859-1') for x in rowInFile]
+                            
+                            #if tbl == "mdstattabcols":
+                            #    PrintMsg(" \n" + tbl + " has " + str(len(fixedRow)) + " values", 1)
+                            #    PrintMsg(" \n" + str(fixedRow), 1)
 
                             for val in fixedRow:  # mdstatdomdet was having problems with this 'for' loop. No idea why.
                                 fldLen = fldLengths[fldNo]
@@ -897,8 +736,8 @@ def ImportMDTabular(newDB, tabularFolder, codePage):
                                 if val == '':
                                     val = None
 
-                                elif fldLen > 0:
-                                    val = val[0:fldLen]
+                                #elif fldLen > 0: # Try running without this truncation for overly long strings
+                                #    val = val[0:fldLen]
 
                                 newRow.append(val)
 
@@ -947,10 +786,6 @@ def ImportTables(outputWS, dbList, dbVersion):
         # Something is slowing up the CONUS gSSURGO database creation at the end of this function. Could it be the
         # relationshipclasses triggering new indexes?
         arcpy.SetProgressorLabel("\tAdding additional relationships for sdv* tables...")
-        #arcpy.CreateRelationshipClass_management("sdvattribute", "sdvfolderattribute", "xSdvattribute_Sdvfolderattribute", "SIMPLE", "> SDV Folder Attribute Table", "<  SDV Attribute Table", "NONE", "ONE_TO_MANY", "NONE", "attributekey", "attributekey", "","")
-        #PrintMsg("    --> zSdvfolder_Sdvfolderattribute", 1)
-        #arcpy.CreateRelationshipClass_management("sdvfolder", "sdvfolderattribute", "xSdvfolder_Sdvfolderattribute", "SIMPLE", "> SDV Folder Attribute Table", "<  SDV Folder Table", "NONE", "ONE_TO_MANY", "NONE", "folderkey", "folderkey", "","")
-
 
         if len(tblList) == 0:
             raise MyError, "No tables found in " +  outputWS
@@ -1047,7 +882,6 @@ def ImportTables(outputWS, dbList, dbVersion):
                             # Import all tables except SDV*
 
                             with arcpy.da.SearchCursor(inputTbl, mdbFieldNames) as inCursor:
-                                #outFields = inCursor.fields
 
                                 with arcpy.da.InsertCursor(outputTbl, mdbFieldNames) as outCursor:
                                     for inRow in inCursor:
@@ -1083,10 +917,9 @@ def ImportTables(outputWS, dbList, dbVersion):
         # Add attribute index for each SDV table
         PrintMsg(" \nSkipping indexes for sdv tables", 1)
 
-        #for tblName in sdvTables:
-        #    arcpy.SetProgressorLabel("\tAdding attribute index for " + tblName)
-        #    sdvTbl = os.path.join(outputWS, tblName)
-        #    indexName = "Indx_" + tblName
+
+            
+            
         #    arcpy.AddIndex_management(sdvTbl, keyFields[tblName], indexName)
 
         #    if tblName == "sdvattribute":
@@ -1119,6 +952,9 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
     try:
         # new code from ImportTables
         #codePage = 'cp1252'
+
+        conn = sqlite3.connect(newDB)
+        liteCur = conn.cursor()
 
         tblList = GetTableList(newDB)
 
@@ -1163,7 +999,25 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
         
         # Add SDV* table relationships. These aren't part of the XML workspace doc as of FY2018 gSSURGO
         # Not normally necessary, but useful for diagnostics
+        #arcpy.CreateRelationshipClass_management(os.path.join(newDB, "sdvattribute"), os.path.join(newDB, "sdvfolderattribute"), "zSdvattribute_Sdvfolderattribute", "SIMPLE", "> SDV Folder Attribute Table", "<  SDV Attribute Table", "NONE", "ONE_TO_MANY", "NONE", "attributekey", "attributekey", "","")
+        #arcpy.CreateRelationshipClass_management(os.path.join(newDB, "sdvfolder"), os.path.join(newDB, "sdvfolderattribute"), "zSdvfolder_Sdvfolderattribute", "SIMPLE", "> SDV Folder Attribute Table", "<  SDV Folder Table", "NONE", "ONE_TO_MANY", "NONE", "folderkey", "folderkey", "","")
+        # End of enforce unique keys setup...
 
+        #arcpy.SetProgressor("step", "Importing tabular data...", 1, len(dbList), 1)
+
+        # Create a list of textfiles to be imported. The import process MUST follow the
+        # order in this list in order to maintain referential integrity. This list
+        # will need to be updated if the SSURGO data model is changed in the future.
+        #
+        txtFiles = ["distmd","legend","distimd","distlmd","lareao","ltext","mapunit", \
+        "comp","muaggatt","muareao","mucrpyd","mutext","chorizon","ccancov","ccrpyd", \
+        "cdfeat","cecoclas","ceplants","cerosnac","cfprod","cgeomord","chydcrit", \
+        "cinterp","cmonth", "cpmatgrp", "cpwndbrk","crstrcts","csfrags","ctxfmmin", \
+        "ctxmoicl","ctext","ctreestm","ctxfmoth","chaashto","chconsis","chdsuffx", \
+        "chfrags","chpores","chstrgrp","chtext","chtexgrp","chunifie","cfprodo","cpmat","csmoist", \
+        "cstemp","csmorgc","csmorhpp","csmormr","csmorss","chstr","chtextur", \
+        "chtexmod","sacatlog","sainterp","sdvalgorithm","sdvattribute","sdvfolder","sdvfolderattribute"]
+            
         for inputDB in dbList:
             iCntr += 1
             newFolder = os.path.dirname(os.path.dirname(inputDB)) # survey dataset folder
@@ -1173,6 +1027,9 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
             soilsFolder = os.path.dirname(os.path.dirname(inputDB))
 
             fnAreasymbol = soilsFolder[(soilsFolder.rfind("_") + 1):].upper()
+            #PrintMsg(" \nParsing areasymbol from: " + inputDB, 1)
+            #fnAreasymbol = inputDB[-9:][0:5].upper()  # arg0
+            #PrintMsg(" \nParsed value: " + fnAreasymbol, 1)
             newFolder = os.path.dirname(os.path.dirname(inputDB)) # survey dataset folder
 
             # get database name from file listing in the new folder
@@ -1195,20 +1052,11 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
                 raise MyError, "Tabular data in " + tabularFolder + " (SSURGO Version " + str(ssurgoVersion) + ") is not supported"
 
             # Create a dictionary with table information
-            tblInfo = GetTableInfo(newDB)
+            if iCntr == 1:
+                tblInfo = GetTableInfo(newDB)
 
-            # Create a list of textfiles to be imported. The import process MUST follow the
-            # order in this list in order to maintain referential integrity. This list
-            # will need to be updated if the SSURGO data model is changed in the future.
-            #
-            txtFiles = ["distmd","legend","distimd","distlmd","lareao","ltext","mapunit", \
-            "comp","muaggatt","muareao","mucrpyd","mutext","chorizon","ccancov","ccrpyd", \
-            "cdfeat","cecoclas","ceplants","cerosnac","cfprod","cgeomord","chydcrit", \
-            "cinterp","cmonth", "cpmatgrp", "cpwndbrk","crstrcts","csfrags","ctxfmmin", \
-            "ctxmoicl","ctext","ctreestm","ctxfmoth","chaashto","chconsis","chdsuffx", \
-            "chfrags","chpores","chstrgrp","chtext","chtexgrp","chunifie","cfprodo","cpmat","csmoist", \
-            "cstemp","csmorgc","csmorhpp","csmormr","csmorss","chstr","chtextur", \
-            "chtexmod","sacatlog","sainterp","sdvalgorithm","sdvattribute","sdvfolder","sdvfolderattribute"]
+            #tblOrder = list()
+            
             # Need to add featdesc import as a separate item (ie. spatial\soilsf_t_al001.txt: featdesc)
 
             # Static Metadata Table that records the metadata for all columns of all tables
@@ -1221,11 +1069,6 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
             #csv.field_size_limit(sys.maxsize)
             csv.field_size_limit(512000)
 
-            # For cointerp, adjust for missing columns
-            #  x = fldNames[0:7]
-            #  y = fldNames[12:14]
-            #  z = fldNames[16:20]
-
             # Need to import text files in a specific order or the MS Access database will
             # return an error due to table relationships and key violations
             for txtFile in txtFiles:
@@ -1233,6 +1076,7 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
                 # Get table name and alias from dictionary
                 if txtFile in tblInfo:
                     tbl, aliasName = tblInfo[txtFile]
+                    #tblOrder.append(tbl)
 
                 else:
                     raise MyError, "Textfile reference '" + txtFile + "' not found in 'mdstattabs table'"
@@ -1243,11 +1087,11 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
                 txtPath = os.path.join(tabularFolder, txtFile + ".txt")
 
                 # continue if the target table exists
-                if arcpy.Exists(tbl):
+                if arcpy.Exists(os.path.join(newDB, tbl)):
                     # Create cursor for all fields to populate the current table
                     #
                     # For a geodatabase, I need to remove OBJECTID from the fields list
-                    fldList = arcpy.Describe(tbl).fields
+                    fldList = arcpy.Describe(os.path.join(newDB, tbl)).fields
                     fldNames = list()
                     #fldLengths = list()
 
@@ -1291,49 +1135,6 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
                                 else:
                                     raise MyError, "Missing tabular data file (" + txtPath + ")"
 
-                        elif tbl == "cointerp":
-
-                            with arcpy.da.InsertCursor(os.path.join(newDB, tbl), fldNames) as cursor:
-                                # counter for current record number
-                                iRows = 1  # input textfile line number
-
-                                #if os.path.isfile(txtPath):
-                                if arcpy.Exists(txtPath):
-
-                                    try:
-                                        # Use csv reader to read each line in the text file
-                                        time.sleep(0.5)  # trying to prevent error reading text file
-
-                                        for rowInFile in csv.reader(open(txtPath, 'rb'), delimiter='|', quotechar='"'):
-                                            # replace all blank values with 'None' so that the values are properly inserted
-                                            # into integer values otherwise insertRow fails
-                                            #fixedRow = [x.decode(codePage) if x else None for x in rowInFile]  # handle non-utf8 characters
-                                            r1 = rowInFile[0:7]
-                                            r2 = rowInFile[11:13]
-                                            r3 = rowInFile[15:19]
-                                            r1.extend(r2)
-                                            r1.extend(r3)
-                                            fixedRow = [x if x else None for x in r1]  # figure out which tables have non-utf8 characters
-                                            #mrulekey = fixedRow[1]
-                                            #ruledepth = fixedRow[6]
-                                            
-                                            if (fixedRow[6] == '0') or (fixedRow[1] == '54955'):
-                                                # NCCPI or ruledepth zero
-                                                # should I make the 54955 a dynamic variable?
-                                                cursor.insertRow(fixedRow) # was fixedRow
-                                                #PrintMsg("\t" + str(fixedRow[1]) + ";\t" + str(fixedRow[2]) + ";\t" + str(fixedRow[6]), 1)
-                                            iRows += 1
-
-                                    except:
-                                        #PrintMsg(" \n" + ", ".join(fldNames), 1)
-                                        PrintMsg(str(fixedRow), 1)
-                                        err = "Error writing line " + Number_Format(iRows, 0, True) + " from " + txtPath
-                                        raise MyError, err
-
-                                else:
-                                    raise MyError, "Missing tabular data file (" + txtPath + ")"
-
-                        
                         else:
                             with arcpy.da.InsertCursor(os.path.join(newDB, tbl), fldNames) as cursor:
                                 # counter for current record number
@@ -1401,13 +1202,13 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
                     # This isn't correct. May need to look at accumulating total table count in a dictionary
                     #if int(arcpy.GetCount_management(os.path.join(newDB, tbl)).getOutput(0)) != iRows:
                     #    raise MyError, tbl + ": Failed to import all " + Number_Format(iRows, 0, True) + " records into "
-                    #
 
                 else:
                     raise MyError, "Required table '" + tbl + "' not found in " + newDB
 
             #arcpy.SetProgressorPosition()
 
+            #PrintMsg(" \nTables: '" + "', '".join(tblOrder), 1)
 
             # Populate the month table (pre-populated in the Access Template database, no text file)
             #
@@ -1427,11 +1228,12 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
             spatialFolder = os.path.join(os.path.dirname(tabularFolder), "spatial")
             txtFile ="soilsf_t_" + fnAreasymbol
             txtPath = os.path.join(spatialFolder, txtFile + ".txt")
+            #tbl = os.path.join(newDB, "featdesc")
             tbl = "featdesc"
 
             if arcpy.Exists(txtPath):
                 # For a geodatabase, I need to remove OBJECTID from the fields list
-                fldList = arcpy.Describe(tbl).fields
+                fldList = arcpy.Describe(os.path.join(newDB, tbl)).fields
                 fldNames = list()
                 for fld in fldList:
                     if fld.type != "OID":
@@ -1441,7 +1243,7 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
                     raise MyError, "Failed to get field names for " + tbl
 
                 # Create cursor for all fields to populate the featdesc table
-                with arcpy.da.InsertCursor(tbl, fldNames) as cursor:
+                with arcpy.da.InsertCursor(os.path.join(newDB, tbl), fldNames) as cursor:
                     # counter for current record number
                     iRows = 1
                     arcpy.SetProgressorLabel("Importing " +  fnAreasymbol + "  (" + Number_Format(iCntr, 0, True) + " of " + Number_Format(len(dbList), 0, True) + "):   " + tbl)
@@ -1486,72 +1288,199 @@ def ImportTabular(newDB, dbList, dbVersion, codePage):
         # 'Iowa Corn Suitability Rating CSR2 (IA)'   [iacornsr]
 
         # 'NH Forest Soil Group'  [nhiforsoigrp]
-
-        # tblIndexes = GetTableIndexes(newDB)  # using mdstatidxdet table
-
-        bCorn = False
-        bNHFor = False
-        bVTSeptic = False
-        wc = "iacornsr IS NOT NULL"
-        with arcpy.da.SearchCursor(os.path.join(newDB, "mapunit"), ["OID@"], where_clause=wc) as cur:
-            for rec in cur:
-                bCorn = True
-                break
-
-        wc = "vtsepticsyscl IS NOT NULL"
-        with arcpy.da.SearchCursor(os.path.join(newDB, "mapunit"), ["OID@"], where_clause=wc) as cur:
-            for rec in cur:
-                bVTSeptic = True
-                break
-
-        wc = "nhiforsoigrp IS NOT NULL"
-        with arcpy.da.SearchCursor(os.path.join(newDB, "mapunit"), ["OID@"], where_clause=wc) as cur:
-            for rec in cur:
-                bNHFor = True
-                break
-
-        if not bCorn:
-            # Next open cursor on the sdvattribute table and delete any unneccessary records
-            wc = "attributecolumnname = 'iacornsr'"
-            with arcpy.da.UpdateCursor(os.path.join(newDB, "sdvattribute"), ["attributecolumnname"], where_clause=wc) as cur:
+        try:
+            bCorn = False
+            bNHFor = False
+            bVTSeptic = False
+            wc = "iacornsr IS NOT NULL"
+            with arcpy.da.SearchCursor(os.path.join(newDB, "mapunit"), ["OID@"], where_clause=wc) as cur:
                 for rec in cur:
-                    #PrintMsg("\tDeleted row for iacornsr", 1)
-                    cur.deleteRow()
+                    bCorn = True
+                    break
 
-        if not bVTSeptic:
-            # Next open cursor on the sdvattribute table and delete any unneccessary records
-            wc = "attributecolumnname = 'vtsepticsyscl'"
-            with arcpy.da.UpdateCursor(os.path.join(newDB, "sdvattribute"), ["attributecolumnname"], where_clause=wc) as cur:
+            wc = "vtsepticsyscl IS NOT NULL"
+            with arcpy.da.SearchCursor(os.path.join(newDB, "mapunit"), ["OID@"], where_clause=wc) as cur:
                 for rec in cur:
-                    #PrintMsg("\tDeleted row for VT septic", 1)
-                    cur.deleteRow()                
+                    bVTSeptic = True
+                    break
 
-        if not bNHFor:
-            # Next open cursor on the sdvattribute table and delete any unneccessary records
-            wc = "attributecolumnname = 'nhiforsoigrp'"
-            with arcpy.da.UpdateCursor(os.path.join(newDB, "sdvattribute"), ["attributecolumnname"], where_clause=wc) as cur:
+            wc = "nhiforsoigrp IS NOT NULL"
+            with arcpy.da.SearchCursor(os.path.join(newDB, "mapunit"), ["OID@"], where_clause=wc) as cur:
                 for rec in cur:
-                    #PrintMsg("\tDeleted row for NH forest group", 1)
-                    cur.deleteRow()
+                    bNHFor = True
+                    break
 
-        arcpy.SetProgressorLabel("Adding attribute index for cointerp table")
+            if not bCorn:
+                # Next open cursor on the sdvattribute table and delete any unneccessary records
+                wc = "attributecolumnname = 'iacornsr'"
+                with arcpy.da.UpdateCursor(os.path.join(newDB, "sdvattribute"), ["attributecolumnname"], where_clause=wc) as cur:
+                    for rec in cur:
+                        #PrintMsg("\tDeleted row for iacornsr", 1)
+                        cur.deleteRow()
+
+            if not bVTSeptic:
+                # Next open cursor on the sdvattribute table and delete any unneccessary records
+                wc = "attributecolumnname = 'vtsepticsyscl'"
+                with arcpy.da.UpdateCursor(os.path.join(newDB, "sdvattribute"), ["attributecolumnname"], where_clause=wc) as cur:
+                    for rec in cur:
+                        #PrintMsg("\tDeleted row for VT septic", 1)
+                        cur.deleteRow()                
+
+            if not bNHFor:
+                # Next open cursor on the sdvattribute table and delete any unneccessary records
+                wc = "attributecolumnname = 'nhiforsoigrp'"
+                with arcpy.da.UpdateCursor(os.path.join(newDB, "sdvattribute"), ["attributecolumnname"], where_clause=wc) as cur:
+                    for rec in cur:
+                        #PrintMsg("\tDeleted row for NH forest group", 1)
+                        cur.deleteRow()
+
+        except:
+            # SQLite is having problem with deleteRow()
+            #
+            pass
+
+
+
+
+        # Get all indexes
+        tblIndexes = GetTableIndexes(outputWS)
+        PrintMsg(" \nNear the end of ImportTabular function...", 1)
+
+        PrintMsg(" \nAdding ArcGIS-type table indexes for " + str(len(tblList)) + " tables...", 1)
+
+        for tblName in tblList:
+            
+            arcpy.SetProgressorLabel("\tAdding attribute index for " + tblName)
+            #PrintMsg(" \nAdding attribute indexes for " + tblName + " table...", 1)
+            
+            tbl = os.path.join(newDB, tblName)
+            
+            if tblName in tblIndexes:
+                # found indexes for this table, go ahead and add them
+                primaryKey, foreignKey = tblIndexes[tblName]
+                
+            if not primaryKey is None:
+                indexName = "Indx_" + tblName + "_" + primaryKey
+                #arcpy.AddIndex_management(tbl, primaryKey, indexName, "UNIQUE")
+                queryIndx = "CREATE UNIQUE INDEX " + indexName + " ON " + tblName + "(" + primaryKey + ")"
+                liteCur.execute(queryIndx)
+                conn.commit
+
+            if not foreignKey is None:
+                indexName = "Indx_" + tblName + "_" + foreignKey
+                #arcpy.AddIndex_management(tbl, foreignKey, indexName, "NON_UNIQUE")
+                queryIndx = "CREATE INDEX " + indexName + " ON " + tblName + "(" + foreignKey + ")"
+                liteCur.execute(queryIndx)
+                conn.commit
+ 
+        # Add additional attribute indexes for cointerp table.
+        # According to documentation, a file geodatabase does not use multi-column indexes
+        arcpy.SetProgressorLabel("Adding attribute index on rulekey for cointerp table")
 
         try:
-            indxName = "Indx_CointerpRulekey"
-            indxList = arcpy.ListIndexes(os.path.join(newDB, "cointerp"), indxName)
-            
-            if len(indxList) == 0: 
-                arcpy.SetProgressorLabel("\tAdding attribute index on rulekey for cointerp table")
-                # Tried to add this Cointerp index to the XML workspace document, but slowed down data import.
-                arcpy.AddIndex_management(os.path.join(newDB, "COINTERP"), "RULEKEY", indxName)
-                arcpy.SetProgressorPosition()
+            tblName = "cointerp"
+            indexName = "Indx_CointerpRulekey"
+            arcpy.SetProgressorLabel("\tAdding attribute index on rulekey for cointerp table")
+            # Tried to add this Cointerp index to the XML workspace document, but slowed down data import.
+            #arcpy.AddIndex_management(os.path.join(newDB, "cointerp"), "rulekey", indexName)
+            queryIndx = "CREATE INDEX " + indexName + " ON " + tblName + "(rulekey) WHERE ruledepth = 0"
+            liteCur.execute(queryIndx)
+            conn.commit
+            arcpy.SetProgressorPosition()
 
         except:
             errorMsg()
             PrintMsg(" \nUnable to create new rulekey index on the cointerp table", 1)
-            
+
+
+        PrintMsg(" \nCreating ArcGIS-type indexes in AppendFeatures function...", 1)
+
+
+                
         arcpy.SetProgressorLabel("Tabular import complete")
 
+        # Create indexes for featureclasses
+        #
+        # Spatial Index for ST_Geometry
+        # SELECT CreateSpatialIndex('mydatabase','sensitive_areas','zone','rtreexy');
+        
+        # Mupolygon
+        tblName = "MUPOLYGON"
+        PrintMsg(" \nAdding attribute index for " + tblName, 1)
+        arcpy.SetProgressorLabel("Adding attribute index for " + tblName)
+        primaryKey = "mukey"
+        indexName = "Indx_" + tblName + "_" + primaryKey
+        #arcpy.AddIndex_management(os.path.join(newDB, tbl), primaryKey, indexName, "NON_UNIQUE")
+
+        queryIndx = "CREATE INDEX " + indexName + " ON " + tblName + "(" + primaryKey + ")"
+        liteCur.execute(queryIndx)
+        conn.commit
+
+        if databaseType == "xxxxxxST_Geometry":
+            # SELECT CreateSpatialIndex('mydatabase','sensitive_areas','zone','rtreexy');
+            querySpatial = "SELECT CreateSpatialIndex('" + newDB  + "', '" + tblName + ", 'Shape', 'rtreexy')"
+            liteCur.execute(querySpatial)
+            conn.commit
+
+        tblName = "MUPOINT"
+        PrintMsg(" \nAdding attribute index for " + tblName, 1)
+        arcpy.SetProgressorLabel("Adding attribute index for " + tbl)
+        primaryKey = "mukey"
+        indexName = "Indx_" + tblName + "_" + primaryKey
+        #arcpy.AddIndex_management(os.path.join(newDB, tbl), primaryKey, indexName, "NON_UNIQUE")
+        queryIndx = "CREATE INDEX " + indexName + " ON " + tblName + "(" + primaryKey + ")"
+        liteCur.execute(queryIndx)
+        conn.commit
+
+
+        tblName = "MULINE"
+        PrintMsg(" \nAdding attribute index for " + tblName, 1)
+        arcpy.SetProgressorLabel("Adding attribute index for " + tblName)
+        primaryKey = "mukey"
+        indexName = "Indx_" + tblName + "_" + primaryKey
+        #arcpy.AddIndex_management(os.path.join(newDB, tblName), primaryKey, indexName, "NON_UNIQUE")
+        queryIndx = "CREATE INDEX " + indexName + " ON " + tblName + "(" + primaryKey + ")"
+        liteCur.execute(queryIndx)
+        conn.commit
+
+        tblName = "SAPOLYGON"
+        PrintMsg(" \nAdding attribute index for " + tblName, 1)
+        arcpy.SetProgressorLabel("Adding attribute index for " + tblName)
+        primaryKey = "areasymbol"
+        indexName = "Indx_" + tblName + "_" + primaryKey
+        #arcpy.AddIndex_management(os.path.join(newDB, tblName), primaryKey, indexName, "NON_UNIQUE")
+        queryIndx = "CREATE INDEX " + indexName + " ON " + tblName + "(" + primaryKey + ")"
+        liteCur.execute(queryIndx)
+        conn.commit
+        
+        tblName = "FEATLINE"
+        PrintMsg(" \nAdding attribute index for " + tblName, 1)
+        arcpy.SetProgressorLabel("Adding attribute index for " + tblName)
+        primaryKey = "featkey"
+        indexName = "Indx_" + tblName + "_" + primaryKey
+        #arcpy.AddIndex_management(os.path.join(newDB, tbl), primaryKey, indexName, "NON_UNIQUE")
+        queryIndx = "CREATE INDEX " + indexName + " ON " + tblName + "(" + primaryKey + ")"
+        liteCur.execute(queryIndx)
+        conn.commit
+        
+        tblName = "FEATPOINT"
+        PrintMsg(" \nAdding attribute index for " + tblName, 1)
+        arcpy.SetProgressorLabel("Adding attribute index for " + tblName)
+        primaryKey = "featkey"
+        indexName = "Indx_" + tblName + "_" + primaryKey
+        #arcpy.AddIndex_management(os.path.join(newDB, tbl), primaryKey, indexName, "NON_UNIQUE")
+        queryIndx = "CREATE INDEX " + indexName + " ON " + tblName + "(" + primaryKey + ")"
+        liteCur.execute(queryIndx)
+        conn.commit
+
+        
+        liteCur.execute("VACUUM")
+        conn.commit
+        conn.close()
+        del conn
+
+        arcpy.SetProgressorLabel("Finished with attribute indexes")
+        
         return True
 
     except MyError, e:
@@ -1656,6 +1585,10 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
     # Compare shapefile feature count to GDB feature count
     # featCnt:  0 mupoly, 1 muline, 2 mupoint, 3 sfline, 4 sfpoint, 5 sapoly
     try:
+
+        PrintMsg(" \nCreating ArcGIS-type spatial indexes in AppendFeatures function...", 1)
+
+        
         # Set output workspace
         env.workspace = outputWS
 
@@ -1677,8 +1610,6 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
         # output datum is either NAD 1983 or WGS 1984. Output coordinate system will be
         # defined by the existing output featureclass.
 
-        # WITH XML workspace method, I need to use Append_management
-
         # Merge process MUPOLYGON
         if len(mupolyList) > 0:
             PrintMsg(" \n\tAppending " + str(len(mupolyList)) + " soil mapunit polygon shapefiles to create new featureclass: " + "MUPOLYGON", 0)
@@ -1687,18 +1618,12 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
             mupolyCnt = int(arcpy.GetCount_management(os.path.join(outputWS, "MUPOLYGON")).getOutput(0))
 
             if mupolyCnt != featCnt[0]:
-                raise MyError, "MUPOLYGON imported only " + Number_Format(mupolyCnt, 0, True) + " polygons, should be " + Number_Format(featCnt[0], 0, True)
-            #PrintMsg(" \nMUPOLYGON imported only " + Number_Format(mupolyCnt, 0, True) + " polygons, should be " + Number_Format(featCnt[0], 0, True), 1)
+                msg = "Merged MUPOLYGON count: " + Number_Format(mupolyCnt, 0, True) + " \nInput polygon count: " + Number_Format(featCnt[0], 0, True) + ":  "
+                raise MyError, msg
 
             # Add spatial index
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "MUPOLYGON"))
-
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOLYGON"), "MUKEY", "Indx_MupolyMukey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOLYGON"), "MUSYM", "Indx_MupolyMusym")
-            arcpy.AddIndex_management(os.path.join(outputWS, "MUPOLYGON"), "AREASYMBOL", "Indx_MupolyAreasymbol")
-
-        #PrintMsg(" \nSkipping import for other featureclasses until problem with shapefile primary key is fixed", 0)
-        #return True
+            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOLYGON"), "AREASYMBOL", "Indx_MupolyAreasymbol")
 
         # Merge process MULINE
         if len(mulineList) > 0:
@@ -1712,11 +1637,7 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
 
             # Add spatial index
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "MULINE"))
-
-            # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MULINE"), "MUKEY", "Indx_MulineMukey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MULINE"), "MUSYM", "Indx_MulineMusym")
-            arcpy.AddIndex_management(os.path.join(outputWS, "MULINE"), "AREASYMBOL", "Indx_MulineAreasymbol")
+            #arcpy.AddIndex_management(os.path.join(outputWS, "MULINE"), "AREASYMBOL", "Indx_MulineAreasymbol")
 
         # Merge process MUPOINT
         if len(mupointList) > 0:
@@ -1728,13 +1649,9 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
             if mupointCnt != featCnt[2]:
                 raise MyError, "MUPOINT short count"
 
-            # Add spatial index
+            # Add indexes
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "MUPOINT"))
-
-            # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOINT"), "MUKEY", "Indx_MupointMukey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOINT"), "MUSYM", "Indx_MupointMusym")
-            arcpy.AddIndex_management(os.path.join(outputWS, "MUPOINT"), "AREASYMBOL", "Indx_MupointAreasymbol")
+            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOINT"), "AREASYMBOL", "Indx_MupointAreasymbol")
 
         # Merge process FEATLINE
         if len(sflineList) > 0:
@@ -1748,11 +1665,7 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
 
             # Add spatial index
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "FEATLINE"))
-
-            # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATLINE"), "FEATKEY", "Indx_SFLineFeatkey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATLINE"), "FEATSYM", "Indx_SFLineFeatsym")
-            arcpy.AddIndex_management(os.path.join(outputWS, "FEATLINE"), "AREASYMBOL", "Indx_SFLineAreasymbol")
+            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATLINE"), "AREASYMBOL", "Indx_SFLineAreasymbol")
 
         # Merge process FEATPOINT
         if len(sfpointList) > 0:
@@ -1769,11 +1682,7 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
 
             # Add spatial index
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "FEATPOINT"))
-
-            # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATPOINT"), "FEATKEY", "Indx_SFPointFeatkey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATPOINT"), "FEATSYM", "Indx_SFPointFeatsym")
-            arcpy.AddIndex_management(os.path.join(outputWS, "FEATPOINT"), "AREASYMBOL", "Indx_SFPointAreasymbol")
+            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATPOINT"), "AREASYMBOL", "Indx_SFPointAreasymbol")
 
         # Merge process SAPOLYGON
         if len(sapolyList) > 0:
@@ -1787,9 +1696,6 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
 
             # Add spatial index
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "SAPOLYGON"))
-
-            # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "SAPOLYGON"), "LKEY", "Indx_SapolyLKey")
             #arcpy.AddIndex_management(os.path.join(outputWS, "SAPOLYGON"), "AREASYMBOL", "Indx_SapolyAreasymbol")
 
         arcpy.RefreshCatalog(outputWS)
@@ -1805,6 +1711,7 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
     except:
         errorMsg()
         return False
+
 
 ## ===================================================================================
 def StateNames():
@@ -1895,8 +1802,6 @@ def GetXML(AOI):
 
         # Input XML workspace document used to create new gSSURGO schema in an empty geodatabase
         if AOI == "Lower 48 States":
-            #inputXML = os.path.join(xmlPath, "gSSURGO_CONUS_AlbersNAD1983.xml")
-            #PrintMsg(" \nUsing test xmlworkspacedocument for CONUS", 1)
             inputXML = os.path.join(xmlPath, "gSSURGO_CONUS_AlbersNAD1983.xml")
             tm = "WGS_1984_(ITRF00)_To_NAD_1983"
 
@@ -1931,6 +1836,9 @@ def GetXML(AOI):
             inputXML = os.path.join(xmlPath, "gSSURGO_GCS_WGS1984.xml")
             tm = ""
 
+        # Hardcoding XML workspace document for testing purposes
+        inputXML = os.path.join(xmlPath, "SQLite_SpatiaLite1.xml")
+        
         arcpy.env.geographicTransformations = tm
 
         return inputXML
@@ -1940,216 +1848,7 @@ def GetXML(AOI):
         return ""
 
 ## ===================================================================================
-def UpdateMetadata(outputWS, target, surveyInfo, description, remove_gp_history_xslt):
-    #
-    # Used for featureclass and geodatabase metadata. Does not do individual tables
-    # Reads and edits the original metadata object and then exports the edited version
-    # back to the featureclass or database.
-    #
-    # Several times over the years I've had problems with ExportMetadata errors:
-    # ERROR 000584: Implementation of this Tool's Validate is invalid.
-    # I now believe this occurs when the geoprocessing workspace environments point to
-    # folder or geodatabases that don't exist. The folder was somehow deleted.
-    #
-    try:
-        if outputWS == target:
-            # Updating the geodatabase metadata
-            #target = outputWS
-            PrintMsg("\tGeodatabase", 0)
-
-        else:
-            # Updating featureclass metadata
-            target = os.path.join(outputWS, target)
-            PrintMsg("\t" + os.path.basename(target.title()), 0)
-
-        # Set metadata translator file
-        dInstall = arcpy.GetInstallInfo()
-        installPath = dInstall["InstallDir"]
-        prod = r"Metadata/Translator/ARCGIS2FGDC.xml"
-        #prod = r"Metadata/Translator/ArcGIS2ISO19139.xml"
-        mdTranslator = os.path.join(installPath, prod)
-
-        if not arcpy.Exists(mdTranslator):
-            raise MyError, "Missing metadata translator file (" + mdTranslator + ")"
-
-        # Define input and output XML files
-        env.scratchFolder
-        env.scratchGDB
-        mdExport = os.path.join(env.scratchFolder, "xxExport.xml")  # initial metadata exported from current MUPOLYGON featureclass
-        mdImport = os.path.join(env.scratchFolder, "xxImport.xml")  # the metadata xml that will provide the updated info
-
-        # Cleanup XML files from previous runs
-        if os.path.isfile(mdImport):
-            os.remove(mdImport)
-
-        if os.path.isfile(mdExport):
-            os.remove(mdExport)
-
-        #PrintMsg(" \nExporting metadata from " + target, 1)
-        #PrintMsg("Current workspace is " + env.workspace, 1)
-        
-        arcpy.ExportMetadata_conversion(target, mdTranslator, mdExport)
-
-        # Get replacement value for the search words
-        #
-        stDict = StateNames()
-        st = os.path.basename(outputWS)[8:-4]
-
-        if st in stDict:
-            # Get state name from the geodatabase
-            mdState = stDict[st]
-
-        else:
-            # Use description as state name
-            #mdState = st
-            mdState = description
-
-        # Set date strings for metadata, based upon today's date
-        #
-        d = datetime.date.today()
-        #today = str(d.isoformat().replace("-",""))
-
-        lastDate = GetLastDate(outputWS)
-
-        # Set fiscal year according to the current month. If run during January thru September,
-        # set it to the current calendar year. Otherwise set it to the next calendar year.
-        #
-        if d.month > 9:
-            fy = "FY" + str(d.year + 1)
-
-        else:
-            fy = "FY" + str(d.year)
-
-        if d.month > 9:
-            fy = "FY" + str(d.year + 1)
-
-        else:
-            fy = "FY" + str(d.year)
-
-
-        # Parse exported XML metadata file
-        #
-        # Convert XML to tree format
-        tree = ET.parse(mdExport)
-        root = tree.getroot()
-
-        # new citeInfo has title.text, edition.text, serinfo/issue.text
-        citeInfo = root.findall('idinfo/citation/citeinfo/')
-
-        if not citeInfo is None:
-            # Process citation elements
-            # title
-            #
-            # PrintMsg("citeInfo with " + str(len(citeInfo)) + " elements : " + str(citeInfo), 1)
-            for child in citeInfo:
-                #PrintMsg("\t\t" + str(child.tag), 0)
-                if child.tag == "title":
-                    if child.text.find('xxSTATExx') >= 0:
-                        child.text = child.text.replace('xxSTATExx', mdState)
-
-                    elif mdState != "":
-                        child.text = child.text + " - " + mdState
-
-                elif child.tag == "edition":
-                    if child.text == 'xxFYxx':
-                        child.text = fy
-
-                elif child.tag == "serinfo":
-                    for subchild in child.iter('issue'):
-                        if subchild.text == "xxFYxx":
-                            subchild.text = fy
-
-        # Update place keywords
-        #PrintMsg("\t\tplace keywords", 0)
-        ePlace = root.find('idinfo/keywords/place')
-
-        for child in ePlace.iter('placekey'):
-            if child.text == "xxSTATExx":
-                child.text = mdState
-
-            elif child.text == "xxSURVEYSxx":
-                child.text = surveyInfo
-
-        # Update credits
-        eIdInfo = root.find('idinfo')
-        #PrintMsg("\t\tcredits", 0)
-
-        for child in eIdInfo.iter('datacred'):
-            sCreds = child.text
-
-            if sCreds.find("xxSTATExx") >= 0:
-                #PrintMsg("\t\tcredits " + mdState, 0)
-                child.text = child.text.replace("xxSTATExx", mdState)
-
-            if sCreds.find("xxFYxx") >= 0:
-                #PrintMsg("\t\tcredits " + fy, 0)
-                child.text = child.text.replace("xxFYxx", fy)
-
-            if sCreds.find("xxTODAYxx") >= 0:
-                #PrintMsg("\t\tcredits " + today, 0)
-                child.text = child.text.replace("xxTODAYxx", lastDate)
-
-        idPurpose = root.find('idinfo/descript/purpose')
-        if not idPurpose is None:
-            ip = idPurpose.text
-            #PrintMsg("\tip: " + ip, 1)
-            if ip.find("xxFYxx") >= 0:
-                #PrintMsg("\t\tip", 1)
-                idPurpose.text = ip.replace("xxFYxx", fy)
-
-        procDates = root.find('dataqual/lineage')
-        if not procDates is None:
-            #PrintMsg(" \nUpdating process step dates", 1)
-            for child in procDates.iter('procdate'):
-
-                sDate = child.text
-                #PrintMsg("\tFound process date: " + sDate, 1)
-                if sDate.find('xxTODAYxx'):
-                    #PrintMsg("\tReplacing process date: " + sDate + " with " + lastDate, 1)
-                    child.text = lastDate
-
-        else:
-            PrintMsg("\nNo find process date", 1)
-
-        #  create new xml file which will be imported, thereby updating the table's metadata
-        tree.write(mdImport, encoding="utf-8", xml_declaration=None, default_namespace=None, method="xml")
-
-        # import updated metadata to the geodatabase table
-        arcpy.ImportMetadata_conversion(mdImport, "FROM_FGDC", target, "DISABLED")
-
-        # Clear geoprocessing history from the target metadata
-        out_xml = os.path.join(env.scratchFolder, "xxClean.xml")
-
-        if arcpy.Exists(out_xml):
-            arcpy.Delete_management(out_xml)
-            #PrintMsg(" \nKeeping metadata file " + out_xml, 1)
-
-        arcpy.XSLTransform_conversion(target, remove_gp_history_xslt, out_xml, "")
-        arcpy.MetadataImporter_conversion(out_xml, target)
-
-        # delete the temporary xml metadata files
-        if os.path.isfile(mdImport):
-            os.remove(mdImport)
-            #PrintMsg(" \nKeeping temporary medatafiles: " + mdImport, 1)
-            #pass
-
-        if os.path.isfile(mdExport):
-            os.remove(mdExport)
-            #pass
-            #PrintMsg(" \nKeeping temporary medatafiles: " + mdExport, 1)
-            #time.sleep(5)
-
-        if arcpy.Exists(out_xml):
-            arcpy.Delete_management(out_xml)
-
-        return True
-
-    except:
-        errorMsg()
-        False
-
-## ===================================================================================
-def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bClipped, areasymbolList):
+def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, bClipped, databaseType, areasymbolList):
     # main function
 
     try:
@@ -2164,7 +1863,7 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
 
         env.overwriteOutput= True
         codePage = 'iso-8859-1'  # allow csv reader to handle non-ascii characters
-        # According to Gary Spivak, SDM downloads are UTF-8 and NASIS downloads are iso-8859-1
+        # According to Gary Spivak, SDM downloads are UTF-8 and NAIS downloads are iso-8859-1
         # cp1252 also seemed to work well
         #codePage = 'utf-16' this did not work
         #
@@ -2173,29 +1872,11 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
 
         dbVersion = 2  # This is the SSURGO version supported by this script and the gSSURGO schema (XML Workspace document)
 
-        # Make sure that the env.scratchGDB is NOT Default.gdb. This can cause problems for
-        # some unknown reason.
-        #if (os.path.basename(env.scratchGDB).lower() == "default.gdb") or \
-        #(os.path.basename(env.scratchWorkspace).lower() == "default.gdb") or \
-        #(os.path.basename(env.scratchGDB).lower() == outputWS):
-                    
-        #if SetScratch() == False:
-        #    raise MyError, "Invalid scratch workspace setting (" + env.scratchWorkspace + ")"
-
-
-        # Problem when scratchGDB or scratchFolder no longer exist
-        scratchFolder = env.scratchFolder
-        # PrintMsg(" \nScratchFolder = " + scratchFolder, 1)
-        
-        if not arcpy.Exists(env.scratchFolder):
-            # try to create it
-            arcpy.CreateFolder(env.scratchFolder)
-
-        if not arcpy.Exists(env.scratchGDB):
-            arcpy.CreateFileGDB(os.path.dirname(env.scratchGDB), os.path.basename(env.scratchGDB), "10.0")
+        if SetScratch() == False:
+            raise MyError, "Invalid scratch workspace setting (" + env.scratchWorkspace + ")"
 
         # Import script to generate relationshipclasses and associated attribute indexes
-        import Create_SSURGO_RelationshipClasses
+        # import Create_SSURGO_RelationshipClasses
         
         # get the information from the tileInfo
         if type(tileInfo) == tuple:
@@ -2222,12 +1903,6 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
         aliasName = ""
 
         #PrintMsg(" \nAlias and description: " + aliasName + "; " +  description, 1)
-
-        # Get the XML Workspace Document appropriate for the specified AOI
-        inputXML = GetXML(AOI)
-
-        if inputXML == "":
-            raise MyError, "Unable to set input XML Workspace Document"
 
         if len(surveyList) == 0:
             raise MyError, "At least one soil survey area input is required"
@@ -2286,7 +1961,6 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
 
                     XCntr = ( shpExtent.XMin + shpExtent.XMax) / 2.0
                     YCntr = ( shpExtent.YMin + shpExtent.YMax) / 2.0
-                    #sortValue = (areaSym, round(XCntr, 1),round(YCntr, 1))  # center of survey area
                     sortValue = (areaSym, round(shpExtent.XMin, 1), round(shpExtent.YMax, 1)) # upper left corner of survey area
                     extentList.append(sortValue)
                     areasymbolList.append(areaSym.upper())
@@ -2302,7 +1976,6 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
 
                     XCntr = ( shpExtent.XMin + shpExtent.XMax) / 2.0
                     YCntr = ( shpExtent.YMin + shpExtent.YMax) / 2.0
-                    #sortValue = (areaSym, round(XCntr, 1),round(YCntr, 1))  # center of survey area
                     sortValue = (areaSym, round(shpExtent.XMin, 1), round(shpExtent.YMax, 1)) # upper left corner of survey area
                     extentList.append(sortValue)
                     areasymbolList.append(areaSym.upper())
@@ -2348,7 +2021,7 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
         sapolyCnt = 0
 
         # Create a series of lists that contain the found shapefiles to be merged
-        PrintMsg(" \nCreating list of shapefiles to be imported for each of " + Number_Format(len(areasymbolList), 0, True) + " survey area...", 0)
+        PrintMsg(" \nCreating list of shapefiles to be imported for each survey area...", 0)
         arcpy.SetProgressor("step", "Adding surveys to merge list", 1, len(areasymbolList))
         
         for areaSym in areasymbolList:
@@ -2356,8 +2029,6 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
             subFolder = "soil_" + areaSym
     
             shpPath = os.path.join( inputFolder, os.path.join( subFolder, "spatial"))
-
-            badShps = list()
 
             # soil polygon shapefile
             mupolyName = "soilmu_a_" + areaSym + ".shp"
@@ -2373,12 +2044,11 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
                     if not muShp in mupolyList:
                         mupolyCnt += cnt
                         mupolyList.append(muShp)
-                        #PrintMsg("\tAdding '" + areaSym.upper() + "' survey to merge list with " + str(cnt) + " polygons", 0)
+                        #PrintMsg("\tAdding '" + areaSym.upper() + "' survey to merge list", 0)
                         arcpy.SetProgressorLabel("Adding " + areaSym.upper() + " survey to merge list")
 
                 else:
-                    badShps.append(shpFile)
-                    #raise MyError, "No features found in " + shpFile
+                    raise MyError, "No features found in " + shpFile
 
             elif arcpy.Exists(gsmuShp):
 
@@ -2392,8 +2062,8 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
                         arcpy.SetProgressorLabel("Adding " + areaSym.upper() + " survey to merge list")
 
                 else:
-                    badShps.append(gsmuShp)
-                    #raise MyError, "No features found in " + gsmuShp
+                    raise MyError, "No features found in " + shpFile
+
 
             else:
                 raise MyError, "Shapefile " + muShp + " not found"
@@ -2460,34 +2130,19 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
                         sapolyList.append(shpFile)
 
             # input soil survey Template database
-            if useTextFiles == True:
-                # use database path, even if it doesn't exist. It will be used
-                # to actually define the location of the tabular folder and textfiles
-                # probably need to fix this later
-                dbPath = os.path.join( inputFolder, os.path.join( subFolder, "tabular"))
-                dbName = "soil_d_" + areaSym + ".mdb"
-                dbFile = os.path.join(dbPath, dbName)
-                
-                if not dbFile in dbList:
-                    dbList.append(dbFile)
+            # use database path, even if it doesn't exist. It will be used
+            # to actually define the location of the tabular folder and textfiles
+            # probably need to fix this later
+            dbPath = os.path.join( inputFolder, os.path.join( subFolder, "tabular"))
+            dbName = "soil_d_" + areaSym + ".mdb"
+            dbFile = os.path.join(dbPath, dbName)
+            
+            if not dbFile in dbList:
+                dbList.append(dbFile)
 
-            else:
-                dbPath = os.path.join( inputFolder, os.path.join( subFolder, "tabular"))
-                dbName = "soil_d_" + areaSym + ".mdb"
-                dbFile = os.path.join(dbPath, dbName)
-
-                if arcpy.Exists(dbFile) and not dbFile in dbList:
-                    dbList.append(dbFile)
-
-                else:
-                    PrintMsg("Missing Template database (" + dbName + ")", 2)
-                    return False
 
             arcpy.SetProgressorPosition()
 
-        if len(badShps) > 0:
-            raise MyError, "Found " + Number_Format(len(badShps), 0, True) + " soil polygon shapefiles with no data: " + "\n".join(badShps)
-        
         time.sleep(1)
         arcpy.ResetProgressor()
 
@@ -2501,7 +2156,8 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
             outputWS = os.path.join(outFolder, gdbName)
             featCnt = (mupolyCnt, mulineCnt, mupointCnt, sflineCnt, sfpointCnt, sapolyCnt)  # 0 mupoly, 1 muline, 2 mupoint, 3 sfline, 4 sfpoint, 5 sapoly
 
-            bGeodatabase = CreateSSURGO_DB(outputWS, inputXML, areasymbolList, aliasName)
+            #PrintMsg(" \nHardcoding inputXML to: " + inputXML, 1)
+            bGeodatabase = CreateSSURGO_DB(outputWS,  areasymbolList, aliasName, databaseType)
 
             if bGeodatabase:
                 # Successfully created a new geodatabase
@@ -2515,23 +2171,13 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
                     if not arcpy.Exists(outputWS):
                         raise MyError, "Could not find " + outputWS + " to append tables to"
 
-                    if useTextFiles:
-                        bMD = ImportMDTabular(outputWS, dbPath, codePage)  # new, import md tables from text files of last survey area
+                    bMD = ImportMDTabular(outputWS, dbPath, codePage)  # new, import md tables from text files of last survey area
 
-                        if bMD == False:
-                            raise MyError, ""
+                    if bMD == False:
+                        raise MyError, ""
 
-                        # import attribute data from text files in tabular folder
-                        bTabular = ImportTabular(outputWS, dbList, dbVersion, codePage)
-
-                    else:
-                        bMD = ImportMDTables(outputWS, dbList)
-
-                        if bMD == False:
-                            raise MyError, ""
-
-                        # import attribute data from Template database tables
-                        bTabular = ImportTables(outputWS, dbList, dbVersion)
+                    # import attribute data from text files in tabular folder
+                    bTabular = ImportTabular(outputWS, dbList, dbVersion, codePage)
 
                     if bTabular == True:
                         # Successfully imported all tabular data (textfiles or Access database tables)
@@ -2550,10 +2196,7 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
 
             # In October 2018 it was reported that two of the DHS interps were missing from the sdv tables
             # This is a patch to replace the 4 missing records
-            #bFixed = IdentifyNewInterps(outputWS)
-
-            # Create table relationships and indexes
-            bRL = CreateTableRelationships(outputWS)
+            bFixed = IdentifyNewInterps(outputWS)
 
             # Query the output SACATALOG table to get list of surveys that were exported to the gSSURGO
             #
@@ -2569,34 +2212,40 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
             surveyInfo = ", ".join(expList)
             queryInfo = ", ".join(queryList)
 
-            # Update metadata for the geodatabase and all featureclasses
-            PrintMsg(" \nUpdating metadata...", 0)
-            arcpy.SetProgressorLabel("Updating metadata...")
-            mdList = [outputWS, os.path.join(outputWS, "FEATLINE"), os.path.join(outputWS, "FEATPOINT"), \
-            os.path.join(outputWS, "MUPOINT"), os.path.join(outputWS, "MULINE"), os.path.join(outputWS, "MUPOLYGON"), \
-            os.path.join(outputWS, "SAPOLYGON")]
-            remove_gp_history_xslt = os.path.join(os.path.dirname(sys.argv[0]), "remove geoprocessing history.xslt")
+            if 1==2:
+                # Skipping metadata for SQLite database
+                
+                # Update metadata for the geodatabase and all featureclasses
+                PrintMsg(" \nUpdating metadata...", 0)
+                arcpy.SetProgressorLabel("Updating metadata...")
+                mdList = [outputWS, os.path.join(outputWS, "FEATLINE"), os.path.join(outputWS, "FEATPOINT"), \
+                os.path.join(outputWS, "MUPOINT"), os.path.join(outputWS, "MULINE"), os.path.join(outputWS, "MUPOLYGON"), \
+                os.path.join(outputWS, "SAPOLYGON")]
+                remove_gp_history_xslt = os.path.join(os.path.dirname(sys.argv[0]), "remove geoprocessing history.xslt")
 
-            if not arcpy.Exists(remove_gp_history_xslt):
-                raise MyError, "Missing required file: " + remove_gp_history_xslt
+                if not arcpy.Exists(remove_gp_history_xslt):
+                    raise MyError, "Missing required file: " + remove_gp_history_xslt
 
-            for target in mdList:
-                bMetadata = UpdateMetadata(outputWS, target, surveyInfo, description, remove_gp_history_xslt)
+                for target in mdList:
+                    bMetadata = UpdateMetadata(outputWS, target, surveyInfo, description, remove_gp_history_xslt)
 
-            # Check scratchfolder for xxImport*.log files
-            # For some reason they are being put in the folder above env.scratchFolder (or is it one above scratchworkspace?)
-            
-            env.workspace = os.path.dirname(env.scratchFolder)
-            #PrintMsg(" \nCleaning log files from " + env.workspace, 1)
+                # Check scratchfolder for xxImport*.log files
+                # For some reason they are being put in the folder above env.scratchFolder (or is it one above scratchworkspace?)
+                
+                env.workspace = os.path.dirname(env.scratchFolder)
+                #PrintMsg(" \nCleaning log files from " + env.workspace, 1)
 
-            logFiles = arcpy.ListFiles("xxImport*.log")
+                logFiles = arcpy.ListFiles("xxImport*.log")
 
-            if len(logFiles) > 0:
-                #PrintMsg(" \nFound " + str(len(logFiles)) + " log files in " + env.workspace, 1)
-                for logFile in logFiles:
-                    #PrintMsg("\t\tDeleting " + logFile, 1)
-                    arcpy.Delete_management(logFile)
+                if len(logFiles) > 0:
+                    #PrintMsg(" \nFound " + str(len(logFiles)) + " log files in " + env.workspace, 1)
+                    for logFile in logFiles:
+                        #PrintMsg("\t\tDeleting " + logFile, 1)
+                        arcpy.Delete_management(logFile)
 
+
+                
+            #PrintMsg(" \nProcessing complete", 0)
             PrintMsg(" \nSuccessfully created a geodatabase containing the following surveys: " + queryInfo, 0)
 
         PrintMsg(" \nOutput file geodatabase:  " + outputWS + "  \n ", 0)
@@ -2622,10 +2271,6 @@ def SortSurveyAreaLayer(ssaLayer, surveyList):
         sortedSSA = os.path.join(env.scratchGDB, "sortedSSA")
         desc = arcpy.Describe(ssaLayer)
         shapeField = desc.featureclass.shapeFieldName
-
-        if arcpy.Exists(sortedSSA):
-            arcpy.Delete_management(sortedSSA)
-            
         arcpy.Sort_management(ssaLayer, sortedSSA, shapeField, "UR")
         #PrintMsg(" \nareasymList: " + str(areasymList), 1)
 
@@ -2690,121 +2335,6 @@ def FindField(theInput, chkField, bVerbose = False):
     except:
         errorMsg()
         return ""
-
-## ===============================================================================================================
-def CreateTableRelationships(wksp):
-    # Create relationship classes between standalone attribute tables.
-    # Relate parameters are pulled from the mdstatrhipdet and mdstatrshipmas tables,
-    # thus it is required that the tables must have been copied from the template database.
-
-    try:
-
-        PrintMsg(" \nCreating table relationships and indexes on key fields...", 0)
-        env.workspace = wksp
-        
-        if arcpy.Exists(os.path.join(wksp, "mdstatrshipdet")) and arcpy.Exists(os.path.join(wksp, "mdstatrshipmas")):
-
-            # Create new Table View to contain results of join between relationship metadata tables
-
-            tbl1 = os.path.join(wksp, "mdstatrshipmas")
-            tbl2 = os.path.join("mdstatrshipdet")
-            tblList = [tbl1, tbl2]
-            queryTableName = "TblRelationships"
-
-            sql = "mdstatrshipdet.ltabphyname = mdstatrshipmas.ltabphyname AND mdstatrshipdet.rtabphyname = mdstatrshipmas.rtabphyname AND mdstatrshipdet.relationshipname = mdstatrshipmas.relationshipname"
-
-            fldList = [["mdstatrshipmas.ltabphyname","LTABPHYNAME"],["mdstatrshipmas.rtabphyname", "RTABPHYNAME"],["mdstatrshipdet.relationshipname", "RELATIONSHIPNAME"], ["mdstatrshipdet.ltabcolphyname", "LTABCOLPHYNAME"],["mdstatrshipdet.rtabcolphyname",  "RTABCOLPHYNAME"]]
-
-            arcpy.MakeQueryTable_management (tblList, queryTableName, "ADD_VIRTUAL_KEY_FIELD", "", fldList, sql)
-
-            if not arcpy.Exists(queryTableName):
-                raise MyError, "Failed to create metadata table required for creation of relationshipclasses"
-
-            tblCnt = int(arcpy.GetCount_management(queryTableName).getOutput(0)) + 7
-            #PrintMsg(" \nQuery table has " + str(tblCnt) + " records", 1)
-            arcpy.SetProgressor("step", "Creating table relationships...", 1, tblCnt, 1)
-            #arcpy.CopyRows_management(queryTableName, os.path.join(env.scratchGDB, "MdTable"))
-
-            # Fields in RelshpInfo table view
-            # OBJECTID, LTABPHYNAME, RTABPHYNAME, RELATIONSHIPNAME, LTABCOLPHYNAME, RTABCOLPHYNAME
-            # Open table view and step through each record to retrieve relationshipclass parameters             
-            with arcpy.da.SearchCursor(queryTableName, ["mdstatrshipmas_ltabphyname", "mdstatrshipmas_rtabphyname", "mdstatrshipdet_ltabcolphyname", "mdstatrshipdet_rtabcolphyname"]) as theCursor:
-
-                for rec in theCursor:
-                    # Get relationshipclass parameters from current table row
-                    # Syntax for CreateRelationshipClass_management (origin_table, destination_table, 
-                    # out_relationship_class, relationship_type, forward_label, backward_label, 
-                    # message_direction, cardinality, attributed, origin_primary_key, 
-                    # origin_foreign_key, destination_primary_key, destination_foreign_key)
-                    #
-                    destinationTable, originTable, originFKey, originPKey = rec
-                    
-                    originTablePath = os.path.join(wksp, originTable)
-                    destinationTablePath = os.path.join(wksp, destinationTable)
-
-                    # Use table aliases for relationship labels
-                    relName = "z" + originTable.title() + "_" + destinationTable.title()
-
-                    if arcpy.Exists(relName):
-                        arcpy.Delete_management(relName)
-
-                    # create Forward Label i.e. "> Horizon AASHTO Table"
-                    fwdLabel = "< " + destinationTable.title() + " Table"
-
-                    # create Backward Label i.e. "< Horizon Table"
-                    backLabel = ">  " + originTable.title() + " Table"
-
-                    if arcpy.Exists(originTablePath) and arcpy.Exists(destinationTablePath):
-                        arcpy.SetProgressorLabel("Creating table relationship between " + originTable + " and " + destinationTable)
-                        arcpy.CreateRelationshipClass_management(originTablePath, destinationTablePath, relName, "SIMPLE", fwdLabel, backLabel, "NONE", "ONE_TO_MANY", "NONE", originPKey, originFKey, "","")
-
-                    arcpy.SetProgressorPosition()
-
-        else:
-            raise MyError, "Missing one or more of the metadata tables"
-
-
-        # Establish Relationship between tables and Spatial layers
-        #
-        arcpy.SetProgressorLabel("Creating relationships for featureclasses...")
-
-        # Relationship between MUPOLYGON --> Mapunit Table            
-        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MUPOLYGON"), os.path.join(wksp, "zSpatial_MUPOLYGON_Mapunit"), "SIMPLE", "< MUPOLYGON_Spatial", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
-        arcpy.SetProgressorPosition()
-
-        # Relationship between MUPOLYGON --> Mapunit Aggregate Table
-        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "muaggatt"), os.path.join(wksp, "MUPOLYGON"), os.path.join(wksp, "zSpatial_MUPOLYGON_Muaggatt"), "SIMPLE", "< MUPOLYGON_Spatial", "> Mapunit Aggregate Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
-        arcpy.SetProgressorPosition()
-
-        # Relationship between SAPOLYGON --> Legend Table
-        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "legend"), os.path.join(wksp, "SAPOLYGON"), os.path.join(wksp, "zSpatial_SAPOLYGON_Legend"), "SIMPLE", "< SAPOLYGON_Spatial", "> Legend Table", "NONE","ONE_TO_MANY", "NONE","LKEY","lkey", "","")
-        arcpy.SetProgressorPosition()
-
-        # Relationship between MULINE --> Mapunit Table          
-        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MULINE"), os.path.join(wksp, "zSpatial_MULINE_Mapunit"), "SIMPLE", "< MULINE_Spatial", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
-        arcpy.SetProgressorPosition()
-
-        # Relationship between MUPOINT --> Mapunit Table            
-        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "mapunit"), os.path.join(wksp, "MUPOINT"), os.path.join(wksp, "zSpatial_MUPOINT_Mapunit"), "SIMPLE", "< MUPOINT_Spatial", "> Mapunit Table", "NONE","ONE_TO_MANY", "NONE","MUKEY","mukey", "","")
-        arcpy.SetProgressorPosition()
-
-        # Relationship between FEATLINE --> Featdesc Table            
-        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "featdesc"), os.path.join(wksp, "FEATLINE"), os.path.join(wksp, "zSpatial_FEATLINE_Featdesc"), "SIMPLE", "< SPECLINE_Spatial", "> Featdesc Table", "NONE","ONE_TO_MANY", "NONE","FEATKEY","featkey", "","")
-        arcpy.SetProgressorPosition()
-
-        # Relationship between FEATPOINT --> Featdesc Table
-        arcpy.CreateRelationshipClass_management(os.path.join(wksp, "featdesc"), os.path.join(wksp, "FEATPOINT"), os.path.join(wksp, "zSpatial_FEATPOINT_Featdesc"), "SIMPLE", "< SPECPOINT_Spatial", "> Featdesc Table", "NONE","ONE_TO_MANY", "NONE","FEATKEY","featkey", "","")
-        arcpy.SetProgressorPosition()
-
-        PrintMsg("\nSuccessfully created featureclass and table relationships", 0)
-        arcpy.ResetProgressor()
-        
-        return True
-
-
-    except:
-        errorMsg()
-        return False
 
 ## ===================================================================================
 def GetFCType(fc):
@@ -2888,9 +2418,9 @@ def GetFCType(fc):
 ## ===================================================================================
 
 # Import system modules
-import arcpy, sys, string, os, traceback, locale, time, datetime, csv
+import arcpy, sys, string, os, traceback, locale, time, datetime, csv, shutil, sqlite3
 from operator import itemgetter, attrgetter
-import xml.etree.cElementTree as ET
+# import xml.etree.cElementTree as ET
 #from xml.dom import minidom
 from arcpy import env
 
@@ -2904,7 +2434,7 @@ try:
         outputWS = arcpy.GetParameterAsText(3)        # Name of output geodatabase
         AOI = arcpy.GetParameterAsText(4)             # Geographic Region used to set output coordinate system
         aliasName = arcpy.GetParameterAsText(5)       # String to be appended to featureclass aliases
-        useTextFiles = arcpy.GetParameter(6)
+        databaseType = arcpy.GetParameterAsText(6)    # 
 
         #dbVersion = 2  # This is the SSURGO version supported by this script and the gSSURGO schema (XML Workspace document)
 
@@ -2918,7 +2448,7 @@ try:
         else:
             areasymbolList = list()
                                          
-        bGood = gSSURGO(inputFolder, surveyList, outputWS, AOI, aliasName, useTextFiles, False, areasymbolList)
+        bGood = gSSURGO(inputFolder, surveyList, outputWS, AOI, aliasName, False, databaseType, areasymbolList)
 
 except MyError, e:
     PrintMsg(str(e), 2)

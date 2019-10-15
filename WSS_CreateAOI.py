@@ -1422,9 +1422,9 @@ def OpenWSS4(shpPath, wssURL, browserStartupAllowanceSeconds):
 
         aoiCnt = int(arcpy.GetCount_management(shpPath).getOutput(0))
 
-        if aoiCnt > 32:
+        if aoiCnt > 100:
             PrintMsg(" \n" + shpPath, 1)
-            raise MyError, "AOI shapefile has " + Number_Format(aoiCnt, 0, True) + " polygons, exceeding the WSS limit of 32"
+            raise MyError, "AOI shapefile has " + Number_Format(aoiCnt, 0, True) + " polygons, exceeding the WSS limit of 100"
 
         # 2017-02-02 only works in Dev WSS right now.
         #wssUrl = 'https://websoilsurvey-dev.dev.sc.egov.usda.gov/App/WebSoilSurvey.aspx'  # 

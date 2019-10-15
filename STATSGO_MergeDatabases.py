@@ -1,22 +1,11 @@
 # STATSGO_MergeDatabases.py
 #
-# Based directly upon SSURGO_MergeDatabases.py.
+# Designed to replace gSSURGO Notcoms and Denied Access mapunits with updated STATSGO data
 
-# Things yet to do.
-# 1. Skip importing tables that have no corresponding STATSGO data such as cointerp?
-# 2. Should I allow user to name merged output raster?
-# 3. Is there any way to purge related NOTCOM table records? Might be able to adapt that
-#    functionality to an remove-and-replace old MLRA survey area data.
-#
-#
-# 
-#
-"""
-# Get dominant component by comppct_r and join to component table
-component.compkind <>'Miscellaneous area' AND DominantComponent.OBJECTID is not null
-AND
-hzdept_r = 0 AND (om_r is null or awc_r is null)
-"""
+# TODO:  Using NASIS-SSURGO Downloads is a little more complicated than out-of-the-box STATSGO.
+# Need to automate the process for importing STATSGO download into a file geodatabase. Currently
+# using ArcGIS Tools for NASIS2/Create gSSURGO DB - Manual Process tool. Needs to be modified
+# just to use with the custom legends and be able to update all keys to use the original STATSGO keys.
 
 #
 ## ===================================================================================
@@ -391,9 +380,7 @@ def GetTableList(outputWS):
 def ImportTables(inputMDB, newGDB, mukeyList):
     #
     # Import data from the specified STATSGO-Access Template database.
-    # The Access database must be populated, reside in the tabular folder and
-    # be named 'soil_d_<AREASYMBOL>.mdb'
-    # Origin: SSURGO_Convert_to_Geodatabase.py
+    # The  database must be populated
 
     # To make this work with the STATSGO merge, I need to add filter so that only
     # the selected set of STATSGO tabular data is brought across.
@@ -406,32 +393,18 @@ def ImportTables(inputMDB, newGDB, mukeyList):
         # 
 
         
-        #tblList = GetTableList(newGDB)  # Original
-
         # Testing new order
         tblList = ['distmd', 'legend', 'distlegendmd', 'laoverlap', 'legendtext', 'mapunit', 'component', 'muaggatt', 'muaoverlap', 'mucropyld', 'mutext', 'chorizon', 'cointerp', 'cocanopycover', 'cocropyld', 'codiagfeatures', 'coecoclass', 'coeplants', 'coerosionacc', 'coforprod', 'cogeomordesc', 'cohydriccriteria', 'comonth', 'copmgrp', 'copwindbreak', 'corestrictions', 'cosurffrags', 'cotaxfmmin', 'cotaxmoistcl', 'cotext', 'cotreestomng', 'cotxfmother', 'chaashto', 'chconsistence', 'chdesgnsuffix', 'chfrags', 'chpores', 'chstructgrp', 'chtext', 'chtexturegrp', 'chunified', 'coforprodo', 'copm', 'cosoilmoist', 'cosoiltemp', 'cosurfmorphgc', 'cosurfmorphhpp', 'cosurfmorphmr', 'cosurfmorphss', 'chstruct', 'chtexture', 'chtexturemod', 'sacatalog']
-
-        
         PrintMsg(" \nAppending STATSGO attribute data to the merged database...", 0)
-
-        # Handle mapunit, component, chorizon tables first. Skip STATSGO tables that aren't populated.
-        #rmTables = ['mapunit', 'component', 'chorizon', 'cointerp', 'sainterp', 'distinterpmd', 'sdvfolderattribute', 'sdvattribute', 'sdvfolder', 'sdvalgorithm']
-        #for tbl in rmTables:
-        #    tblList.remove(tbl)
-
-        #tblList.insert(0, 'chorizon')
-        #tblList.insert(0, 'component')
-        #tblList.insert(0, 'mapunit')
 
         if len(tblList) == 0:
             raise MyError, "No tables found in " +  newGDB
 
         # Save key values for use in queries
-        #keyIndx = dict()  # dictionary containing key field index number for each SDV table
-        keyFields = dict() # dictionary containing a list of key field names for each SDV table
-        primaryKeys = dict()
-        # PrintMsg(" \n\tAdding " + Number_Format(len(mukeyList), 0, True) + " mukeys to primaryKeys dictionary", 1)
-        primaryKeys["mukey"] = mukeyList
+        keyValues = dict() # dictionary containing a list of key field names for each SDV table
+        
+        # PrintMsg(" \n\tAdding " + Number_Format(len(mukeyList), 0, True) + " mukeys to keyValues dictionary", 1)
+        keyValues["mukey"] = mukeyList
         tblCnt = 0
         tblName = ""
 
@@ -441,189 +414,181 @@ def ImportTables(inputMDB, newGDB, mukeyList):
         for tblName in tblList:
             # Import data for each table
             #
-            outputTbl = os.path.join(newGDB, tblName)  # gSTURGO database table
+            outputTbl = os.path.join(newGDB, tblName)  # gNATSGO database table
             inputTbl = os.path.join(inputMDB, tblName) # gSSURGO database table
 
+            # Get key fields for this table
+            # tbl = mdstatidxdet
+            mdFields = ["tabphyname", "idxphyname", "colphyname"]
+            wc = "tabphyname = '" + tblName + "'"
+            
+            # Table with primary and foreign key information for each table
+            mdstatTbl = os.path.join(inputMDB, "mdstatidxdet")
+            parentKey = ""
+            foreignKey = ""
+            
+            with arcpy.da.SearchCursor(mdstatTbl, ["tabphyname", "idxphyname", "colphyname"], where_clause=wc) as cur:
+                for rec in cur:
+                    #PrintMsg("\t\t" + str(rec), 1)
+                    
+                    if rec[1].startswith("DI_"):
+                        if rec[2].encode('ascii') in keyValues:
+                            # Trying to capture cokey for cointerp with this logic
+                            foreignKey = rec[2].encode('ascii')
+
+                    elif rec[1].startswith("PK_"):
+                        parentKey = rec[2].encode('ascii')
+                
             if arcpy.Exists(inputTbl):
-
-                #PrintMsg(" \n" + tblName + " (" + Number_Format(len(keys), 0, True) + " " + keyField + " values)", 1)
-                #PrintMsg(wc, 0)
-
                 # Problem with order? I don't think cokey query is being used for COMONTH table
                 recCnt = int(arcpy.GetCount_management(inputTbl).getOutput(0))
+                #PrintMsg(" \nKeys for " + tblName + ": " + parentKey + "; " + foreignKey, 1)
                 
                 if recCnt == 0:
                     if tblName == "mapunit":
                         raise MyError, " Input table " + tblName + " is not populated"
                     
                     else:
-                        PrintMsg("\tInput table " + tblName + " is not populated", 1)
+                        #PrintMsg("\tInput table " + tblName + " is not populated", 1)
                         tmpTbl = ""  # initialize this variable so that the del at the end won't fail.
                     
                 else:
-                    # Import this table
+                    # Create a table view that will allow selected sets to be created
+                    #
+                    # Queries need to use foreignKey
+                    # if not parentKey in keyValues: append each parentKey value to keyValues[parentKey]
                     #
                     tmpTbl = "TempTable"
-                    #PrintMsg("\tImporting " + tblName + "...", 0)
 
-                    fieldNames = [fld.name for fld in arcpy.Describe(inputTbl).fields]  # get list of fields from MDB (no OBJECTID)
+                    if arcpy.Exists(tmpTbl):
+                        arcpy.Delete_management(tmpTbl)
+                        
+                    iCnt = 0
+                    PrintMsg("\tImporting " + tblName + "...", 0)
+
+                    fieldNames = [fld.name for fld in arcpy.Describe(inputTbl).fields if fld.type != "OID"]  # get list of fields from MDB (no OBJECTID)
                     tblCnt += 1
-
                     arcpy.MakeQueryTable_management(inputTbl, tmpTbl, "ADD_VIRTUAL_KEY_FIELD")
+                    arcpy.SelectLayerByAttribute_management(tmpTbl, "CLEAR_SELECTION")
+                    #PrintMsg(" \n" + tblName + " fields: " + ", ".join(fieldNames), 1)
 
-
-                    # Need to split up very large queries
-                    # Begin by clearing selection (is this really necessary?)
-                    # arcpy.SelectLayerByAttribute_management(tmpTbl, "CLEAR_SELECTION")
-
+                    # Get key values for query
                     if tblName == "mapunit":
-                        keys = primaryKeys["mukey"]
+                        # Start with mapunit table for now, rather than legend table.
+                        keys = keyValues["mukey"]
                         fieldName = "mukey"
 
                     else:
-
-                        if fieldNames[-2] in primaryKeys:
-                            # use list of primary key values to build query
-                            keys = primaryKeys[fieldNames[-2]]
-                            fieldName = fieldNames[-2]
-                            
-                            #if len(keys) > 1:
-                            #    wc = fieldNames[-2] + " IN "
-
-                            #else:
-                            #    wc = fieldNames[-2] + " = '"
-
-                        elif fieldNames[-1] in primaryKeys:
-                            # use list of foreign key values to build query
-                            keys = primaryKeys[fieldNames[-1]]
-                            fieldName = fieldNames[-1]
+                        if foreignKey in keyValues:
+                            # Base query on foreign key
+                            keys = keyValues[foreignKey]
+                            fieldName = foreignKey
 
                         else:
-                            recCnt = int(arcpy.GetCount_management(tmpTbl).getOutput(0))
-                            #PrintMsg("\tImporting all " + Number_Format(recCnt, 0, True) + " records for " + tblName, 0)
-                            wc = ""
-                            fieldName = ""
-                            keys = []
+                            fieldName = parentKey
 
-                    # Split the list of key values into bite-sized chunks
+                            if parentKey in keyValues:
+                                # Base query on primary key
+                                keys = keyValues[parentKey]
+
+                            else:
+                                # Read all records for this table and add all primary key values
+                                keyValues[parentKey] = []
+                                keys = []
+
                     if len(keys) > 0:
+                        # Split the list of key values into bite-sized chunks
                         n = 1000
                         keyList = [keys[i:i + n] for i in xrange(0, len(keys), n)]
 
                     else:
                         keyList = [[]]
-                        arcpy.SelectLayerByAttribute_management(tmpTbl, "ADD_TO_SELECTION", wc)
-                        recCnt = int(arcpy.GetCount_management(tmpTbl).getOutput(0))
+
+                    recCnt = int(arcpy.GetCount_management(tmpTbl).getOutput(0))
                             
                     # LOOP QUERIES HERE TO HANDLE VERY LONG QUERY STRINGS (PRIMARILY CONUS PROBLEM)
                     for keys in keyList:
 
                         if len(keys) > 1:
                             wc = fieldName + " IN " + str(tuple(keys))
-                            #PrintMsg("\t\tnumber of keys: " + str(len(keys)), 1)
-
+                            
                         elif len(keys) == 1:
-                            #wc = fieldNames[-1] + " = '" + keys[0] + "'"
                             wc = fieldName + " = '"  + keys[0] + "'"
-                            #PrintMsg("\t\tnumber of keys: " + str(len(keys)), 1)
 
                         else:
                             wc = ""
-                            #PrintMsg("\t\tnumber of keys: " + str(len(keys)), 1)
 
-                        try:
-                            arcpy.SelectLayerByAttribute_management(tmpTbl, "ADD_TO_SELECTION", wc)
-
-                        except:
-                            raise MyError, "\t\tBad query: " + wc
-
-                    recCnt = int(arcpy.GetCount_management(tmpTbl).getOutput(0))
-
-                    if recCnt > 0:
-                        # Skip importing this table if the query failed to select anything
-                        # PrintMsg("Selected " + Number_Format(recCnt, 0, True) + " records in " + tblName, 1)
-                        arcpy.SetProgressorLabel("Importing " + tblName + "  (" + Number_Format(recCnt, 0, True) + " records)...")
+                        arcpy.SetProgressorLabel("Importing from " + tblName + "  ( contains " + Number_Format(recCnt, 0, True) + " records )...")
                         arcpy.SetProgressorPosition()
-                        sdvCur = arcpy.da.SearchCursor(tmpTbl, fieldNames)
+
+                        # get indices for primary and foreign keys
+                        if foreignKey != "" and foreignKey in fieldNames:
+                            fIndx = fieldNames.index(foreignKey)
+
+                        if parentKey != "" and parentKey in fieldNames:
+                            pIndx = fieldNames.index(parentKey)
+                        
+                        sdvCur = arcpy.da.SearchCursor(tmpTbl, fieldNames, where_clause=wc, sql_clause=("DISTINCT " + fieldName, None))
                         outCur = arcpy.da.InsertCursor(outputTbl, fieldNames)
-                        iCnt = 0
+                        
+                        if foreignKey != "":
+                            # foreignKey is identified and being used in the query
 
-                        if (fieldNames[-1].endswith("key") and not fieldNames[-1] in primaryKeys) and (fieldNames[-2].endswith("key") and not fieldNames[-2] in primaryKeys):
-                            pKeyValues = list()
-                            fKeyValues = list()
-                            #PrintMsg(" \nAdding key values for " + fieldNames[-2] + " and " + fieldNames[-1], 1)
+                            if not parentKey in keyValues:
+                                # capture parent key values
+                                pKeyValues = list()
 
-                            for rec in sdvCur:
-                                fKeyValues.append(rec[-2].encode('ascii'))  # fKey
-                                pKeyValues.append(rec[-1].encode('ascii'))  # pKey
-                                outCur.insertRow(rec)
-                                iCnt += 1
-
-                            if len(fKeyValues) > 0 or len(pKeyValues) > 0:
-                                
-                                if len(fKeyValues) > 0:
-                                    fKeyValues = list(set(fKeyValues))
-                                    #PrintMsg("\tSaving foreign key (" + fieldNames[-2] + " - " + Number_Format(len(fKeyValues), 0, True) + " values) from " + tblName, 0)
-                                    primaryKeys[str(fieldNames[-2])] = fKeyValues
+                                for rec in sdvCur:
+                                    pKeyValues.append(rec[pIndx].encode('ascii'))  # pKey
+                                    outCur.insertRow(rec)
+                                    iCnt += 1
 
                                 if len(pKeyValues) > 0:
                                     pKeyValues = list(set(pKeyValues))
-                                    #PrintMsg("\tSaving primary key (" + fieldNames[-1] + " - " + Number_Format(len(pKeyValues), 0, True) + " values) from " + tblName, 0)
-                                    primaryKeys[str(fieldNames[-1])] = pKeyValues
-                                
+                                    keyValues[parentKey] = pKeyValues
+                                    del pKeyValues
+                                    
                             else:
-                                PrintMsg(" \nNo keyValues found for " + tblName + ": " + primKey, 1)
+                                # no need to capture any key values
 
-                        elif fieldNames[-2].endswith("key") and not fieldNames[-2] in primaryKeys:
-                            keyValues = list()
+                                for rec in sdvCur:
+                                    outCur.insertRow(rec)
+                                    iCnt += 1
+         
+                        elif parentKey != "" and not parentKey in keyValues:
+                            # No foreign key identified
+                            # capture parent key values instead
+                            pKeyValues = list()
 
                             for rec in sdvCur:
-                                keyValues.append(rec[-2].encode('ascii'))
+                                pKeyValues.append(rec[pIndx].encode('ascii'))  # pKey
                                 outCur.insertRow(rec)
                                 iCnt += 1
-                                #PrintMsg("\ta. " + str(rec), 1)
 
-                            if len(keyValues) > 0:
-                                #PrintMsg("\t1. Saving foreign key (" + fieldNames[-2] + " - " + Number_Format(len(keyValues), 0, True) + " values) from " + tblName, 0)
-                                keyValues = list(set(keyValues))
-                                primaryKeys[str(fieldNames[-2])] = keyValues
-                                
-                            else:
-                                PrintMsg(" \nNo " + fieldNames[-2] + " key values found for " + tblName, 1)
+                            if len(pKeyValues) > 0:
+                                pKeyValues = list(set(pKeyValues))
+                                keyValues[parentKey] = pKeyValues
+                                del pKeyValues
 
-                        elif not fieldNames[-1] in primaryKeys:
-                            keyValues = list()
+                        elif parentKey != "" and parentKey in keyValues:
+                            # No foreign key identified
+                            # keyValues dictionary already has parent key values
 
                             for rec in sdvCur:
-                                keyValues.append(rec[-1].encode('ascii'))
                                 outCur.insertRow(rec)
                                 iCnt += 1
-                                #PrintMsg("\ta. " + str(rec), 1)
-
-                            if len(keyValues) > 0:
-                                keyValues = list(set(keyValues))
-                                #PrintMsg("\t1. Saving primary key (" + fieldNames[-1] + " " + Number_Format(len(keyValues), 0, True) + " values) from " + tblName + " values", 0)
-                                primaryKeys[str(fieldNames[-1])] = keyValues
-                                
-                            else:
-                                PrintMsg(" \nNo " + fieldNames[-2] + " key values found for " + tblName, 1)
 
                         else:
-                            for rec in sdvCur:
-                                outCur.insertRow(rec)
-                                iCnt += 1
-                                #PrintMsg("\tb. " + str(rec), 1)
+                            raise MyError, "Bad logic for key values on " + tblName
 
-                        PrintMsg("\tImported " + Number_Format(iCnt, 0, True) + " records to " + tblName, 0)
-                        del sdvCur, outCur, tmpTbl
-                        #PrintMsg("\t" +  Number_Format(iCnt, 0, True) + " written records", 1)
+                    if iCnt > 0:
+                        PrintMsg("\t\tImported " + Number_Format(iCnt, 0, True) + " records to " + tblName, 0)
 
                     else:
-                        PrintMsg("\tQuery found no matching records for " + tblName, 1)
-                        #PrintMsg(" \n" + wc, 1)
-                        #raise MyError, "Query failed. Nothing selected for " + tblName
-                        del tmpTbl
-
+                        PrintMsg("\t\tImported " + Number_Format(iCnt, 0, True) + " records to " + tblName, 1)
+                        
+                    del sdvCur, outCur
+                    #PrintMsg("\t" +  Number_Format(iCnt, 0, True) + " written records", 1)
 
             else:
                PrintMsg(" \nSkipping table " + tblName, 1)
@@ -641,18 +606,11 @@ def ImportTables(inputMDB, newGDB, mukeyList):
         errorMsg()
         return False
 
-
 ## ===============================================================================================================
 def GetClipPolygons(fcName, newGDB, inputMDB, shpFile, newMukeys, inputRaster):
     #
 
     try:
-        """
-        # Get dominant component by comppct_r and join to component table
-        component.compkind <>'Miscellaneous area' AND DominantComponent.OBJECTID is not null
-        AND
-        hzdept_r = 0 AND (om_r is null or awc_r is null)
-        """
 
         # Get list of NOTCOM, NOTPUB and Denied Access map unit keys
         env.workspace = newGDB
@@ -663,12 +621,12 @@ def GetClipPolygons(fcName, newGDB, inputMDB, shpFile, newMukeys, inputRaster):
         
         mukeyList = list()  # list of mukeys for those gSSURGO mapunit polygons that need to be replaced by STATSGO
 
-        wc = "musym IN ('NOTCOM', 'NOTPUB') OR (UPPER(muname) LIKE '%DENIED%' AND UPPER(muname) LIKE '%ACCESS%')"
+        # Kyle's query to identify Notcoms and Denied access mapunits in SSURGO
+        wc = "musym IN ('NOTCOM', 'NOTPUB') Or UPPER (muname) LIKE '%DENIED%' Or UPPER (muname) LIKE '%ACCESS%' Or UPPER ( muname) LIKE '%NO SOILS DATA%' Or UPPER(muname) LIKE '%NOT SURVEY%' Or UPPER (muname) LIKE '%NO DATA%'" 
 
         with arcpy.da.SearchCursor(mapunitTbl, ["mukey"], where_clause=wc) as cur:
             for rec in cur:
                 mukeyList.append(rec[0].encode('ascii'))     
-
 
         #shpFile = shpFiles[0]
         inputCS = arcpy.Describe(shpFile).spatialReference
@@ -698,16 +656,18 @@ def GetClipPolygons(fcName, newGDB, inputMDB, shpFile, newMukeys, inputRaster):
         if cnt > 0:
             # Make a new featureclass: NOTCOMS. Skipping this step for now...
             # STATSGO polygons will have either 'US' or STPO areasymbol
-            PrintMsg(" \nSelected " + Number_Format(cnt, 0, True) + " associated gSSURGO polygons for replacement", 0)
+            PrintMsg(" \nSelected " + Number_Format(cnt, 0, True) + " associated gSSURGO soil polygons for replacement", 0)
             arcpy.CopyFeatures_management(inputLayer, os.path.join(newGDB, "NOTCOMS"))
             arcpy.SetProgressorLabel("Clip layer created")
 
             # Clip STATSGO polygons by NOTCOMs
             statsgoLayer = "STATSGO Layer"
             arcpy.MakeFeatureLayer_management(shpFile, statsgoLayer)
+            tmpFC = os.path.join(env.scratchGDB, "STATSGO2")
             newFC = os.path.join(env.scratchGDB, "STATSGO")
             arcpy.SetProgressorLabel("Clipping out replacement STATSGO polygons")
-            arcpy.Clip_analysis(statsgoLayer, inputLayer, newFC)
+            arcpy.Clip_analysis(statsgoLayer, inputLayer, tmpFC)
+            arcpy.MultipartToSinglepart_management(tmpFC, newFC)
 
             if arcpy.Exists(newFC):
                 cnt2 = int(arcpy.GetCount_management(newFC).getOutput(0))
@@ -731,8 +691,7 @@ def GetClipPolygons(fcName, newGDB, inputMDB, shpFile, newMukeys, inputRaster):
             dLegend = dict()
             dAreasymbol = dict()
 
-            # Why do I need a whereclause for STATSGO download? Kyle's downloads do not have a 'US' areasymbol.
-            # where_clause="areasymbol='US'"
+            # Need to make sure that all replacement attribute data have a 'US' areasymbol.
 
             with arcpy.da.SearchCursor(legendTbl, ["lkey"]) as cur:
                 for rec in cur:
@@ -742,7 +701,6 @@ def GetClipPolygons(fcName, newGDB, inputMDB, shpFile, newMukeys, inputRaster):
                 for rec in cur:
                     rec = [statsgoLkey, "STATSGO2"]
                     cur.updateRow(rec)
-                    
 
             # Update gNATSGO using STATSGO SAPOLYGONs
             arcpy.Update_analysis(outputSA, statsgoSA, tmpSA, "BORDERS", 0)
@@ -764,36 +722,49 @@ def GetClipPolygons(fcName, newGDB, inputMDB, shpFile, newMukeys, inputRaster):
                 arcpy.Delete_management(tmpSA)
                 del tmpSA
                 
-            PrintMsg(" \nSurvey Boundary featureclass updated...", 0)
-                    
-                    
+            PrintMsg(" \nSurvey Boundary featureclass attributes updated...", 0)
 
             # Delete the NOTCOM polygons from MUPOLYGON featureclass
             #PrintMsg(" \nDeleting NOTCOM polygons from output MUPOLYGON featureclass...", 1)
-            arcpy.SetProgressorLabel("Deleting 'bad data' polygons")
+            arcpy.SetProgressorLabel("Deleting NOTCOM polygons from " + inputLayer)
             arcpy.DeleteFeatures_management(inputLayer)
 
             arcpy.Delete_management(inputLayer) # just getting rid of featurelayer
             del inputLayer
 
-            # Append STATSGO polygons to gSSURGO MUPOLYGON
+            # Append clipped STATSGO soil polygons to gSSURGO MUPOLYGON
             #
             fields = arcpy.Describe(outputFC).fields
             fieldList = [fld.name.upper() for fld in fields if fld.type != "OID" and not fld.name.upper().startswith("SHAPE")]
             fieldList.insert(0, "SHAPE@")
+            fieldList.insert(0, "OID@")
             mukeyIndx = fieldList.index("MUKEY")
-            #PrintMsg(" \nUsing fields: " + ", ".join(fieldList), 1)
-            arcpy.SetProgressorLabel("Appending STATSGO replacement polygons...")
+            PrintMsg(" \nAppending STATSGO replacement polygons to " + outputFC + "...", 1)
+            arcpy.SetProgressorLabel("Appending STATSGO replacement polygons to " + outputFC + "...")
 
+            updateCnt = 0
+			
             with arcpy.da.InsertCursor(outputFC, fieldList) as outCur:  # output MUPOLYGONS
                 inCur = arcpy.da.SearchCursor(newFC, fieldList)         # input STATSGO. Need to confirm that fieldLists match.
+				
                 for rec in inCur:
                     mukey = rec[mukeyIndx].encode('ascii')
+                    #oid = str(rec[0])
+                    #geom = rec[1]
+                    #acres = geom.getArea("PLANAR", "ACRES")
+
                     if not mukey in newMukeys:
                         newMukeys.append(mukey)
 
                     outCur.insertRow(rec)
+                    updateCnt += 1
+                    #PrintMsg("\tAdding STATSGO soil polygon " + oid + ": " + str(mukey) + " with area of " + str(round(acres, 2)) + " acres", 1)
 
+            if not updateCnt == cnt2:
+                PrintMsg(" \nProblem with appending STATSGO polygons to new MUPOLYGON featureclass, only " + str(updateCnt) + " polygons were transferred", 1)
+            
+            else:
+                PrintMsg(" \nSuccessfully appended " + str(updateCnt) + " STATSGO soil polygons to the new MUPOLYGON featureclass", 1)
 
         else:
             raise MyError, "Failed to select NOTCOMS..."

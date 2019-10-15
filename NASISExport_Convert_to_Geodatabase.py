@@ -15,6 +15,10 @@
 # zip file (Staging Server download). Make note of which surveys had Staging Server spatial and then only
 # import the Rest of the spatial from the other user-provided source.
 #
+# This version of script is not handling the import of the feature description table. The text file would
+# be included in spatial folder if this was a normal SSURGO download instead of a NASIS-SSURGO download.
+# This import would be in the ImportTabular function.
+#
 ## ===================================================================================
 class MyError(Exception):
     pass
@@ -770,7 +774,8 @@ def ImportMDTabular(newDB, tabularFolder, codePage):
                     # counter for current record number
                     iRows = 1  # input textfile line number
 
-                    if os.path.isfile(txtPath):
+                    #if os.path.isfile(txtPath):
+                    if arcpy.Exists(txtPath):
 
                         # Use csv reader to read each line in the text file
                         #for rowInFile in csv.reader(open(txtPath, 'rb'), delimiter='|'):
@@ -812,7 +817,8 @@ def ImportMDTabular(newDB, tabularFolder, codePage):
                             raise MyError, tbl + " has only " + str(iRows) + " records. Check 'md*.txt' files in tabular folder"
 
                     else:
-                        raise MyError, "Missing tabular data file (" + txtPath + ")"
+                        #raise MyError, "Missing tabular data file (" + txtPath + ")"
+                        PrintMsg(" \nMissing tabular data file (" + txtPath + ")", 1)
 
             else:
                 raise MyError, "Required table '" + tbl + "' not found in " + newDB
@@ -913,6 +919,7 @@ def ImportTabular(newDB, tabularFolder, dbVersion, codePage, tblList, zipFileNam
         "cstemp","csmorgc","csmorhpp","csmormr","csmorss","chstr","chtextur", \
         "chtexmod","sacatlog","sainterp","sdvalgorithm","sdvattribute","sdvfolder","sdvfolderattribute"]
         # Need to add featdesc import as a separate item (ie. spatial\soilsf_t_al001.txt: featdesc)
+        PrintMsg(" \nSkipping import of the feature description table", 1)
 
         # Static Metadata Table that records the metadata for all columns of all tables
         # that make up the tabular data set.
@@ -956,6 +963,9 @@ def ImportTabular(newDB, tabularFolder, dbVersion, codePage, tblList, zipFileNam
                 if len(fldNames) == 0:
                     raise MyError, "Failed to get field names for " + tbl
 
+                #else:
+                #    PrintMsg("\tGot " + str(len(fldNames)) + " fieldnames for " + tbl, 1)
+
                 if not tbl in ['sdvfolderattribute', 'sdvattribute', 'sdvfolder', 'sdvalgorithm']:
                     # Import all tables except SDV
                     #
@@ -986,7 +996,8 @@ def ImportTabular(newDB, tabularFolder, dbVersion, codePage, tblList, zipFileNam
                                 raise MyError, err
 
                         else:
-                            raise MyError, "Missing tabular data file (" + txtPath + ")"
+                            #raise MyError, "Missing tabular data file (" + txtPath + ")"
+                            PrintMsg(" \nMissing tabular data file (" + txtPath + ")", 1)
 
                 else:
                     # Import SDV tables while enforcing unique key constraints
@@ -1005,12 +1016,15 @@ def ImportTabular(newDB, tabularFolder, dbVersion, codePage, tblList, zipFileNam
                                 for rowInFile in csv.reader(open(txtPath, 'rb'), delimiter='|', quotechar='"'):
                                     newRow = list()
                                     fldNo = 0
-                                    keyVal = int(rowInFile[dIndex[tbl]])
+                                    fixedRow = [x.decode(codePage) for x in rowInFile]  # trying to workaround problem with version 1 SD613 recall
+                                    #keyVal = int(rowInFile[dIndex[tbl]])  # original code
+                                    keyVal = int(fixedRow[dIndex[tbl]])
 
                                     if not keyVal in dKeys[tbl]:
                                         # write new record to SDV table
                                         dKeys[tbl].append(keyVal)
-                                        newRow = [x if x else None for x in rowInFile]
+                                        #newRow = [x if x else None for x in rowInFile]  # original code
+                                        newRow = [x if x else None for x in fixedRow]
                                         cursor.insertRow(newRow)  # was newRow
                                     iRows += 1
 
@@ -1242,7 +1256,12 @@ def GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMu
     # Not being used right now for the NASIS-SSURGO Export process
     
     try:
+        # I probably need to add a second return value: boolean for success
+        # Right now it's just missingMapunits which are empty anyway if nothing runs.
+        #
         missingMapunits = list()
+        missingLayers = list()
+        
         # Set output workspace
         env.workspace = outputWS
 
@@ -1283,12 +1302,32 @@ def GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMu
             saShp = os.path.join(tmpFolder, areasym.upper() + "_b.shp")
             
             if arcpy.Exists(muShp):
-                muShpFiles.append(muShp)
-                areasymList.remove(areasym)
+                pCnt = int(arcpy.GetCount_management(muShp).getOutput(0))  # Get featureclass polygon count
+                
+                if pCnt > 0:
+                    muShpFiles.append(muShp)
+                    PrintMsg("\t" + muShp + "(" + Number_Format(pCnt,0, True) + " polygons)", 0)
+                    areasymList.remove(areasym)
+
+                else:
+                    PrintMsg("\t" + muShp + " is an empty shapefile", 1)
+
+            else:
+                # Remove this later so that tabular-only downloads will run
+                PrintMsg("\tMissing " + muShp, 1)
+                missingLayers.append(os.path.basename(muShp))
 
             if arcpy.Exists(saShp):
                 saShpFiles.append(saShp)
+                PrintMsg("\t" + os.path.basename(saShp), 0)
 
+            else:
+                PrintMsg("\tMissing " + saShp, 1)
+                missingLayers.append(os.path.basename(saShp))
+
+        #if len(missingLayers) > 0:
+        #    raise MyError, "Shapefiles not found: " + ", ".join(missingLayers)
+            
 
         if len(areasymList) == 0:
             wc = ""
@@ -1299,20 +1338,29 @@ def GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMu
         else:
             wc = "areasymbol IN " + str(tuple(areasymList))
 
-                        
+
+        PrintMsg(" \nImporting spatial data for " + Number_Format(len(areasymList), 0, True) + " survey areas from " + soilPolygons + "...", 0)
+        
         if len(areasymList) > 0:
-            if  soilPolygons != "":
+            # Try to get the rest of the soil polygon data from the input SoilPolygon layer selected by the user
+            #
+            if soilPolygons != "":
                 PrintMsg(" \n\tAppending matching soil mapunit polygons from layer '" + soilPolygons + "'", 0)
                 arcpy.SetProgressorLabel("Appending features to MUPOLYGON layer")
                 #PrintMsg(" \nAreasymbol query: " + wc, 1)
                 env.workspace = outputWS
 
                 muDesc = arcpy.Describe(soilPolygons)
+                pCnt = int(arcpy.GetCount_management(soilPolygons).getOutput(0))  # Get featureclass polygon count
+
+                if pCnt == 0:
+                    raise MyError, soilPolygons + " is an empty shapefile"
+                
                 muType = muDesc.dataType
                 soilLayer = "InputSoils"
                 arcpy.MakeFeatureLayer_management(soilPolygons, soilLayer, wc)
 
-                selCnt = int(arcpy.GetCount_management(soilLayer).getOutput(0))
+                selCnt = int(arcpy.GetCount_management(soilLayer).getOutput(0)) # Get featurelayer polygon count based on query by areasymbol
                 missingMapunits = list()
 
                 if selCnt == 0:
@@ -1324,16 +1372,14 @@ def GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMu
                 muType = ""
 
 
-        #elif 
-
 
         if len(muShpFiles) > 0:
-            PrintMsg(" \nAppending muShpFiles: " + ", ".join(muShpFiles) + "...", 1)
+            PrintMsg(" \nAdding these soil polygon shapefiles to the output geodatabase: " + ", ".join(muShpFiles) + "...", 0)
             
             arcpy.Append_management(muShpFiles,  os.path.join(outputWS, "MUPOLYGON"), "NO_TEST", fieldmappings )
             
-            if len(areasymList) > 0:
-                arcpy.Delete_management(soilLayer)
+            #if len(areasymList) > 0:
+            #    arcpy.Delete_management(soilLayer)
 
             if bUpdateMukeys:
                 # Using draft soil polygon layer that has missing or out-of-date mukeys
@@ -1404,7 +1450,10 @@ def GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMu
                 arcpy.SetProgressorLabel("Appending features to SAPOLYGON layer")
                 arcpy.Append_management(saShpFiles,  os.path.join(outputWS, "SAPOLYGON"), "NO_TEST", fieldmappings )
                 
-           
+
+            # Remove tmpFolder
+            #arcpy.Delete_management(tmpFolder)
+            
             # For the NASIS-SSURGO Export data, we need to make sure that the tabular and spatial
             # mukeys match. Need to consult with Kyle and Steve C about the best way to handle
             # this from the perspective of an SDQS or State Soil Scientist
@@ -1425,15 +1474,15 @@ def GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMu
             arcpy.AddIndex_management(os.path.join(outputWS, "MUPOLYGON"), "AREASYMBOL", "Indx_MupolyAreasymbol")
             arcpy.RefreshCatalog(outputWS)
 
-        return missingMapunits
+        return missingMapunits, True
 
     except MyError, e:
         PrintMsg(str(e), 1)
-        return missingMapunits
+        return missingMapunits, False
 
     except:
         errorMsg()
-        return missingMapunits
+        return missingMapunits, False
 
 ## ===============================================================================================================
 def CheckMatch(outputWS):
@@ -1450,7 +1499,7 @@ def CheckMatch(outputWS):
         with arcpy.da.SearchCursor(legendTbl, ["lkey", "areasymbol"]) as cur:
             
             for rec in cur:
-                if not rec[0] in dLegend:
+               if not rec[0] in dLegend:
                     dLegend[rec[0]] = rec[1]
                     #areasymList.append(rec[1].encode('ascii'))
                     
@@ -2444,6 +2493,9 @@ def gSSURGO(zipFolder, zipFileNames, soilPolygons, outputWS, AOI, bValidation, b
             gdbName = gdbName.replace("-", "_")
             outputWS = os.path.join(outFolder, gdbName)
             tmpFolder = os.path.join(env.scratchFolder, "xxTabular")
+
+            if not arcpy.Exists(tmpFolder):
+                arcpy.CreateFolder_management(os.path.dirname(tmpFolder), os.path.basename(tmpFolder))
             
             bGeodatabase = CreateSSURGO_DB(outputWS, inputXML, "", "")
 
@@ -2579,80 +2631,84 @@ def gSSURGO(zipFolder, zipFileNames, soilPolygons, outputWS, AOI, bValidation, b
 
             else:
                 featCnt = int(arcpy.GetCount_management(soilPolygons).getOutput(0))
+                PrintMsg(" \nSelected " + str(featCnt) + " polygons in " + soilPolygons, 1)
 
-            if 1 == 1:  # process spatial data (soilPolygons or shapefiles included in Staging Server download
-                missingMapunits = GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMukeys, areasymList, tmpFolder)
+            # process spatial data (soilPolygons or shapefiles included in Staging Server download
+            missingMapunits, bSpatial = GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMukeys, areasymList, tmpFolder)
 
-                #if len(missingMapunits) > 0:
-                    # list of mapunits that exist in the NASIS export, but not the spatial
-                #    PrintMsg(" \n\tThese mapunits exist in the NASIS export(s) but not the spatial:  " + ", ".join(missingMapunits), 1)
-  
-                # Create table relationships and indexes
-                bRL = CreateTableRelationships(outputWS)
+            if not bSpatial:
+                raise MyError, ""
+
+            #if len(missingMapunits) > 0:
+                # list of mapunits that exist in the NASIS export, but not the spatial
+            #    PrintMsg(" \n\tThese mapunits exist in the NASIS export(s) but not the spatial:  " + ", ".join(missingMapunits), 1)
+
+            # Create table relationships and indexes
+            bRL = CreateTableRelationships(outputWS)
 
 
 
-                # For metadata, get the distinct list of download generation date-timestamps
-                # from distmd.distgendate column
-                #
-                distmdTbl = os.path.join(outputWS, "distmd")
-                genDates = list()
+            # For metadata, get the distinct list of download generation date-timestamps
+            # from distmd.distgendate column
+            #
+            distmdTbl = os.path.join(outputWS, "distmd")
+            genDates = list()
+            
+            with arcpy.da.SearchCursor(distmdTbl, ["distgendate"]) as cur:
+                for rec in cur:
+                    if not rec[0] in genDates:
+                        genDates.append(rec[0])
+
+            if len(genDates) > 1:
+                genDates.sort()
+                dateRange = genDates[0].isoformat() + " -> " + genDates[-1].isoformat()
+
+            else:
+                dateRange = genDates[0].isoformat()
+
+            PrintMsg(" \nNASIS Download: " + dateRange, 1)
+
+
+
+            # Update metadata for the geodatabase and all featureclasses
+            PrintMsg(" \nUpdating metadata...", 0)
+            arcpy.SetProgressorLabel("Updating metadata...")
+            mdList = [outputWS, os.path.join(outputWS, "FEATLINE"), os.path.join(outputWS, "FEATPOINT"), \
+            os.path.join(outputWS, "MUPOINT"), os.path.join(outputWS, "MULINE"), os.path.join(outputWS, "MUPOLYGON"), \
+            os.path.join(outputWS, "SAPOLYGON")]
+            remove_gp_history_xslt = os.path.join(os.path.dirname(sys.argv[0]), "remove geoprocessing history.xslt")
+
+            if not arcpy.Exists(remove_gp_history_xslt):
+                raise MyError, "Missing required file: " + remove_gp_history_xslt
+
+            #PrintMsg(" \nSurveyInfo: " + str(expInfo), 1)
+            PrintMsg(" \nSkipping medatadata for now", 1)
+
+            #for target in mdList:
+            #    bMetadata = UpdateMetadata(outputWS, target, expInfo, remove_gp_history_xslt, dateRange)
+
+            env.workspace = os.path.dirname(env.scratchFolder)
+            PrintMsg(" \nCleaning up log files from " + env.workspace, 1)
+
+            logFiles = arcpy.ListFiles("xxImport*.log")
+
+            if len(logFiles) > 0:
+                #PrintMsg(" \nFound " + str(len(logFiles)) + " log files in " + env.workspace, 1)
+                for logFile in logFiles:
+                    #PrintMsg("\t\tDeleting " + logFile, 1)
+                    arcpy.Delete_management(logFile)
+
+            #if arcpy.Exists(tmpFolder):
+            #    arcpy.Delete_management(tmpFolder)
                 
-                with arcpy.da.SearchCursor(distmdTbl, ["distgendate"]) as cur:
-                    for rec in cur:
-                        if not rec[0] in genDates:
-                            genDates.append(rec[0])
+            #PrintMsg(" \nProcessing complete", 0)
+            PrintMsg(" \nSuccessfully created a geodatabase containing the following surveys: " + ", ".join(areasymList), 0)
 
-                if len(genDates) > 1:
-                    genDates.sort()
-                    dateRange = genDates[0].isoformat() + " -> " + genDates[-1].isoformat()
-
-                else:
-                    dateRange = genDates[0].isoformat()
-
-                PrintMsg(" \nNASIS Download: " + dateRange, 1)
-
-    
-
-                # Update metadata for the geodatabase and all featureclasses
-                PrintMsg(" \nUpdating metadata...", 0)
-                arcpy.SetProgressorLabel("Updating metadata...")
-                mdList = [outputWS, os.path.join(outputWS, "FEATLINE"), os.path.join(outputWS, "FEATPOINT"), \
-                os.path.join(outputWS, "MUPOINT"), os.path.join(outputWS, "MULINE"), os.path.join(outputWS, "MUPOLYGON"), \
-                os.path.join(outputWS, "SAPOLYGON")]
-                remove_gp_history_xslt = os.path.join(os.path.dirname(sys.argv[0]), "remove geoprocessing history.xslt")
-
-                if not arcpy.Exists(remove_gp_history_xslt):
-                    raise MyError, "Missing required file: " + remove_gp_history_xslt
-
-                #PrintMsg(" \nSurveyInfo: " + str(expInfo), 1)
-                PrintMsg(" \nSkipping medatadata for now", 1)
-
-                #for target in mdList:
-                #    bMetadata = UpdateMetadata(outputWS, target, expInfo, remove_gp_history_xslt, dateRange)
-
-                env.workspace = os.path.dirname(env.scratchFolder)
-                #PrintMsg(" \nCleaning log files from " + env.workspace, 1)
-
-                logFiles = arcpy.ListFiles("xxImport*.log")
-
-                if len(logFiles) > 0:
-                    #PrintMsg(" \nFound " + str(len(logFiles)) + " log files in " + env.workspace, 1)
-                    for logFile in logFiles:
-                        #PrintMsg("\t\tDeleting " + logFile, 1)
-                        arcpy.Delete_management(logFile)
-
-                if arcpy.Exists(tmpFolder):
-                    arcpy.Delete_management(tmpFolder)
-                    
-                #PrintMsg(" \nProcessing complete", 0)
-                PrintMsg(" \nSuccessfully created a geodatabase containing the following surveys: " + ", ".join(areasymList), 0)
-
-                PrintMsg(" \nOutput file geodatabase:  " + outputWS + "  \n ", 0)
-                    
-                #else:
-                #    PrintMsg("Failed to export all data to gSSURGO. Spatial export error", 2)
-                #    return False
+            PrintMsg(" \nOutput file geodatabase:  " + outputWS + "  \n ", 0)
+                
+            #else:
+            #    PrintMsg("Failed to export all data to gSSURGO. Spatial export error", 2)
+            #    return False
 
 
         return True
@@ -2770,7 +2826,8 @@ def IdentifyNewInterps(outputWS):
             for rec in cur:
                 interpName = rec[0].encode('ascii')
 
-                if not interpName in sdvInterps and not interpName in missingInterps:
+                if not interpName in sdvInterps and not interpName in missingInterps and interpName.find("Radioactive") == -1:
+                    # Skip the DHS radiation interps
                     interpDesc = str(rec[1])
                     dInterps[interpName] = interpDesc 
                     missingInterps.append(interpName)

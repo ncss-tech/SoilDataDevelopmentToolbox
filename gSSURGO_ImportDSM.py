@@ -4,15 +4,15 @@
 #
 # Steve Peaslee, National Soil Survey Center, Lincoln, Nebraska
 #
-# Purpose: Import DSM Survey data into a gSSURGO or gNATSGO database
+# Purpose: Import Raster Soil Survey data into a gSSURGO or gNATSGO database
 #
 # Some issues I've run into...
 #  1. Raster attribute tables: CellValue != Mukey
 #  2. NOTCOM in some rasters. These should not be included when mosaicing with the gNATSGO raster.
-#  3. NOTCOM in DSM mapunit and component tables should not be copied to gNATSGO database.
+#  3. NOTCOM in RSS mapunit and component tables should not be copied to gNATSGO database.
 #  4. Inconsistent cellsize (Essex is 5m, Boundary Waters is 10m)
 #  5. Essex spatial data is UTM meters, NAD1983
-#  5. Areasymbol in Essex DSM is the same as the SSURGO Areasymbol
+#  5. Areasymbol in Essex RSS is the same as the SSURGO Areasymbol
 #  6. WMS - Irrigation, Micro (subsurface drip) had two different rulekeys
 #  7.
 
@@ -623,6 +623,7 @@ def ImportMDTables(newDB, dsmDB):
         # 
         for table in tables:
             arcpy.SetProgressorLabel("Importing " + table + "...")
+            PrintMsg("\tImporting table " + table, 0)
             inTbl = os.path.join(dsmDB, table)
             outTbl = os.path.join(newDB, table)
 
@@ -701,7 +702,7 @@ def ImportMDTables(newDB, dsmDB):
 ## ===================================================================================
 def ImportTables(outputWS, dsmDB):
     #
-    # Import tables from DSM database. Does not require text files
+    # Import tables from RSS database. Does not require text files
     # Origin: SSURGO_Convert_to_Geodatabase.py
 
     try:
@@ -710,7 +711,7 @@ def ImportTables(outputWS, dsmDB):
         if len(tblList) == 0:
             raise MyError, "No tables found in " +  outputWS
 
-        PrintMsg(" \nImporting tabular data from DRSS database...", 0)
+        PrintMsg(" \nImporting tabular data from RSS database " + dsmDB + "...", 0)
 
         # Create lists of key values to use in preventing duplicate keys in some SDV* tables
         #
@@ -757,7 +758,8 @@ def ImportTables(outputWS, dsmDB):
 
                     # dbAreasymbol is not being used and will error in this next line
                     # arcpy.SetProgressorLabel("Importing " +  dbAreaSymbol.upper() + "  (" + Number_Format(iCntr, 0, True) + " of " + Number_Format(len(dbList), 0, True) + "): " + tblName)
-                    arcpy.SetProgressorLabel("Importing DRSS table: " + tblName)
+                    arcpy.SetProgressorLabel("Importing RSS table: " + tblName)
+                    PrintMsg("\tImporting table from RSS: " + tblName, 0)
 
                     if tblName.lower() in ['sdvfolderattribute', 'sdvattribute', 'sdvfolder', 'sdvalgorithm']:
                         # Process the 'SDV' tables separately to prevent key errors from duplicate records
@@ -878,7 +880,7 @@ def MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys):
 
         env.pyramid = "PYRAMIDS 0 NEAREST"
 
-        # The original DSM raster is crippled because it does not have a unique cell value based
+        # The original RSS raster is crippled because it does not have a unique cell value based
         # upon mukey. Use Lookup sa function to create a new temporary raster.
         env.snapRaster = outputRaster
         env.cellSize = outputRaster
@@ -926,13 +928,13 @@ def MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys):
         ssurgoRaster = os.path.join(outputWS, outputRaster)
 
         
-        PrintMsg("\tMerging the DSM and gNATSGO rasters...", 0)
-        arcpy.SetProgressor("default", "Merging the DSM and gNATSGO rasters...")
-        #pixType = "32_BIT_UNSIGNED"
+        PrintMsg("\tMerging the RSS and gNATSGO rasters...", 0)
+        arcpy.SetProgressor("default", "Merging the RSS and gNATSGO rasters...")
+        #pixType = "32_BIT_UNSIGNED"Updating 
         #cellSize = 10
         nBands = 1
         mosaicMethod = "LAST"
-        # Mosaic the existing mapunit raster with the new DSM raster. The new raster has priority.
+        # Mosaic the existing mapunit raster with the new RSS raster. The new raster has priority.
         arcpy.Mosaic_management([fixedRas], outputRaster, "LAST", "", "", "", "NONE", 0.5, "NONE")
         
         PrintMsg("\tRebuilding attribute table for updated raster (" + outputRaster + ")", 0)
@@ -954,107 +956,109 @@ def MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys):
         arcpy.BuildPyramids_management(outputRaster, -1, "NONE", "NEAREST", "DEFAULT", "", "OVERWRITE")
         arcpy.ResetProgressor()
 
-        # Convert fixedRas to a temporary polygon featureclass for inclusion in the output MUPOLYGON featureclass
-        #
-        PrintMsg(" \nCreating DSM soil polygon featureclass...", 0)
-        newPolygons = os.path.join(env.scratchGDB, "xxMupolygons")
-        arcpy.SetProgressor("default", "Creating DRSS soil polygon featureclass...")
-        arcpy.RasterToPolygon_conversion(fixedRas, newPolygons, "NO_SIMPLIFY", "VALUE")
-        # Use gridcode to add and calculate MUKEY.
-        # Output polygon featureclass has extra columns 'Id' and 'gridcode' that need to be dropped
-        # Add other attribute fields and calculate using mapunit table and legend table: AREASYMBOL, SPATIALVER, MUSYM, MUKEY
-        # Also need to dissolve this featureclass to create SAPOLYGON with AREASYMBOL, SPATIALVER, LKEY
+        if 1 == 1:
+            # Skipping creation of RSS mupolygon 
+            # Convert fixedRas to a temporary polygon featureclass for inclusion in the output MUPOLYGON featureclass
+            #
+            #PrintMsg(" \nCreating RSS soil polygon featureclass...", 0)
+            #newPolygons = os.path.join(env.scratchGDB, "xxMupolygons")
+            #arcpy.SetProgressor("default", "Creating RSS soil polygon featureclass...")
+            #arcpy.RasterToPolygon_conversion(fixedRas, newPolygons, "NO_SIMPLIFY", "VALUE")
+            # Use gridcode to add and calculate MUKEY.
+            # Output polygon featureclass has extra columns 'Id' and 'gridcode' that need to be dropped
+            # Add other attribute fields and calculate using mapunit table and legend table: AREASYMBOL, SPATIALVER, MUSYM, MUKEY
+            # Also need to dissolve this featureclass to create SAPOLYGON with AREASYMBOL, SPATIALVER, LKEY
 
-        # Get legend info, assuming this is a single survey area
-        arcpy.SetProgressorLabel("Updating DRSS soil polygon layer attributes...")
-        legendTbl = os.path.join(dsmDB, "legend")
-        dLegend = dict()
-        dAreasymbol = dict()
+            # Get legend info, assuming this is a single survey area
+            arcpy.SetProgressorLabel("Updating RSS attributes for legend and mapunit tables...")
+            legendTbl = os.path.join(dsmDB, "legend")
+            dLegend = dict()
+            dAreasymbol = dict()
 
-        with arcpy.da.SearchCursor(legendTbl, ["areasymbol", "lkey"]) as cur:
-            for rec in cur:
-                areasym, lkey = rec
-                dLegend[lkey] = areasym
-                dAreasymbol[areasym] = lkey
-                                   
-        if len(dLegend) == 1:
-            # As expected, the DRSS database consists of a single survey area
-            pass
+            with arcpy.da.SearchCursor(legendTbl, ["areasymbol", "lkey"]) as cur:
+                for rec in cur:
+                    areasym, lkey = rec
+                    dLegend[lkey] = areasym
+                    dAreasymbol[areasym] = lkey
+                                       
+            if len(dLegend) == 1:
+                # As expected, the RSS database consists of a single survey area
+                pass
 
-        else:
-            raise MyError, "DRSS database consists of " + str(len(dLegend)) + " survey areas"
+            else:
+                raise MyError, "RSS database consists of " + str(len(dLegend)) + " survey areas"
 
-        # Get legend info, assuming this is a single survey area
-        mapunitTbl = os.path.join(dsmDB, "mapunit")
-        dMapunit = dict()
+            # Get legend info, assuming this is a single survey area
+            mapunitTbl = os.path.join(dsmDB, "mapunit")
+            dMapunit = dict()
 
-        with arcpy.da.SearchCursor(mapunitTbl, ["mukey", "musym", "lkey"]) as cur:
-            for rec in cur:
-                mukey, musym, lkey = rec
-                areasym = dLegend[lkey]
-                dMapunit[mukey] = (musym, areasym)
-                saList = [areasym, lkey, "DRSS"]
-               
-        fldName = "AREASYMBOL"
-        dataType = "TEXT"
-        precision = ""
-        scale = ""
-        length = 7
-        arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
+            with arcpy.da.SearchCursor(mapunitTbl, ["mukey", "musym", "lkey"]) as cur:
+                for rec in cur:
+                    mukey, musym, lkey = rec
+                    areasym = dLegend[lkey]
+                    dMapunit[mukey] = (musym, areasym)
+                    saList = [areasym, lkey, "DRSS"]
+                   
+            fldName = "AREASYMBOL"
+            dataType = "TEXT"
+            precision = ""
+            scale = ""
+            length = 7
+            #arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
 
-        fldName = "SPATIALVER"
-        dataType = "DOUBLE"
-        precision = ""
-        scale = ""
-        length = ""
-        arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length) 
+            fldName = "SPATIALVER"
+            dataType = "DOUBLE"
+            precision = ""
+            scale = ""
+            length = ""
+            #arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length) 
 
-        fldName = "MUSYM"
-        dataType = "TEXT"
-        precision = ""
-        scale = ""
-        length = 6
-        arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
+            fldName = "MUSYM"
+            dataType = "TEXT"
+            precision = ""
+            scale = ""
+            length = 6
+            #arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
 
-        fldName = "MUKEY"
-        dataType = "TEXT"
-        precision = ""
-        scale = ""
-        length = 30
-        arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
+            fldName = "MUKEY"
+            dataType = "TEXT"
+            precision = ""
+            scale = ""
+            length = 30
+            #arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
 
-        spatialver = 0
+            spatialver = 0
+            
+            # Populate RSS polygon attributes
+            #PrintMsg("\tUpdating RSS soil polygon attributes for " + newPolygons, 1)
+            #arcpy.SetProgressorLabel("Updating RSS polygon attributes..")
+            #pCnt = int(arcpy.GetCount_management(newPolygons).getOutput(0)) - 1
+            #arcpy.SetProgressor("step", "Updating RSS polygon attributes..", 0, pCnt, 1)
+            
+            #with arcpy.da.UpdateCursor(newPolygons, ["gridcode", "areasymbol", "spatialver", "musym", "mukey"]) as cur:
+            #    for rec in cur:
+            #        gridcode = rec[0]
+            #        mukey = str(gridcode)
+            #        musym, areasym = dMapunit[mukey]
+            #        newrec = [gridcode, areasym, spatialver, musym, mukey]
+            #        cur.updateRow(newrec)
+            #        arcpy.SetProgressorPosition()
+                    
+
+            #arcpy.DeleteField_management(newPolygons, "Id")
+            #arcpy.DeleteField_management(newPolygons, "gridcode")
+
         
-        # Populate DSM polygon attributes
-        PrintMsg("\tUpdating DRSS soil polygon attributes for " + newPolygons, 1)
-        #arcpy.SetProgressorLabel("Updating DRSS polygon attributes..")
-        pCnt = int(arcpy.GetCount_management(newPolygons).getOutput(0)) - 1
-        arcpy.SetProgressor("step", "Updating DRSS polygon attributes..", 0, pCnt, 1)
-        
-        with arcpy.da.UpdateCursor(newPolygons, ["gridcode", "areasymbol", "spatialver", "musym", "mukey"]) as cur:
-            for rec in cur:
-                gridcode = rec[0]
-                mukey = str(gridcode)
-                musym, areasym = dMapunit[mukey]
-                newrec = [gridcode, areasym, spatialver, musym, mukey]
-                cur.updateRow(newrec)
-                arcpy.SetProgressorPosition()
-                
-
-        arcpy.DeleteField_management(newPolygons, "Id")
-        arcpy.DeleteField_management(newPolygons, "gridcode")
-
-        
-        # Create SAPOLYGON equivalent for DRSS survey
+        # Create SAPOLYGON equivalent for RSS survey
         #
         # Also very slow, but perhaps that's just the Update process that follows?
         #
         saPolygons = os.path.join(env.scratchGDB, "xxSapolygons")
-        PrintMsg(" \nCreating DRSS survey boundary featureclass (" + saPolygons + ")", 0)
-        arcpy.SetProgressor("default", "Creating DRSS survey boundary featureclass...")
+        PrintMsg(" \nCreating RSS survey boundary featureclass (" + saPolygons + ")", 0)
+        arcpy.SetProgressor("default", "Creating RSS survey boundary featureclass...")
         #arcpy.Dissolve_management(newPolygons, saPolygons, "AREASYMBOL", "", "SINGLE_PART")
 
-        # Create constant raster based upon original DRSS raster
+        # Create constant raster based upon original RSS raster
         # Problem here. NoData cells are being included. I don't want those.
         saRas = Con(dsmRasterLayer, 1, "#", "VALUE > 0")
         arcpy.RasterToPolygon_conversion(saRas, saPolygons, "NO_SIMPLIFY", "VALUE")
@@ -1090,7 +1094,7 @@ def MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys):
         with arcpy.da.UpdateCursor(saPolygons, ["areasymbol", "lkey", "source"]) as cur:
             for rec in cur:
                 #lkey = dAreasymbol[rec[0]]
-                rec = saList  # Here I am assuming there is only one areasymbol in this DRSS survey
+                rec = saList  # Here I am assuming there is only one areasymbol in this RSS survey
                 cur.updateRow(rec)
         
 
@@ -1127,8 +1131,6 @@ def MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys):
         if not "source" in saFieldNames:
             arcpy.AddField_management(saPolygonFC, "SOURCE", "TEXT", "", "", 30)
 
-
-
         # Update SAPOLYGON featureclass. Not at all sure if this is designed properly.
         #
         if arcpy.Exists(tmpSaPolygons):
@@ -1143,7 +1145,7 @@ def MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys):
                     newRec = list(rec)
                     
                     if newRec[-1] is None and rec[2] is None:
-                        # if source is None and spatialver is None then assume this is DRSS data
+                        # if source is None and spatialver is None then assume this is RSS data
                         newRec[-1] = "DRSS"
                         #PrintMsg("\tDRSS added", 1)
 
@@ -1158,38 +1160,40 @@ def MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys):
             arcpy.Delete_management(tmpSaPolygons)
             del tmpSaPolygons
             
-
-        # Update MUPOLYGON featureclass
-
-        tmpMuPolygons = os.path.join(outputWS, "tmpMupolygons")
-        mupolygonFC = os.path.join(outputWS, "MUPOLYGON")
-        PrintMsg(" \nUpdating " + tmpMuPolygons, 1)
-        arcpy.SetProgressor("default", "Updating " + tmpMuPolygons + "...")
-        arcpy.Update_analysis(mupolygonFC, newPolygons, tmpMuPolygons, "BORDERS", 0)  # slow!
-        muCnt = int(arcpy.GetCount_management(tmpMuPolygons).getOutput(0))
-        arcpy.SetProgressor("step", "Updating " + mupolygonFC, 1, muCnt, 1)
-        
-        if arcpy.Exists(tmpMuPolygons):
-            PrintMsg(" \nUpdating " + mupolygonFC, 1)
-            # Replace SAPOLYGON features
-            arcpy.TruncateTable_management(mupolygonFC)
-
-            with arcpy.da.InsertCursor(mupolygonFC, ["shape@", "areasymbol", "spatialver", "musym", "mukey"]) as udCur:
-                sCur = arcpy.da.SearchCursor(tmpMuPolygons, ["shape@", "areasymbol", "spatialver", "musym", "mukey"])
+        if 1 == 2:
+            # Skipping this mupolygon section for RSS
+            # Update MUPOLYGON featureclass
+            PrintMsg(" \nSkipping MUPOLYGON update...", 1)
+            if 1 == 2:
+                tmpMuPolygons = os.path.join(outputWS, "tmpMupolygons")
+                mupolygonFC = os.path.join(outputWS, "MUPOLYGON")
+                PrintMsg(" \nUpdating " + tmpMuPolygons, 1)
+                arcpy.SetProgressor("default", "Updating " + tmpMuPolygons + "...")
+                arcpy.Update_analysis(mupolygonFC, newPolygons, tmpMuPolygons, "BORDERS", 0)  # slow!
+                muCnt = int(arcpy.GetCount_management(tmpMuPolygons).getOutput(0))
+                arcpy.SetProgressor("step", "Updating " + mupolygonFC, 1, muCnt, 1)
                 
-                for rec in sCur:
-                    udCur.insertRow(rec)
-                    arcpy.SetProgressorPosition()
+                if arcpy.Exists(tmpMuPolygons):
+                    PrintMsg(" \nUpdating " + mupolygonFC, 1)
+                    # Replace SAPOLYGON features
+                    arcpy.TruncateTable_management(mupolygonFC)
 
-                del sCur
+                    with arcpy.da.InsertCursor(mupolygonFC, ["shape@", "areasymbol", "spatialver", "musym", "mukey"]) as udCur:
+                        sCur = arcpy.da.SearchCursor(tmpMuPolygons, ["shape@", "areasymbol", "spatialver", "musym", "mukey"])
+                        
+                        for rec in sCur:
+                            udCur.insertRow(rec)
+                            arcpy.SetProgressorPosition()
 
-            arcpy.Delete_management(tmpMuPolygons)
-            del tmpMuPolygons
-                
+                        del sCur
+
+                    arcpy.Delete_management(tmpMuPolygons)
+                    del tmpMuPolygons
+                        
         
         arcpy.CheckInExtension("Spatial")
 
-        PrintMsg(" \nStill need to add the step to delete the original Mu and Sa polygon layer and rename", 1)
+        #PrintMsg(" \nStill need to add the step to delete the original Mu and Sa polygon layer and rename", 1)
         return True
 
     except MyError, e:
@@ -2278,7 +2282,7 @@ def gSSURGO(outputWS, dsmRasterLayer, dsmDB, outputRaster):
         outputWS = os.path.join(outFolder, gdbName)
         
         bMD = ImportMDTables(outputWS, dsmDB)  # seems to cause problems with duplicate records when
-        # we import md tables from the DRSS database
+        # we import md tables from the RSS database
 
         if bMD == False:
             raise MyError, ""
@@ -2309,7 +2313,7 @@ def gSSURGO(outputWS, dsmRasterLayer, dsmDB, outputRaster):
         expInfo = ", ".join(expList) # This is a list of areasymbol with saverest for metadata
 
 
-        # Get a list of DRSS mukeys
+        # Get a list of RSS mukeys
         #
         muTbl = os.path.join(dsmDB, "mapunit")
         newMukeys = list()
@@ -2630,8 +2634,8 @@ try:
 
         outputWS = arcpy.GetParameterAsText(0)            #  Existing output geodatabase (gSSURGO-gSTATSGO)
         outputRaster = arcpy.GetParameterAsText(1)        #  gNATSGO Raster
-        dsmRaster = arcpy.GetParameterAsText(2)           #  DRSS raster Layer (if raster dataset, switch to layer)
-        #dsmDB = arcpy.GetParameterAsText(2)               #  NASIS Export Folder
+        dsmRaster = arcpy.GetParameterAsText(2)           #  RSS raster Layer (if raster dataset, switch to layer)
+        #dsmDB = arcpy.GetParameterAsText(2)            #  NASIS Export Folder
 
 
         # Need to get dsmDB from dsmRaster
@@ -2643,7 +2647,7 @@ try:
         dsmDB = os.path.dirname(dsmPath)                  # assume that dsmRaster is in a geodatabase
 
         if not dsmDB.endswith(".gdb"):
-            raise MyError, "Input DRSS raster must belong to a file geodatabase"
+            raise MyError, "Input RSS raster must belong to a file geodatabase"
 
         if dsmDataType == "RASTERDATASET":
             wc = "musym <> 'NOTCOM'"

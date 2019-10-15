@@ -1,15 +1,8 @@
-# SSURGO_ExportMuRaster.py
+# SSURGO_ExportMuRasterWebMercatur.py
 #
-# Convert MUPOLYGON featureclass to raster for the specified SSURGO geodatabase.
+# Convert MUPOLYGON featureclass for National gSSURGO to raster using Web Mercatur.
 # By default any small NoData areas (< 5000 sq meters) will be filled using
 # the Majority value.
-#
-# Input mupolygon featureclass must have a projected coordinate system or it will skip.
-# Input databases and featureclasses must use naming convention established by the
-# 'SDM Export By State' tool.
-#
-# For geographic regions that have USGS NLCD available, the tool wil automatically
-# align the coordinate system and raster grid to match.
 #
 # 10-31-2013 Added gap fill method
 #
@@ -90,8 +83,7 @@
 
 # 2018-09-11 Removed 'ImportMetadata_conversion' because I suddenly started getting that Tool validation error. Possibly due
 #            to a Windows or IE update?
-#
-# For SQLite geopackage: arcpy.AddRasterToGeoPackage_conversion
+
 
 ## ===================================================================================
 class MyError(Exception):
@@ -246,23 +238,6 @@ def SnapToNLCD(inputFC, iRaster):
             PrintMsg("Projected coordinate system is " + inputSRName + "; units = '" + theUnits + "'", 0)
             raise MyError, "Unable to align raster output with this coordinate system"
 
-        if 1 == 2:  # old code for using snap raster
-            # Need to calculate a pair of Albers coordinates based upon the snapraster
-            #PrintMsg(" \nUsing snapraster: " + theSnapRaster, 1)
-            rDesc = arcpy.Describe(theSnapRaster)
-            env.snapRaster = theSnapRaster
-
-            # Compare input soil polygon featureclass with snapraster and see if they have the same coordinate system.
-            if rDesc.spatialReference.name == theDesc.extent.spatialReference.name:
-                # Same coordinate system, go ahead and
-                xNLCD = rDesc.extent.XMin
-                yNLCD = rDesc.extent.YMin
-                if xNLCD != int(xNLCD) or yNLCD != int(yNLCD):
-                    raise MyError, "SnapRaster has floating point extent coordinates"
-
-            else:
-                raise MyError, "Input featureclass and snapraster have different coordinate systems"
-
 
         pExtent = theDesc.extent  # Input featureclass extent
         x1 = float(pExtent.XMin)
@@ -354,8 +329,8 @@ def SnapToNLCD_original(inputFC, iRaster):
             theUnits = "meters"
 
         # USA_Contiguous_Albers_Equal_Area_Conic_USGS_version (NAD83)
-        xNLCD = 532695
-        yNLCD = 1550295
+        #xNLCD = 532695
+        #yNLCD = 1550295
 
         # Hawaii_Albers_Equal_Area_Conic  -345945, 1753875
         # Western_Pacific_Albers_Equal_Area_Conic  -2390975, -703265 est.
@@ -404,8 +379,8 @@ def SnapToNLCD_original(inputFC, iRaster):
         # Use +- 5 meters to align with NLCD
         # Calculate snapgrid using 30 meter Kansas NLCD Lower Left coordinates = -532,695 X 1,550,295
         #
-        xNLCD = 532695
-        yNLCD = 1550295
+        #xNLCD = 532695
+        #yNLCD = 1550295
         iRaster = int(iRaster)
 
         # Calculate number of columns difference between KS NLCD and the input extent
@@ -470,6 +445,7 @@ def TiledExtents(inputSA, tileList, theDesc, iRaster, bTiled):
                     polygon, areaSym = rec
                     st = areaSym[0:2]
                     pExtent = polygon.extent
+                    
                     try:
                         # expand existing extent for this state
                         xMin, yMin, xMax, yMax = dExtents[st] # get previous extent
@@ -505,8 +481,9 @@ def TiledExtents(inputSA, tileList, theDesc, iRaster, bTiled):
 
 
         for tile in tileList:
+            PrintMsg(" \n\tAdjusting extent for tile '" + tile + "'", 0)
             beginExtent = dExtents[tile]
-            rasExtent = AdjustExtent(beginExtent, theDesc, iRaster)
+            rasExtent = AdjustExtent(beginExtent, theDesc, iRaster, False)
             dExtents[tile] = rasExtent
 
         return dExtents
@@ -521,20 +498,15 @@ def TiledExtents(inputSA, tileList, theDesc, iRaster, bTiled):
         return dExtents
 
 ## ===================================================================================
-def AdjustExtent(beginExtent, theDesc, iRaster):
-    # This function is used to set an output extent for each tile that matches the NLCD raster dataset.
-    # In effect this is like using NLCD as a snapraster as long as the projections are the same,
-    # which is USA_Contiguous_Albers_Equal_Area_Conic_USGS_version
-    #
-    # Major problem. Extent from featurelayer is the same as the original featureclass.
-    # Need to copy SAPOLYGON features to a temporary featureclass and get the extent from that instead.
+def AdjustExtent(beginExtent, theDesc, iRaster, bVerbose):
+    # This function is used to set an output extent for each tile and rounds coordinates
+    # to the nearest cellsize.
     #
     # Returns empty string if linear units are not 'foot' or 'meter'
 
     try:
-        #theDesc = arcpy.Describe(tmpSA)
         sr = theDesc.spatialReference
-        inputSRName = sr.name
+        inputSRName = sr.PCSName
         theUnits = sr.linearUnitName
 
         x1 = float(beginExtent[0])
@@ -549,8 +521,8 @@ def AdjustExtent(beginExtent, theDesc, iRaster):
             theUnits = "meters"
 
         # USA_Contiguous_Albers_Equal_Area_Conic_USGS_version (NAD83)
-        xNLCD = 532695
-        yNLCD = 1550295
+        #xNLCD = 532695
+        #yNLCD = 1550295
 
         # Hawaii_Albers_Equal_Area_Conic  -345945, 1753875
         # Western_Pacific_Albers_Equal_Area_Conic  -2390975, -703265 est.
@@ -585,6 +557,11 @@ def AdjustExtent(beginExtent, theDesc, iRaster):
             xNLCD = -2390975
             yNLCD = -703265
 
+        elif inputSRName == "WGS_1984_Web_Mercator_Auxiliary_Sphere":
+            # Only use this for national database in Geographic WGS 1984
+            xNLCD = 0
+            yNLCD = 0
+
         else:
             PrintMsg("Projected coordinate system is " + inputSRName + "; units = '" + theUnits + "'", 0)
             raise MyError, "Unable to align raster output with this coordinate system"
@@ -594,8 +571,8 @@ def AdjustExtent(beginExtent, theDesc, iRaster):
         # Use +- 5 meters to align with NLCD
         # Calculate snapgrid using 30 meter Kansas NLCD Lower Left coordinates = -532,695 X 1,550,295
         #
-        xNLCD = 532695
-        yNLCD = 1550295
+        #xNLCD = 532695
+        #yNLCD = 1550295
         iRaster = int(iRaster)
 
         # Calculate number of columns difference between KS NLCD and the input extent
@@ -604,8 +581,6 @@ def AdjustExtent(beginExtent, theDesc, iRaster):
         # Do I need to move x1 and y1 southwest one pixel and then add two pixels to the column and row width?
         iCol = int((x1 - xNLCD) / 30)
         iRow = int((y1 - yNLCD) / 30)
-        #x1 = (30 * iCol) + xNLCD - 30
-        #y1 = (30 * iRow) + yNLCD - 30
 
         x1 = (30 * iCol) + xNLCD - 60
         y1 = (30 * iRow) + yNLCD - 60
@@ -628,11 +603,11 @@ def AdjustExtent(beginExtent, theDesc, iRaster):
         sX2 = ((sLen - len(sX2)) * " ") + sX2
         sY2 = " X " + ((sLen - len(sY2)) * " ") + sY2
 
-        #PrintMsg(" \nAdjustExtent is aligning output tile to match NLCD:", 0)
-        #PrintMsg("\tUR: " + sX2 + sY2 + " " + theUnits.lower(), 0)
-        #PrintMsg("\tLL: " + sX1 + sY1 + " " + theUnits.lower(), 0)
-        #PrintMsg(" \n\tNumber of rows =    \t" + Number_Format(numRows * 30 / iRaster), 0)
-        #PrintMsg("\tNumber of columns = \t" + Number_Format(numCols * 30 / iRaster), 0)
+        if bVerbose:
+            PrintMsg("\tUR: " + sX2 + sY2 + " " + theUnits.lower(), 0)
+            PrintMsg("\tLL: " + sX1 + sY1 + " " + theUnits.lower(), 0)
+            PrintMsg(" \n\tNumber of rows =    \t" + Number_Format(numRows * 30 / iRaster), 0)
+            PrintMsg("\tNumber of columns = \t" + Number_Format(numCols * 30 / iRaster), 0)
 
         return theExtent
 
@@ -912,7 +887,6 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
         #
         d = datetime.date.today()
         today = str(d.isoformat().replace("-",""))
-        
         #PrintMsg(" \nToday replacement string: " + today, 1)
 
         # Set fiscal year according to the current month. If run during January thru September,
@@ -1013,27 +987,7 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
                 idPurpose.text = ip.replace("xxFYxx", fy)
                 #PrintMsg("\t\tReplacing xxFYxx", 1)
                 
-        # Update process steps
-        eProcSteps = root.findall('dataqual/lineage/procstep')
 
-        if not eProcSteps is None:
-            PrintMsg("\t\tprocess steps", 0)
-            for child in eProcSteps:
-                for subchild in child.iter('procdesc'):
-                    #PrintMsg("\t\t" + subchild.tag + "\t" + subchild.text, 0)
-                    procText = subchild.text
-                    
-                    if procText.find('xxTODAYxx') >= 0:
-                        subchild.text = subchild.text.replace("xxTODAYxx", d.strftime('%Y-%m-%d'))
-
-                    if procText.find("xxSTATExx") >= 0:
-                        subchild.text = subchild.text.replace("xxSTATExx", mdState)
-                        #PrintMsg("\t\tReplacing xxSTATExx", 1)
-
-                    if procText.find("xxFYxx") >= 0:
-                        subchild.text = subchild.text.replace("xxFYxx", fy)
-                        #PrintMsg("\t\tReplacing xxFYxx", 1)
-            
         #PrintMsg(" \nSaving template metadata to " + mdImport, 1)
 
         #  create new xml file which will be imported, thereby updating the table's metadata
@@ -1068,12 +1022,7 @@ def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
         env.workspace = currentWS
 
         return True
-    
-    except MyError, e:
-        # Example: raise MyError, "This is an error message"
-        PrintMsg(str(e), 2)
-        return False
-    
+
     except:
         errorMsg()
         False
@@ -1115,19 +1064,41 @@ def ConvertToRaster(target, iRaster, bTiled):
 
         # Set geoprocessing environment
         #
+
+        # Web Mercatur spatial reference
+        #outputSR = arcpy.SpatialReference("WGS_1984_Web_Mercator_Auxiliary_Sphere")
+        outputSR = arcpy.SpatialReference(3857)  # alternate 102100
+        env.outputCoordinateSystem = outputSR
+        env.cellSize = iRaster
+        env.geographicTransformations = "WGS_1984_(ITRF00)_To_NAD_1983"
+
+        # Try using convex hull from SAPOLYGON to define the output raster extent with Web Mercatur coordinates
+        bndFC = os.path.join(theGDB, "SAPOLYGON")
+        inputSA = os.path.join(env.scratchGDB, "ConvexHull")
+
+        if bTiled in ["Large", "Small"]:
+            arcpy.MinimumBoundingGeometry_management(bndFC, inputSA, "CONVEX_HULL")
+
+        else:
+            arcpy.MinimumBoundingGeometry_management(bndFC, inputSA, "CONVEX_HULL", "ALL")
+
+        theDesc = arcpy.Describe(inputSA)  #
+        beginExtent = [theDesc.extent.XMin, theDesc.extent.YMin, theDesc.extent.XMax, theDesc.extent.YMax]
+        finalExtent = AdjustExtent(beginExtent, theDesc, iRaster, True)
+        #PrintMsg(" \nNEED TO NORMALIZE THE RASTER EXTENT", 1)
+        #env.extent = arcpy.Describe(bndFC).extent
+
         env.overwriteOutput = True
         arcpy.env.compression = "LZ77"
-        env.tileSize = "128 128"
+        env.tileSize = "128 128"  # should this be changed to 256 256?
         desc = arcpy.Describe(target)
 
         if desc.dataType.lower() == "workspace":
-            theGDB = target
             inputFC = os.path.join(theGDB, "MUPOLYGON")
 
         elif desc.dataType.lower() == "featureclass":
             inputFC = target
-            theGDB = os.path.dirname(target)
-
+            
         # Make sure that the env.scratchGDB set, and not to Default.gdb. This causes problems for
         # some unknown reason.
 
@@ -1166,19 +1137,15 @@ def ConvertToRaster(target, iRaster, bTiled):
                 tileName = inputFC[(inputFC.rfind("_") + 1):]
                 outputRaster = os.path.join(theGDB, "MapunitRaster_" + tileName.lower() + "_" + str(iRaster) + "m")
 
-        inputSA = os.path.join(theGDB, "SAPOLYGON")
 
         if not arcpy.Exists(inputFC):
             raise MyError, "Could not find input featureclass: " + inputFC
 
         # Check input layer's coordinate system to make sure horizontal units are meters
-        # set the output coordinate system for the raster (neccessary for PolygonToRaster)
-        if CheckSpatialReference(inputFC) == False:
-            return False
+        # set the output coordinate system for the rfullExtentaster (neccessary for PolygonToRaster)
+        #if CheckSpatialReference(inputFC) == False:
+        #    return False
 
-        # Sometimes it helps to compact large databases before raster conversion
-        #arcpy.SetProgressorLabel("Compacting database prior to rasterization...")
-        #arcpy.Compact_management(theGDB)
 
         # For rasters named using an attribute value, some attribute characters can result in
         # 'illegal' names.
@@ -1307,13 +1274,6 @@ def ConvertToRaster(target, iRaster, bTiled):
         #
         # End of Lookup table code
 
-        # Match NLCD raster (snapraster)
-        #if theSnapRaster != "":
-            # Set snapraster environment if  one is specified
-        #    arcpy.snapRaster = theSnapRaster
-
-        # Set output extent
-        fullExtent = SnapToNLCD(inputFC, iRaster)
 
         # Raster conversion process...
         #
@@ -1337,7 +1297,7 @@ def ConvertToRaster(target, iRaster, bTiled):
 
             for tile in tileList:
                 i += 1
-                #tmpPolys = "poly_" + tile
+
                 if bTiled == "Small":
                     wc = "AREASYMBOL = '" + tile + "'"
 
@@ -1346,7 +1306,7 @@ def ConvertToRaster(target, iRaster, bTiled):
 
                 tileRaster = os.path.join(tmpFolder, tile.lower() + ".tif")
                 rasterList.append(tileRaster)
-                msg = "\t\tPerforming raster conversion for '" + tile + "'  (tile " + str(i) + " of " + str(tileCnt) + ")..."
+                msg = " \n\tPerforming raster conversion for '" + tile + "'  (tile " + str(i) + " of " + str(tileCnt) + ")..."
                 arcpy.SetProgressor("default", msg)
                 PrintMsg(msg, 0)
 
@@ -1380,24 +1340,14 @@ def ConvertToRaster(target, iRaster, bTiled):
                 # Use a priority field for tiled rasters to try and prevent NoData around edge
 
                 #ListEnv()
-                
-
-##                tmpFields = [fld.name.upper() for fld in arcpy.Describe(tmpPolys).fields]
-
-##                PrintMsg(" \ntmpPoly fields: " + ", ".join(tmpFields), 1)
-##                PrintMsg(" \nLookup Table: " + lu, 1)
-##                PrintMsg(" \nCurrent workspace: " + env.workspace, 1)
-##                PrintMsg(" \nScratchWorkspace: " + env.scratchWorkspace, 1)
-##                PrintMsg(" \nScratchFolder: " + env.scratchFolder, 1)
-##                PrintMsg(" \nScratchGDB: " + env.scratchGDB, 1)
-##                PrintMsg(" \nPolygonToRaster conversion inputs: \ntmpPolys: " + str(tmpPolys) + " \ntileRaster: " + str(tileRaster) + " \npriorityFld: " + str(priorityFld) + " \niRaster: " + str(iRaster) + " \nEnd of inputs", 1)
-                
                 arcpy.PolygonToRaster_conversion(tmpPolys, "Lookup.CELLVALUE", tileRaster, "MAXIMUM_COMBINED_AREA", priorityFld, iRaster)  # Getting some NoData pixels
 
             del tileRaster
             PrintMsg(" \n\tMosaicing tiles to a single raster...", 0)
             arcpy.SetProgressorLabel("Mosaicing tiles to a single raster...")
-            env.extent = fullExtent
+
+            env.extent = finalExtent
+            
             arcpy.MosaicToNewRaster_management (rasterList, os.path.dirname(outputRaster), os.path.basename(outputRaster), "", "32_BIT_UNSIGNED", iRaster, 1, "MAXIMUM")
             del rasterList
             # Compact the scratch geodatabase after deleting all the rasters
@@ -1405,12 +1355,24 @@ def ConvertToRaster(target, iRaster, bTiled):
         else:
             # Create a single raster, no tiles
             #
+            # Try using convex hull from SAPOLYGON to define the output raster extent
+            #inputSA = os.path.join(theGDB, "SAPOLYGON")
+            #bndFC = os.path.join(env.scratchGDB, "ConvexHull")
+            #arcpy.MinimumBoundingGeometry_management(inputSA, bndFC, "CONVEX_HULL", "ALL")
+            #PrintMsg(" \nNEED TO NORMALIZE THE RASTER EXTENT", 1)
+            #env.extent = arcpy.Describe(bndFC).extent
+            theDesc = arcpy.Describe(inputSA)  #
+            beginExtent = [theDesc.extent.XMin, theDesc.extent.YMin, theDesc.extent.XMax, theDesc.extent.YMax]
+            theExtent = AdjustExtent(beginExtent, theDesc, iRaster, False)
+            env.extent = theExtent
+
+            
             PrintMsg(" \nConverting featureclass " + os.path.join(os.path.basename(os.path.dirname(inputFC)), os.path.basename(inputFC)) + " to raster (" + str(iRaster) + " meter)", 0)
             tmpPolys = "poly_tmp"
             arcpy.MakeFeatureLayer_management (inputFC, tmpPolys)
             arcpy.AddJoin_management (tmpPolys, "MUKEY", lu, "MUKEY", "KEEP_ALL")
             arcpy.SetProgressor("default", "Running PolygonToRaster conversion...")
-            env.extent = fullExtent
+
 
             # Need to make sure that the join was successful
             time.sleep(1)
@@ -1432,19 +1394,14 @@ def ConvertToRaster(target, iRaster, bTiled):
 
 
             #ListEnv()
-##            tmpFields = [fld.name.upper() for fld in arcpy.Describe(tmpPolys).fields]
-##            PrintMsg(" \ntmpPoly fields: " + ", ".join(tmpFields), 1)
-##            PrintMsg(" \nLookup Table: " + lu, 1)
-##            PrintMsg(" \nCurrent workspace: " + env.workspace, 1)
-##            PrintMsg(" \nScratchWorkspace: " + env.scratchWorkspace, 1)
-##            PrintMsg(" \nScratchFolder: " + env.scratchFolder, 1)
-##            PrintMsg(" \nScratchGDB: " + env.scratchGDB, 1)                
-##            PrintMsg(" \nPolygonToRaster conversion inputs: \ntmpPolys: " + str(tmpPolys) + " \noutputRaster: " + str(outputRaster) + " \npriorityFld: " + str(priorityFld) + " \niRaster: " + str(iRaster) + " \nEnd of inputs", 1)
             arcpy.PolygonToRaster_conversion(tmpPolys, "Lookup.CELLVALUE", outputRaster, "MAXIMUM_COMBINED_AREA", priorityFld, iRaster) # No priority field for single raster
 
             # immediately delete temporary polygon layer to free up memory for the rest of the process
             time.sleep(1)
             arcpy.Delete_management(tmpPolys)
+
+            if not arcpy.Exists(outputRaster):
+                raise MyError, "Failed to create output raster"
 
             # End of single raster process
 

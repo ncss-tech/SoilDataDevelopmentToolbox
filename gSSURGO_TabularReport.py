@@ -247,7 +247,7 @@ try:
         arcpy.mapping.AddTableView(df, sdvTbl)
 
         arcpy.SetProgressorLabel("Running report for '" + title + "' ....")
-        PrintMsg(" \nImporting table into report template...", 0)
+        PrintMsg(" \nImporting table into report template (" + template + ")...", 0)
 
         # Create PDF for tabular report
         arcpy.mapping.ExportReport(sdvTbl, template, reportPDF, dataset, report_title=title, field_map=fm)

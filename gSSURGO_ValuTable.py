@@ -210,39 +210,61 @@ def CreateQueryTables(inputDB, outputDB, maxD):
                     # initialize list of horizon records
                     dHz[cokey] = [rec]
 
-            # HORIZON TEXTURE
-            #
-            #PrintMsg(" \n\tMaking query table (CT) for texture information", 0)
-            inputTbls = list()
-            tbls = ["chtexturegrp", "chtexture"]
-            for tbl in tbls:
-                inputTbls.append(os.path.join(inputDB, tbl))
+        del hzTbl
 
-            txList1 = [["chtexturegrp.chkey", "chkey"], ["chtexturegrp.texture", "texture"], ["chtexture.lieutex", "lieutex"]]
-            whereClause = "chtexturegrp.chtgkey = chtexture.chtgkey and chtexturegrp.rvindicator = 'Yes'"
-            arcpy.MakeQueryTable_management(inputTbls, queryCT, "USE_KEY_FIELDS", "#", txList1, whereClause)
+        # HORIZON TEXTURE
+        #
+        #PrintMsg(" \n\tMaking query table (CT) for texture information", 0)
+        inputTbls = list()
+        tbls = ["chtexturegrp", "chtexture"]
+        for tbl in tbls:
+            inputTbls.append(os.path.join(inputDB, tbl))
 
-            # Read texture query into dictionary
-            txList2 = ["chtexturegrp.chkey", "chtexturegrp.texture", "chtexture.lieutex"]
-            dTexture = dict()
-            ctCnt = int(arcpy.GetCount_management(queryCT).getOutput(0))
+        txList1 = [["chtexturegrp.chkey", "chkey"], ["chtexturegrp.texture", "texture"], ["chtexture.lieutex", "lieutex"]]
+        whereClause = "chtexturegrp.chtgkey = chtexture.chtgkey and chtexturegrp.rvindicator = 'Yes'"
+        arcpy.MakeQueryTable_management(inputTbls, queryCT, "USE_KEY_FIELDS", "#", txList1, whereClause)
 
-            arcpy.SetProgressor ("step", "Getting horizon texture information for QueryTable_HZ...", 0, ctCnt, 1)
+        # Try to overcome memory error by copying this query table to disk
+        textureTbl = os.path.join(env.scratchGDB, "HzTexture")
+        arcpy.TableToTable_conversion(queryCT, os.path.dirname(textureTbl), os.path.basename(textureTbl))
+        arcpy.Delete_management(queryCT)
+        del queryCT
 
-            # Have been running out of memory here if other applications are running. 5.66GB
+        #raise MyError, "EARLY OUT"
 
-            with arcpy.da.SearchCursor(queryCT, txList2) as cur:
-                for rec in cur:
+        # Read texture query into dictionary
+        #txList2 = ["chtexturegrp.chkey", "chtexturegrp.texture", "chtexture.lieutex"]
+        txList2 = ["chkey", "texture", "lieutex"]
+        dTexture = dict()
+        ctCnt = int(arcpy.GetCount_management(textureTbl).getOutput(0))
+
+        arcpy.SetProgressor ("step", "Getting horizon texture information for QueryTable_HZ...", 0, ctCnt, 1)
+
+        # Have been running out of memory here if other applications are running. 5.66GB
+        lieuList = ['Slightly decomposed plant material', 'Moderately decomposed plant material', \
+        'Highly decomposed plant material', 'Undecomposed plant material', 'Muck', 'Mucky peat', \
+        'Peat', 'Coprogenous earth']
+        txList = ["CE", "COP-MAT", "HPM", "MPM", "MPT", "MUCK", "PDOM", "PEAT", "SPM", "UDOM"]
+        #cnt = 0
+        
+        with arcpy.da.SearchCursor(textureTbl, txList2) as cur:
+            for rec in cur:
+                if (rec[1] in txList or rec[2] in lieuList):
+                    #cnt +=1
+                    #arcpy.SetProgressorLabel(str(cnt))
                     dTexture[rec[0]] = [rec[1], rec[2]]
-                    arcpy.SetProgressorPosition()
+                arcpy.SetProgressorPosition()
 
-            arcpy.Delete_management(queryCT)
+        arcpy.Delete_management(textureTbl)
 
-            del hzTbl
-            del queryCT
+
+        del textureTbl
 
         # COMPONENT RESTRICTIONS which will be saved to a gdb table
         #
+        if arcpy.Exists(os.path.join(outputDB, "QueryTable_CR")):
+            arcpy.Delete_management(os.path.join(outputDB, "QueryTable_CR"))
+            
         crTbl = os.path.join(inputDB, "corestrictions")
         #PrintMsg(" \n\tReading component restriction data...", 0)
         fldCr = [["cokey", "cokey"], \
@@ -253,6 +275,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
         arcpy.MakeQueryTable_management(crTbl, queryCR, "USE_KEY_FIELDS", "#", fldCr, whereClause)
         arcpy.CreateTable_management(outputDB, "QueryTable_CR", queryCR)
         arcpy.Delete_management(queryCR)
+        del queryCR
 
         fldCr2 = list()
         dCr = dict()
@@ -316,7 +339,11 @@ def CreateQueryTables(inputDB, outputDB, maxD):
         component.cokey = chorizon.cokey and mapunit.objectid = 1"
 
         outputTable = os.path.join(outputDB, "QueryTable_HZ")
-        PrintMsg(" \nCreating table " + outputTable, 0)
+        #PrintMsg(" \nCreating table " + outputTable, 0)
+
+        if arcpy.Exists(os.path.join(outputDB, "QueryTable_HZ")):
+            arcpy.Delete_management(os.path.join(outputDB, "QueryTable_HZ"))
+        
         arcpy.MakeQueryTable_management(['mapunit', 'component', 'chorizon'], queryTemp, "USE_KEY_FIELDS", "#", fldAll, whereClause)
         arcpy.CreateTable_management(outputDB, "QueryTable_HZ", queryTemp)
         arcpy.AddField_management(outputTable, "texture", "TEXT", "", "", "30", "texture")
@@ -324,9 +351,12 @@ def CreateQueryTables(inputDB, outputDB, maxD):
         arcpy.Delete_management(queryTemp)
         del queryTemp
 
-        # Process dictionaries and use them to write out the new QueryTable_HZ table
+        # Process dictionaries and use themtextureTbl to write out the new QueryTable_HZ table
         #
         # Open output table
+        #if arcpy.Exist(theMuTable):
+        #    arcpy.Delete_management(theMuTable)
+            
         outFld2 = arcpy.Describe(outputTable).fields
         outFlds = list()
         for fld in outFld2:
@@ -447,60 +477,60 @@ def CreateQueryTables(inputDB, outputDB, maxD):
         arcpy.ResetProgressor()
         arcpy.SetProgressorLabel("Looking for inconsistencies in horizon depths...")
 
-        # Memory Error below
-        #
-        curFields = ['mukey', 'cokey','hzdept_r','hzdepb_r', 'hzname', 'compname', 'localphase', 'majcompflag']
+        if 1==2: # Skip check for CONUS because of Memory errors...
+            # Memory Error below
+            #
+            curFields = ['mukey', 'cokey','hzdept_r','hzdepb_r', 'hzname', 'compname', 'localphase', 'majcompflag']
 
-        with arcpy.da.SearchCursor(outputTable, curFields, where_clause=wc) as cur:
-            for rec in cur:
-                mukey, cokey, top, bot, hzname, compname, localphase, majcomp = rec
-                #cokey = cokey
+            with arcpy.da.SearchCursor(outputTable, curFields, where_clause=wc) as cur:
+                for rec in cur:
+                    mukey, cokey, top, bot, hzname, compname, localphase, majcomp = rec
 
-                if cokey in dHZ:
-                    vals = dHZ[cokey]
-                    vals.append([top, bot, hzname, mukey, compname, localphase, majcomp])
-                    dHZ[cokey] = vals
+                    if cokey in dHZ:
+                        vals = dHZ[cokey]
+                        vals.append([top, bot, hzname, mukey, compname, localphase, majcomp])
+                        dHZ[cokey] = vals
+
+                    else:
+                        dHZ[cokey] = [[top, bot, hzname, mukey, compname, localphase, majcomp]]
+
+            # Number of items in each component value = len(rec)
+            # top of first horizon = rec[0][0]
+            # bottom of last horizon = rec[len(rec) - 1][1]
+            # component thickness #1 = rec[len(rec) - 1][1] - rec[0][0]
+            # Read each entry in the dictionary and check for gaps and overlaps in the horizons
+            #
+            badCoHz = list()
+            badHorizons = list()
+
+            for cokey, vals in dHZ.items():
+                # Process each component
+                #
+                hzSum = 0                     # itialize sum of horizon thicknesses
+                lb = vals[0][0]               # initialize last bottom to the top of the first horizon
+                localphase = vals[0][5]
+
+                if localphase is None:
+                    localphase = ""
 
                 else:
-                    dHZ[cokey] = [[top, bot, hzname, mukey, compname, localphase, majcomp]]
+                    localphase = " " + localphase
 
-        # Number of items in each component value = len(rec)
-        # top of first horizon = rec[0][0]
-        # bottom of last horizon = rec[len(rec) - 1][1]
-        # component thickness #1 = rec[len(rec) - 1][1] - rec[0][0]
-        # Read each entry in the dictionary and check for gaps and overlaps in the horizons
-        #
-        badCoHz = list()
-        badHorizons = list()
+                for v in vals:
+                    # Process each horizon in the component record
+                    #
+                    # sum of bottom - top for each horizon
+                    hzSum += (v[1] - v[0])
 
-        for cokey, vals in dHZ.items():
-            # Process each component
-            #
-            hzSum = 0                     # itialize sum of horizon thicknesses
-            lb = vals[0][0]               # initialize last bottom to the top of the first horizon
-            localphase = vals[0][5]
+                            # Check for consistency between tops and bottoms for each consecutive horizon
+                    if v[0] != lb:
+                        diff = v[0] - lb
+                        badCoHz.append(str(cokey))
+                        badHorizons.append(v[3] + ", " + str(cokey) + ", " + v[4] + localphase + ", " + majcomp + ", " + str(v[2]) + ", " + str(v[0]) + ", " + str(diff) )
 
-            if localphase is None:
-                localphase = ""
+                    lb = v[1] # update last bottom depth
 
-            else:
-                localphase = " " + localphase
-
-            for v in vals:
-                # Process each horizon in the component record
-                #
-                # sum of bottom - top for each horizon
-                hzSum += (v[1] - v[0])
-
-        		# Check for consistency between tops and bottoms for each consecutive horizon
-                if v[0] != lb:
-                    diff = v[0] - lb
-                    badCoHz.append(str(cokey))
-                    badHorizons.append(v[3] + ", " + str(cokey) + ", " + v[4] + localphase + ", " + majcomp + ", " + str(v[2]) + ", " + str(v[0]) + ", " + str(diff) )
-
-                lb = v[1] # update last bottom depth
-
-        del dHZ
+            del dHZ
 
         #PrintMsg(" \nWriting component restrictions to " + outputCR, 0)
         arcpy.SetProgressor ("step", "Writing component restriction data to " + outputCR + "...", 0, len(dCr), 1)
@@ -736,6 +766,9 @@ def CreateOutputTableCo(theCompTable, depthList):
         arcpy.AddField_management(tmpTable, "MUKEY", "TEXT", "", "", "30", "MUKEY")
 
         # Convert IN_MEMORY table to a permanent table
+        if arcpy.Exists(os.path.join(outputDB, os.path.basename(theCompTable))):
+            arcpy.Delete_management(os.path.join(outputDB, os.path.basename(theCompTable)))
+            
         arcpy.CreateTable_management(outputDB, os.path.basename(theCompTable), tmpTable)
 
         # add attribute indexes for key fields
@@ -773,14 +806,14 @@ def CheckTexture(mukey, cokey, desgnmaster, om, texture, lieutex, taxorder, taxs
     #
     # If desgnmast = 'O' or 'L' and not (TAXORDER = 'Histosol' OR TAXSUBGRP like 'Histic%') then exclude this horizon from all RZAWS calcualtions.
     #
-    # lieutext values: Slightly decomposed plant material, Moderately decomposed plant material,
+    # lieutex values: Slightly decomposed plant material, Moderately decomposed plant material,
     # Bedrock, Variable, Peat, Material, Unweathered bedrock, Sand and gravel, Mucky peat, Muck,
     # Highly decomposed plant material, Weathered bedrock, Cemented, Gravel, Water, Cobbles,
     # Stones, Channers, Parachanners, Indurated, Cinders, Duripan, Fragmental material, Paragravel,
     # Artifacts, Boulders, Marl, Flagstones, Coprogenous earth, Ashy, Gypsiferous material,
     # Petrocalcic, Paracobbles, Diatomaceous earth, Fine gypsum material, Undecomposed organic matter
 
-    # According to Bob, any of the 'decomposed plant material', 'Muck, 'Mucky peat, 'Peat', 'Coprogenous earth' LIEUTEX
+    # According to Bob, any of these 'decomposed plant material', 'Muck, 'Mucky peat, 'Peat', 'Coprogenous earth' LIEUTEX
     # values qualify.
     #
     # This function does not determine whether the horizon might be a buried organic. That is done in CalcRZAWS1.
@@ -3012,7 +3045,7 @@ def CreateValuTable(inputDB):
     # Run all processes from here
 
     try:
-        arcpy.OverwriteOutput = True
+        arcpy.overwriteOutput = True
 
         # Set location for temporary tables
         #outputDB = "IN_MEMORY"
@@ -3180,12 +3213,16 @@ def CreateValuTable(inputDB):
         # Update metadata for the geodatabase and all featureclasses
         PrintMsg(" \n\tUpdating " + os.path.basename(theMuTable) + " metadata...", 0)
         bMetadata = UpdateMetadata(inputDB, theMuTable, surveyInfo)
+        #bMetadata = True
 
-        #if arcpy.Exists(theCompTable):
-        #    arcpy.Delete_management(theCompTable)
+        if arcpy.Exists(theCompTable):
+            arcpy.Delete_management(theCompTable)
 
         if bMetadata:
             PrintMsg("\t\tMetadata complete", 0)
+
+        else:
+            PrintMsg("\t\tSkipping Valu1 table metadata...", 1)
 
         PrintMsg(" \n\tValu1 table complete for " + inputDB + " \n ", 0)
 

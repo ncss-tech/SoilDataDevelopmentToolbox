@@ -126,7 +126,7 @@ def elapsedTime(start):
 ## ===================================================================================
 
 # Import system modules
-import arcpy, sys, string, os, traceback, locale, time
+import arcpy, sys, string, os, traceback, locale, time, sqlite3
 
 # Create the environment
 from arcpy import env
@@ -135,8 +135,10 @@ try:
 
     inputLayer = arcpy.GetParameterAsText(0)       # Input mapunit polygon layer
     sdvAtts = arcpy.GetParameter(1)                # SDV Attribute
-    top = arcpy.GetParameter(2)                    # Top Depth, default = 0
-    bot = arcpy.GetParameter(3)                     # Bottom Depth, default = 1
+    depthList = arcpy.GetParameterAsText(2)        # space-delimited list of depths
+    
+    #top = arcpy.GetParameter(2)                    # Top Depth, default = 0
+    #bot = arcpy.GetParameter(3)                     # Bottom Depth, default = 1
 
     num = 0
     badList = list()
@@ -155,7 +157,7 @@ try:
 
     del mxd, df, layers
 
-    # Get gSSURGO Db behind inputLayer
+    # Get gSSURGO DB behind inputLayer
     desc = arcpy.Describe(inputLayer)
     
     if desc.dataType.lower() == "featurelayer":
@@ -177,6 +179,14 @@ try:
     tieBreaker = ""
     sRV = "Representative"
 
+    depthRanges = list()
+    d1 = depthList.split(" ")
+    d2 = [int(x) for x in d1]
+
+    for i in range(len(d2) - 1):
+        depthRanges.append((d2[i], d2[i + 1]))
+
+    depthRanges.reverse()
     newAtts = list()
     
     for sdvAtt in sdvAtts:
@@ -184,35 +194,44 @@ try:
         # to clean up the list before processing.
         if not sdvAtt.startswith("* "):
             newAtts.append(sdvAtt.strip())
-            
-    PrintMsg(" \nCreating a series of " + str(len(newAtts)) + " soil maps", 0)
-    arcpy.SetProgressor("step", "Creating series of soil maps...", 1, len(newAtts), 1)
+
+    mapCnt = (len(newAtts) * len(depthRanges))    
+    PrintMsg(" \nCreating a series of " + str(mapCnt) + " soil maps (" + str(len(depthRanges)) + " depths X " + str(len(newAtts)) + " properties)", 0)
+    arcpy.SetProgressor("step", "Creating series of soil maps...", 0, mapCnt, 1)
     num = 0
     
     for sdvAtt in newAtts:
         if not sdvAtt.startswith("* "):
-            sdvAtt = sdvAtt.strip()
-            num += 1
-            msg = "Creating map number " + str(num) + ":  " + sdvAtt
-            #arcpy.SetProgressorLabel(msg)
-            PrintMsg(" \n" + msg, 0)
-            time.sleep(2)
+            for depths in depthRanges:
+                top, bot = depths
+                sdvAtt = sdvAtt.strip()
+                num += 1
+                msg = "Creating map number " + str(num) + ":  " + sdvAtt + " " + str(top) + " to " + str(bot) + "cm"
+                arcpy.SetProgressorLabel(msg)
+                PrintMsg(" \n" + msg, 0)
+                time.sleep(2)
 
-            # Trying here to enter default values for most parameters and to modify CreateSoilMap.CreateSoilMap to use default aggregation method (aggMethod) when it is passed an empty string
-            bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
-            #arcpy.SetProgressorPosition()
-            
-            if bSoilMap == 2:
-                badList.append(sdvAtt)
+                # Trying here to enter default values for most parameters and to modify CreateSoilMap.CreateSoilMap to use default aggregation method (aggMethod) when it is passed an empty string
+                bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
+                arcpy.SetProgressorPosition()
+                
+                if bSoilMap == 2:
+                    if bot > 0:
+                        badList.append(sdvAtt + " " + str(top) + " to " + str(bot) + "cm'")
 
-            elif bSoilMap == 0:
-                #PrintMsg("\tbSoilMap returned 0", 0)
-                badList.append(sdvAtt)
+                    else:
+                        badList.append(sdvAtt)
+
+                elif bSoilMap == 0:
+                    #PrintMsg("\tbSoilMap returned 0", 0)
+                    badList.append(sdvAtt)
             
     del bSoilMap
     arcpy.RefreshActiveView()
     
     if len(badList) > 0:
+
+        
         if len(badList) == 1:
             PrintMsg(" \nUnable to create the following soil map layer: '" + badList[0] + "' \n ", 1)
 
@@ -221,7 +240,7 @@ try:
 
     else:
         PrintMsg(" \nCreateSoilMaps finished \n ", 0)
-    
+
     del badList
 
 except:

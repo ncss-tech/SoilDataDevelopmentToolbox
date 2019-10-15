@@ -1,0 +1,62 @@
+﻿<metadata>
+  <idinfo>
+    <citation>
+      <citeinfo>
+        <title>SDV_Title</title>
+        <geoform>tabular digital data</geoform>
+      </citeinfo>
+    </citation>
+    <descript>
+      <abstract>SDV_Description</abstract>
+      <purpose>SDV_Summary</purpose>
+    </descript>
+    <keywords>
+      <theme>
+        <themekt>None</themekt>
+        <themekey>gSSURGO</themekey>
+        <themekey>Soil Data Viewer</themekey>
+      </theme>
+    </keywords>
+    <accconst>None</accconst>
+    <useconst>None</useconst>
+    <datacred>SDV_Credits</datacred>
+    <native>Microsoft Windows 7 Version 6.1 (Build 7601) Service Pack 1; Esri ArcGIS 10.1.1.3300</native>
+  </idinfo>
+  <eainfo>
+    <detailed>
+      <enttyp>
+        <enttypl>SDV_omr_DCP_0to1</enttypl>
+      </enttyp>
+      <attr>
+        <attrlabl>COMPPCT_R</attrlabl>
+        <attrdef>Component Percent</attrdef>
+      </attr>
+      <attr>
+        <attrlabl>MUKEY</attrlabl>
+        <attrdef>Primary key</attrdef>
+      </attr>
+      <attr>
+        <attrlabl>AREASYMBOL</attrlabl>
+        <attrdef>Soil Survey Identifier</attrdef>
+      </attr>
+      <attr>
+        <attrlabl>OBJECTID</attrlabl>
+        <attrdef>Internal feature number.</attrdef>
+        <attrdefs>Esri</attrdefs>
+        <attrdomv>
+          <udom>Sequential unique whole numbers that are automatically generated.</udom>
+        </attrdomv>
+      </attr>
+      <attr>
+        <attrlabl>SDV_RATING</attrlabl>
+		<attrdef>Dummy description</attrdef>
+      </attr>
+    </detailed>
+  </eainfo>
+  <metainfo>
+    <metd>20160116</metd>
+    <metstdn>FGDC Content Standard for Digital Geospatial Metadata</metstdn>
+    <metstdv>FGDC-STD-001-1998</metstdv>
+    <mettc>local time</mettc>
+  </metainfo>
+</metadata>

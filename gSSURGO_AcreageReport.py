@@ -183,7 +183,7 @@ def GetRatingDomain(gdb):
         return []
 
 ## ===================================================================================
-def CalculateAcres(sdvLayer):
+def CalculateAcres(sdvLayer, outputSR):
     #
     # Read raster or featureclass table and calculate area in acres for each rating category
     #
@@ -209,7 +209,7 @@ def CalculateAcres(sdvLayer):
 
             fields = [countField, layerRatingField]
 
-            with arcpy.da.SearchCursor(layerName, fields) as cur:
+            with arcpy.da.SearchCursor(layerName, fields, "", outputSR) as cur:
                 for rec in cur:
                     # Accumulate acres for each rating value
                     try:
@@ -223,7 +223,7 @@ def CalculateAcres(sdvLayer):
             PrintMsg(" \nCreating acreage summary report for feature layer '" + layerName + "' \n ", 0)
             fields = ["SHAPE@AREA", layerRatingField]
 
-            with arcpy.da.SearchCursor(layerName, fields) as cur:
+            with arcpy.da.SearchCursor(layerName, fields, "", outputSR) as cur:
                 for rec in cur:
                     try:
                         dAcres[rec[1]] += (rec[0] * convAcres)
@@ -462,9 +462,13 @@ try:
     resultField = layerField.baseName.upper()
     fieldType = layerField.type.lower()
     fieldLength = layerField.length
-    sr = desc.spatialReference
-    units = sr.linearUnitName.lower()
+    outputSR = desc.spatialReference
+    units = outputSR.linearUnitName.lower()
+    srType = outputSR.type.lower()
 
+    if srType == "geographic":
+        outputSR = arcpy.SpatialReference(3857)
+    
     # Get information from sdvattribute table
     dSDV = GetSDVAtts(gdb, resultField)
 
@@ -490,10 +494,11 @@ try:
     elif units == "foot":
         convAcres = 0.00002295679522500955             # International Feet
 
-    else:
-        raise MyError, "Unable to handle unit conversion for area (" + units + ")"
+    elif srType == "geographic":
+        # assuming unprojected data will be handled as Web Mercatur
+        convAcres = 0.000247104393                     # meters
 
-    dAcres = CalculateAcres(sdvLayer)
+    dAcres = CalculateAcres(sdvLayer, outputSR)
 
     # Print area for each rating
     #
