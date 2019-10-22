@@ -428,6 +428,9 @@ def CreateSSURGO_DB(outputWS, inputXML, areasymbolList, aliasName):
 
         PrintMsg(" \nCreating new geodatabase (" + gdbName + ") in " + outputFolder, 0)
 
+        env.XYResolution = "0.001 Meters"
+        env.XYTolerance = "0.01 Meters"
+
         arcpy.CreateFileGDB_management(outputFolder, gdbName, "10.0")
 
         # The following command will fail when the user only has a Basic license
@@ -1692,9 +1695,6 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
 
             # Add spatial index
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "MUPOLYGON"))
-
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOLYGON"), "MUKEY", "Indx_MupolyMukey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOLYGON"), "MUSYM", "Indx_MupolyMusym")
             arcpy.AddIndex_management(os.path.join(outputWS, "MUPOLYGON"), "AREASYMBOL", "Indx_MupolyAreasymbol")
 
         #PrintMsg(" \nSkipping import for other featureclasses until problem with shapefile primary key is fixed", 0)
@@ -1714,8 +1714,6 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "MULINE"))
 
             # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MULINE"), "MUKEY", "Indx_MulineMukey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MULINE"), "MUSYM", "Indx_MulineMusym")
             arcpy.AddIndex_management(os.path.join(outputWS, "MULINE"), "AREASYMBOL", "Indx_MulineAreasymbol")
 
         # Merge process MUPOINT
@@ -1732,8 +1730,6 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "MUPOINT"))
 
             # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOINT"), "MUKEY", "Indx_MupointMukey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "MUPOINT"), "MUSYM", "Indx_MupointMusym")
             arcpy.AddIndex_management(os.path.join(outputWS, "MUPOINT"), "AREASYMBOL", "Indx_MupointAreasymbol")
 
         # Merge process FEATLINE
@@ -1750,8 +1746,6 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "FEATLINE"))
 
             # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATLINE"), "FEATKEY", "Indx_SFLineFeatkey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATLINE"), "FEATSYM", "Indx_SFLineFeatsym")
             arcpy.AddIndex_management(os.path.join(outputWS, "FEATLINE"), "AREASYMBOL", "Indx_SFLineAreasymbol")
 
         # Merge process FEATPOINT
@@ -1771,8 +1765,6 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "FEATPOINT"))
 
             # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATPOINT"), "FEATKEY", "Indx_SFPointFeatkey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "FEATPOINT"), "FEATSYM", "Indx_SFPointFeatsym")
             arcpy.AddIndex_management(os.path.join(outputWS, "FEATPOINT"), "AREASYMBOL", "Indx_SFPointAreasymbol")
 
         # Merge process SAPOLYGON
@@ -1788,9 +1780,6 @@ def AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineLis
             # Add spatial index
             arcpy.AddSpatialIndex_management (os.path.join(outputWS, "SAPOLYGON"))
 
-            # Add attribute indexes
-            #arcpy.AddIndex_management(os.path.join(outputWS, "SAPOLYGON"), "LKEY", "Indx_SapolyLKey")
-            #arcpy.AddIndex_management(os.path.join(outputWS, "SAPOLYGON"), "AREASYMBOL", "Indx_SapolyAreasymbol")
 
         arcpy.RefreshCatalog(outputWS)
 
@@ -2415,9 +2404,9 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
             shpFile = os.path.join(shpPath, mupointName)
 
             if arcpy.Exists(shpFile):
-                cnt= int(arcpy.GetCount_management(shpFile).getOutput(0))
+                cnt = int(arcpy.GetCount_management(shpFile).getOutput(0))
 
-                if mupointCnt > 0:
+                if cnt > 0:
                     mupointCnt += cnt
                     mupointList.append(shpFile)
 
@@ -2808,7 +2797,7 @@ def CreateTableRelationships(wksp):
 
 ## ===================================================================================
 def GetFCType(fc):
-    # Determine featureclass type  featuretype and table fields
+    # Determine featureclass typefeaturetype and table fields
     # Rename featureclasses from old shapefile-based name to new, shorter name
     # Returns new featureclass name using DSS convention for geodatabase
     #
@@ -2818,6 +2807,7 @@ def GetFCType(fc):
 
     # Look for minimum list of required fields
     #
+    
     if FindField(fc, "MUSYM"):
         hasMusym = True
 
@@ -2856,8 +2846,10 @@ def GetFCType(fc):
                 PrintMsg(fcName + " is an unidentified " + featType + " featureclass with an MUSYM field (GetFCName)", 2)
                 featureType = ""
 
+            
+
         # Survey Area Boundary
-        if hasLkey:
+        elif hasLkey:
             if featType == "Polygon":
                 dataType = "Survey Boundary"
 
@@ -2866,7 +2858,7 @@ def GetFCType(fc):
                 dataType = ""
 
         # Special Features
-        if hasFeatsym:
+        elif hasFeatsym:
             # Special Feature Line
             if featType == "Polyline":
                 dataType = "Special Feature Line"
@@ -2879,6 +2871,7 @@ def GetFCType(fc):
                 PrintMsg(fcName + " is an unidentified " + featType + " featureclass with an FEATSYM field (GetFCName)", 2)
                 dataType = ""
 
+        PrintMst(" \n" + fc + " data type is " + dataType, 1)
         return dataType
 
     except:

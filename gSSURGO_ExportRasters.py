@@ -3,7 +3,7 @@
 # Steve Peaslee, National Soil Survey Center
 # 2019-10-07
 #
-# Purpose: Convert gSSURGO soil maps into standalone rasters (TIFF).
+# Purpose: Batch mode conversion of multiple gSSURGO soil maps into raster (TIFF or FGDB raster).
 #
 #
 ## ===================================================================================
@@ -59,6 +59,75 @@ def Number_Format(num, places=0, bCommas=True):
         errorMsg()
 
         return "???"
+
+
+## ===================================================================================
+def get_random_color(pastel_factor=0.5):
+    # Part of generate_random_color
+    try:
+        newColor = [int(255 *(x + pastel_factor)/(1.0 + pastel_factor)) for x in [random.uniform(0,1.0) for i in [1,2,3]]]
+
+        return newColor
+
+    except:
+        errorMsg()
+        return [0,0,0]
+
+## ===================================================================================
+def color_distance(c1,c2):
+    # Part of generate_random_color
+    return sum([abs(x[0] - x[1]) for x in zip(c1,c2)])
+
+## ===================================================================================
+def generate_new_color(existing_colors, pastel_factor=0.5):
+    # Part of generate_random_color
+    try:
+        #PrintMsg(" \nExisting colors: " + str(existing_colors) + "; PF: " + str(pastel_factor), 1)
+
+        max_distance = None
+        best_color = None
+
+        for i in range(0,100):
+            color = get_random_color(pastel_factor)
+
+
+            if not color in existing_colors:
+                color.append(255) # add transparency level
+                return color
+
+            best_distance = min([color_distance(color,c) for c in existing_colors])
+
+            if not max_distance or best_distance > max_distance:
+                max_distance = best_distance
+                best_color = color
+                best_color.append(255)
+
+            return best_color
+
+    except:
+        errorMsg()
+        return None
+
+## ===================================================================================
+def rand_rgb_colors(num):
+    # Generate a random list of rgb values
+    # 2nd argument in generate_new_colors is the pastel factor. 0 to 1. Higher value -> more pastel.
+
+    try:
+        colors = []
+        # PrintMsg(" \nGenerating " + str(num - 1) + " new colors", 1)
+
+        for i in range(0, num):
+            newColor = generate_new_color(colors, 0.1)
+            colors.append(newColor)
+
+        # PrintMsg(" \nColors: " + str(colors), 1)
+
+        return colors
+
+    except:
+        errorMsg()
+        return []
 
 ## ===================================================================================
 def UpdateMetadata(theGDB, target, sdvLayer, description, iRaster):
@@ -366,8 +435,9 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
 
         for mLayer in mLayers:
             dMetadata[mLayer.name] = (mLayer.description, mLayer.credits)
-            
 
+        del mLayer, mLayers
+        
         # Probably should make sure all of these input layers have the same featureclass
         #
         # first get path where input SDV shapefiles are located (using last one in list)
@@ -378,11 +448,9 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
         # to avoid duplication such as MUNAME which may often exist in a county shapefile.
 
         chkFields = list()  # list of rating fields from SDV soil map layers (basenames). Use this to count dups.
-        #dFields = dict()
         dLayerFields = dict()
         maxRecords = 0  # use this to determine which table has the most records and put it first
         maxTable = ""
-
 
         # Get FGDB raster from inputLayer
         rDesc = arcpy.Describe(inputRaster)
@@ -390,8 +458,8 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
         rSR = rDesc.spatialReference
         linearUnit = rSR.linearUnitName
                     
-
         # Iterate through each of the map layers and get the name of rating field from the join table
+        #
         sdvLayers.reverse()
         
         for sdvLayer in sdvLayers:
@@ -423,21 +491,40 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
             dLayerFields[sdvLayer] = (sdvTblName, fName, bName, fldType, fldLen)
             chkFields.append(bName)
 
-
-        # Create raster layer for each soil map
+        # Get information used in metadata
         i = 0
+        layerIndx = 0
         layerCnt = len(sdvLayers)
         
-        for sdvLayer in sdvLayers:
-            i += 1
-            PrintMsg(" \nCreating raster layer from '" + sdvLayer + "'  (" + str(i) + " of " + str(layerCnt) + ")", 0)
+        # Get user name and today's date for credits
+        envUser = arcpy.GetSystemEnvironment("USERNAME")
+        
+        if "." in envUser:
+            user = envUser.split(".")
+            userName = " ".join(user).title()
 
+        elif " " in envUser:
+            user = envUser.split(" ")
+            userName = " ".join(user).title()
+
+        else:
+            userName = envUser
+                    
+        d = datetime.date.today()
+        toDay = d.isoformat()
+        newCredits = "\r\nCreated by " + userName + " on " + toDay + " using script " + os.path.basename(sys.argv[0])
+
+        # Process each map layer. This is the beginning of the big loop.
+        #
+        for sdvLayer in sdvLayers:
+            layerIndx += 1
+            arcpy.SetProgressorLabel("Creating raster layer from '" + sdvLayer + "'  (" + str(layerIndx) + " of " + str(layerCnt) + ")")
+            PrintMsg(" \nCreating raster layer from '" + sdvLayer + "'  (" + str(layerIndx) + " of " + str(layerCnt) + ")", 0)
             sdvTblName, fName, bName, fldType, fldLen = dLayerFields[sdvLayer]
             newDescription = dMetadata[sdvLayer][0]
-            newCredits = dMetadata[sdvLayer][1]
             newLayerName = sdvLayer + " (" + str(outputRes) + " " + linearUnit.lower() + " raster)"
-            
             symTbl = os.path.join(gdb, "SDV_Symbology")
+            
             if arcpy.Exists(symTbl):
                 wc = "layername = '" + sdvLayer +"'"
                 rendererInfo = ""
@@ -448,21 +535,93 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
             
             if len(rendererInfo) > 0:
                 rendererType = rendererInfo['type']
+                #PrintMsg(" \nrendererType: " + rendererType, 1)
 
             else:
-                rendererType = ""
+                if fldType == "String":
+                    rendererType = "uniqueValue"
+
+                else:
+                    rendererType = ""
+
+            dLegendInfo = dict()
                         
             if rendererType == 'uniqueValue':
-                dLegendInfo = dict()
-                for valInfos in rendererInfo['uniqueValueInfos']:
-                    cRed, cGreen, cBlue, opacity = valInfos['symbol']['color']
-                    #PrintMsg(" \nvalInfos: " + str(valInfos['symbol']), 1)
-                    dLegendInfo[valInfos['value']] = (valInfos['label'], (float(cRed) / 255.0), (float(cGreen) / 255.0), (float(cBlue) / 255.0), 1)
+                # Let's try writing a Lookup table that we can use later
+                # Failing for non-irr cap class
+                #
+                lu = os.path.join(gdb, "Lookup")
                 
+                if arcpy.Exists(lu):
+                    arcpy.Delete_management(lu)
+                    
+                arcpy.CreateTable_management(os.path.dirname(lu), os.path.basename(lu))
+                arcpy.AddField_management(lu, "CELLVALUE", "LONG")
+                arcpy.AddField_management(lu, bName, fldType, "#", "#", fldLen)  # join on this column, but add LABEL to class_name
+                arcpy.AddField_management(lu, "LABEL", "TEXT", "#", "#", fldLen)
+
+                if len(rendererInfo) > 0:
+                    # Create Lookup table with color information
+                    PrintMsg("\tBuilding Lookup table from map layer information", 0)
+                    with arcpy.da.InsertCursor(lu, ["CELLVALUE", bName, "LABEL"]) as cur:
+
+                        row = 0
+                        #PrintMsg(" \nuniqueValueInfos: " + str(rendererInfo['uniqueValueInfos']), 1)
+                                 
+                        for valInfos in rendererInfo['uniqueValueInfos']:
+                            row += 1
+                            cRed, cGreen, cBlue, opacity = valInfos['symbol']['color']
+                            lab = valInfos['label']
+                            val = valInfos['value']
+                            dLegendInfo[row] = (val, lab, (float(cRed) / 255.0), (float(cGreen) / 255.0), (float(cBlue) / 255.0), 1)
+                            
+                            try:
+                                cur.insertRow([row, val, lab])
+
+                            except:
+                                # Need to leave NULL values out of Lookup
+                                pass
+
+                    #PrintMsg(" \ndLegendInfo: " + str(dLegendInfo), 1)
+                    arcpy.AddIndex_management(lu, [bName], "Indx_" + bName)
+
+                else:
+                    # Create Lookup table without color information
+                    # This may be slow for large map layers with a lot of polygons
+                    PrintMsg(" \nBuilding Lookup table from scratch using SDV table " + bName + " column", 1)
+                    whereClause = bName + " IS NOT NULL"
+                    sqlClause = ("DISTINCT", "ORDER BY " + bName)
+                    row = 0
+
+                    # val, label, red, green, blue, opacity = dLegendInfo[cellValue]
+                    # Get a list of random RGB colors to assign to each legend value
+                    sdvCnt = int(arcpy.GetCount_management(os.path.join(gdb, sdvTblName)).getOutput(0))
+
+                    # Get random RGB colors for use in this unique values legend        
+                    rgbColors = rand_rgb_colors(sdvCnt)
+
+                    with arcpy.da.SearchCursor(os.path.join(gdb, sdvTblName), [bName], sql_clause=sqlClause, where_clause=whereClause) as sdvCur:
+                        
+                        cur = arcpy.da.InsertCursor(lu, ["CELLVALUE", bName, "LABEL"])
+
+                        for rec in sdvCur:
+                            row += 1
+                            val = rec[0]
+                            cRed, cGreen, cBlue, opacity = rgbColors[row]  
+                            dLegendInfo[row] = [val, val, (float(cRed) / 255.0), (float(cGreen) / 255.0), (float(cBlue) / 255.0), (float(opacity) / 255.0)]
+                            newrec = [row, val, val]
+                            
+                            try:
+                                cur.insertRow(newrec)
+                                
+                            except:
+                                PrintMsg("\tFailed to handle '" + str(newrec), 1)
+
+                    arcpy.AddIndex_management(lu, [bName], "Indx_" + bName)
+
+
             elif rendererType == 'classBreaks':
                 dLegendInfo = dict() # work on class breaks later? Probably won't need it.
-                #PrintMsg(" \nclassBreaks: " + str(rendererInfo['classBreakInfos']), 1)
-                #PrintMsg(" \nclassBreakInfos: " + str(rendererInfo['classBreakInfos']), 1)
 
             else:
                 dLegendInfo = dict()
@@ -474,7 +633,6 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
             # Get data type from sdv table and use this value to set output raster data type
             # pH is described as a SINGLE; Hydric Pct is SmallInteger;
 
-            # NOTE! When using Aggregate function with MEAN option, even integer rating values are turned into FLOATs.
 
             if fldType in ["Double", "Single"]:
                 bitDepth = "32_BIT_FLOAT"
@@ -482,7 +640,8 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
 
             elif fldType in ["SmallInteger", "Integer"]:
                 bitDepth = "8_BIT_UNSIGNED"
-                aggMethod = "MEDIAN"
+                #aggMethod = "MEDIAN"
+                aggMethod = "MAJORITY"        # Test for using BlockStatistics instead of Aggregate
                 
 
             elif fldType in ["String"]:
@@ -510,16 +669,25 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                 raise MyError, "Missing raster map layer"
 
             arcpy.AddJoin_management (tmpRaster, "MUKEY", os.path.join(gdb, sdvTblName), "MUKEY", "KEEP_ALL")
+            
+            if rendererType == 'uniqueValue':
+                
+                # Add CELLVALUE for Lookup. This is to maintain the correct legend order
+                # Note to self. If there was no LegendInfo the order will be random.
+                luCnt = int(arcpy.GetCount_management(lu).getOutput(0))
+                #PrintMsg(" \n\tFound " + str(luCnt) + " records in " + lu + " table", 1)
+                
+                #PrintMsg("\tJoining " + lu + " to raster on " + fName + " to " + bName, 1)
+    
+                arcpy.AddJoin_management(tmpRaster, fName, lu, bName, "KEEP_COMMON")  # This damn thing is not bringing any data with the join.
+                jDesc = arcpy.Describe(tmpRaster)
+                jFields = jDesc.fields
 
+                    
             # Create raster using Lookup_sa
             # Select non-Null values when fldType in ('Single', 'Double')
             # Note: the CopyRaster command has a bit-depth setting.
             #
-            wc = fName + " IS NOT NULL"
-            arcpy.SelectLayerByAttribute_management(tmpRaster, "NEW_SELECTION", wc)
-            dValues = dict()
-
-            
 
             # Set output file name (FGDB Raster or TIFF)
             if outputFolder == "":
@@ -540,88 +708,127 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                 else:
                     newRaster = os.path.join(outputFolder, "SoilRas_" + sdvTblName.replace("SDV_", "") + "_" + str(outputRes) + str(linearUnit) + ".tif")  # Temporary placement of this line
             
-            PrintMsg("\tConverting soil map layer to '" + newRaster + "'", 0)
-
-            # Resample
-            if fldType == "String":
-                #  These should all have a raster attribute table with fName column
-                
-                PrintMsg("\tUsing Lookup tool to create initial raster", 0)
-                # Create temporary raster with attribute table containing fname (rating column)
-                tmpRas = Lookup(tmpRaster, fName)
-                tmpDesc = arcpy.Describe(tmpRas)
-                # Question. Why am I resetting fName below????
-                tmpFields = [fld.name for fld in tmpDesc.fields]
-                # sdvTblName, fName, bName, fldType, fldLen = dLayerFields[sdvLayer]
-                fName = tmpFields[-1]  # get last field name as rating field. Alternate method for this?
-
-                # Create dictionary for rating values
-                with arcpy.da.SearchCursor(tmpDesc.catalogPath, ["VALUE", fName]) as cur:
-                    for rec in cur:
-                        val, rating = rec
-                        dValues[val] = rating
+            PrintMsg("\tOutput raster will be '" + newRaster + "'", 0)
+            
+            if not fldType in ("Single", "Double"):  # Going to try running everything with BlockStatistics
 
                 if cellFactor > 1:
-                    PrintMsg("\tUsing BlockStatistics tool with " + aggMethod + " option", 0)
-                    nbr = NbrRectangle(int(iRaster * cellFactor), int(iRaster * cellFactor), "MAP")
+                    env.cellSize = iRaster
+                    
+                    if rendererType == 'uniqueValue':
+                        method = rendererType + ": " + "Using Lookup tool against the CELLVALUE column (" + fldType + ")."
+                        newMethod = "\n\rRaster Processing: " + method
+                        PrintMsg("\t" + method, 0)
+                        arcpy.SelectLayerByAttribute_management(tmpRaster, "NEW_SELECTION", "Lookup.CELLVALUE IS NOT NULL")
+                        rCnt = int(arcpy.GetCount_management(tmpRaster).getOutput(0))
+                        #PrintMsg(" \n\tSelected " + str(rCnt) + " records in tmpRaster for use with Lookup", 1)
+                        
+                        tmpRas = Lookup(tmpRaster, "Lookup.CELLVALUE")
+
+                        time.sleep(1)
+                        arcpy.Delete_management(tmpRaster)
+
+                    else:
+                        method = rendererType + ": " + "Using Lookup tool against the " + bName + " column (" + fldType + ")."
+                        newMethod = "\n\rRaster Processing: " + method
+                        PrintMsg("\t" + method, 0)
+                        #arcpy.SelectLayerByAttribute_management(tmpRaster, "NEW_SELECTION", "Lookup." + bName + " IS NOT NULL")
+                        tmpRas = Lookup(tmpRaster, bName)
+                        
+                        time.sleep(1)
+                        arcpy.Delete_management(tmpRaster)
+                    
+                    method = "Using BlockStatistics with " + aggMethod + " option to resample to " + str(outputRes) + " " + linearUnit.lower() + " resolution."
+                    newMethod += " " + method
+                    PrintMsg("\t" + method, 0)
+                    time.sleep(1)
+                    nbr = NbrRectangle(outputRes, outputRes, "MAP")
+                    env.cellSize = outputRes
                     holyRas = BlockStatistics(tmpRas, nbr, aggMethod, "DATA")  # the majority value calculated by BlockStatistics will be NoData for ties.
 
-                    filledRas = Con(IsNull(holyRas), tmpRas, holyRas)  # Try filling the NoData holes in the aggregate raster using data from the 30m input raster
+                    if arcpy.Exists(holyRas):
+                        #PrintMsg("\tFilling NoData cells in holyRas", 1)
+                        time.sleep(1)
+                        filledRas = Con(IsNull(holyRas), tmpRas, holyRas)  # Try filling the NoData holes in the aggregate raster using data from the 30m input raster
+                        del tmpRas, holyRas
 
-                    del tmpRas, holyRas
-                    hiRez = os.path.join(env.scratchGDB, "xx" + bName.lower())
-                    filledRas.save(hiRez)
-                    
-                    if not arcpy.Exists(hiRez):
-                        raise MyError, "Failed to create temporary raster: " + hiRez
+                        if arcpy.Exists(filledRas):
+                            PrintMsg("\tCreating final output raster", 0) 
+                            time.sleep(1)
+                            filledRas.save(newRaster)
+                            # still have filledRas?
 
-                    #if cellFactor > 1:
-                    PrintMsg("\tResampling final output raster", 0)
-                    #
-                    arcpy.Resample_management(hiRez, newRaster, outputRes, "NEAREST")
-                    time.sleep(1)
-                    arcpy.Delete_management(hiRez)
+                        else:
+                            raise MyError, "Missing filledRas raster"
+ 
+
+                    else:
+                        raise MyError, "Missing holyRas raster"
 
                 else:
-                    PrintMsg("\tCreating final output raster", 0) 
+                    # Input and output resolution is the same, no resampling.
+                    
+                    if rendererType == 'uniqueValue':
+                        method = rendererType + ": " + "Using Lookup tool against the CELLVALUE column (" + fldType + ")."
+                        newMethod = "\n\rRaster Processing: " + method
+                        PrintMsg("\t" + method, 0)
+                        arcpy.SelectLayerByAttribute_management(tmpRaster, "NEW_SELECTION", "Lookup.CELLVALUE IS NOT NULL")
+                        tmpRas = Lookup(tmpRaster, "Lookup.CELLVALUE")
+
+                        time.sleep(1)
+                        arcpy.Delete_management(tmpRaster)
+
+                    else:
+                        method = rendererType + ": " + "Using Lookup tool against the " + bName + " column (" + fldType + ")."
+                        newMethod = "\n\rRaster Processing: " + method
+                        PrintMsg("\t" + method, 0)
+                        arcpy.SelectLayerByAttribute_management(tmpRaster, "NEW_SELECTION", bName + " IS NOT NULL")
+
+                        tmpRas = Lookup(tmpRaster, bName)
+                        
+                        time.sleep(1)
+                        arcpy.Delete_management(tmpRaster)
+                        
+                        
+                    PrintMsg("\tCreating final output raster", 0)
+                    time.sleep(1)
                     tmpRas.save(newRaster)
 
-                    
-                newDesc = arcpy.Describe(newRaster)
-                newFields = [fld.name for fld in newDesc.fields]
-
-                fName = fName.split("_")[0]  # shorten field name to work within the TIFF file's DBF limits
-
-                if not fName in newFields:
-                    PrintMsg("\tUpdating raster attribute table by adding " + fName + " field", 0)
-                    arcpy.AddField_management(newRaster, fName, "TEXT", "", "", fldLen)
-
-                    with arcpy.da.UpdateCursor(newRaster, ["VALUE", fName]) as cur:
-                        for rec in cur:
-                            val = rec[0]
-                            cur.updateRow([val, dValues[val]])
-
             else:
-                # All Numeric data (non-String fldType such as SmallInteger, )
+                # All non-floating point data )
                 #
                 # Note: these may have an attribute table, but won't necessarily have the attribute columns
-
-                
                 if cellFactor > 1:
-                    PrintMsg("\tUsing Aggregate tool with " + aggMethod + " option and " + fName + " column (" + fldType + ")", 0)
+                    # Need to resample
+                    method = "Using Aggregate tool with " + aggMethod + " option against the " + fName + " column (" + fldType + ")."
+                    newMethod = "\n\rRaster Processing: " + method
+                    PrintMsg("\t" + method, 0)
+                    env.cellSize = outputRes
                     outRas = Aggregate(Lookup(tmpRaster, fName), cellFactor, aggMethod, "EXPAND", "DATA")
-                    PrintMsg("\tResampling output to " + str(outputRes) + " " + linearUnit + " resolution", 0)
-                    #outRasPath = arcpy.Describe(outRas).catalogPath
-                    arcpy.Resample_management(outRas, newRaster, outputRes , "NEAREST")
+                    time.sleep(1)
+
+                    arcpy.Delete_management(tmpRaster)
+                        
+                    outRas.save(newRaster)
+                    #PrintMsg("\tResampling output to " + str(outputRes) + " " + linearUnit.lower() + " resolution", 0)
+                    #arcpy.Resample_management(outRas, newRaster, outputRes , "NEAREST")
+                    time.sleep(1)
                     del outRas
 
                 else:
+                    # No resampling needed
+                    method = "Using Lookup tool against the " + fName + " column (" + fldType + ")."
+                    newMethod = "\n\rRaster Processing: " + method
                     PrintMsg("\tSaving results of Lookup to " + newRaster, 0)
-                    #PrintMsg("\tCheck attributes?", 1)
+                    arcpy.SelectLayerByAttribute_management(tmpRaster, "NEW_SELECTION", fName + " IS NOT NULL")
                     outRas = Lookup(tmpRaster, fName)
-                    outRas.save(newRaster)
-                    del outRas
+                    time.sleep(1)
 
+                    arcpy.Delete_management(tmpRaster)
+                        
+                    outRas.save(newRaster)
+                    time.sleep(1)
+                    del outRas
 
                 newDesc = arcpy.Describe(newRaster)
 
@@ -663,7 +870,7 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
             if arcpy.Exists(tmpRaster):
                 # clean up any previous runs
                 arcpy.Delete_management(tmpRaster)
-                del tmpRaster
+                #del tmpRaster
 
                 
             if bPyramids:
@@ -678,10 +885,10 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                 try:
                     # Add RGB attributes for unique values. Will fail if output raster does not have a VAT
                     sdvTblName, xName, bName, fldType, fldLen = dLayerFields[sdvLayer]
-                    try:
-                        arcpy.AddField_management(newRaster, fName, "TEXT", "", "", fldLen)
-                    except:
-                        pass
+                    #try:
+                    #    arcpy.AddField_management(newRaster, fName, "TEXT", "", "", fldLen)
+                    #except:
+                    #    pass
                     
                     arcpy.AddField_management(newRaster, "CLASS_NAME", "TEXT", "", "", fldLen)
                     arcpy.AddField_management(newRaster, "RED", "FLOAT")
@@ -694,17 +901,17 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
 
                 try:
                     # Populate RGB color attributes using soil map legend
-                    with arcpy.da.UpdateCursor(newRaster, [fName, "class_name", "red", "green", "blue", "opacity"]) as cur:
+                    with arcpy.da.UpdateCursor(newRaster, ["value", "class_name", "red", "green", "blue", "opacity"]) as cur:
+                    #with arcpy.da.UpdateCursor(newRaster, [fName, "class_name", "red", "green", "blue", "opacity"]) as cur:
                         #PrintMsg(" \nAdding RGB info to raster attribute table", 1)
                         
                         for rec in cur:
-                            keyValue = rec[0]
+                            cellValue = rec[0]
                              
-                            if keyValue in dLegendInfo:
-                                label, red, green, blue, opacity = dLegendInfo[keyValue]
-                                rec = [keyValue, label, red, green, blue, opacity]
+                            if cellValue in dLegendInfo:
+                                val, label, red, green, blue, opacity = dLegendInfo[cellValue]
+                                rec = [cellValue, label, red, green, blue, opacity]
                                 cur.updateRow(rec)
-
 
                     # Add new raster layer to ArcMap
                     tmpRaster = "Temp_Raster"
@@ -712,14 +919,29 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                     if arcpy.Exists(tmpRaster):
                         # clean up any previous runs
                         arcpy.Delete_management(tmpRaster)
-                
-                    
-                    newLayerFile = os.path.join(outputFolder, newLayerName + ".lyr")
+
+                    if outputFolder == "":
+                        newLayerFile = os.path.join(os.path.dirname(gdb), "Ras_" + newLayerName + ".lyr")
+
+                    else:
+                        newLayerFile = os.path.join(outputFolder, "Ras_" + newLayerName + ".lyr")
+
+                    # Update description
+                    for line in newDescription.splitlines():
+                        if line.startswith("Featurelayer:"):
+                            #PrintMsg(line, 1)
+                            newDescription = newDescription.replace(line, "Input Raster: " + inputRaster)
+
+                        elif line.startswith("Layer File:"):
+                            newDescription = newDescription.replace(line, "Layer File: " + newLayerFile)
+
+                        elif line.startswith("Aggregation Method:"):
+                            # Add raster aggregation and resampling methods here
+                            newLine = line.replace("Aggregation Method:", "Mapunit Aggregation:") + "\n\r" + newMethod
+                            newDescription = newDescription.replace(line, newLine)
+                        
                     tmpLayerFile = os.path.join(env.scratchFolder, newLayerName + ".lyr")
                     tmpRaster = arcpy.MakeRasterLayer_management(newRaster, tmpRaster)
-                    #tmpRaster.name = newLayerName
-                    #tmpRaster.description = newDescription
-                    #tmpRaster.credits = newCredits
                     arcpy.SaveToLayerFile_management(tmpRaster, tmpLayerFile, "RELATIVE", "10.3")
                     finalMapLayer = arcpy.mapping.Layer(tmpLayerFile)
                     finalMapLayer.name = newLayerName
@@ -727,16 +949,21 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                     finalMapLayer.credits = newCredits
                     finalMapLayer.visible = False
                     arcpy.mapping.AddLayerToGroup(df, grpLayer, finalMapLayer, "TOP")
-                    #arcpy.SaveToLayerFile_management(tmpRaster, newLayerFile, "RELATIVE", "10.3")
                     arcpy.SaveToLayerFile_management(finalMapLayer, newLayerFile, "RELATIVE", "10.3")
-                    #PrintMsg("\tAdded new map layer '" + newLayerName + "' to ArcMap in the UniqueValues section", 1)
-    
-                    
+                    # PrintMsg("\tAdded new map layer '" + newLayerName + "' to ArcMap in the UniqueValue section", 1)
+
+                    # Cleanup layers
+                    #PrintMsg("\tCleaning up temporary rasters", 1)
+                    #time.sleep(1)
+                    #arcpy.Delete_management(tmpLayerFile)
+                    #arcpy.Delete_management(tmpRaster)
+
+ 
                 except:
                     # Integer rasters such as TFactor may have an attribute table but no rating field
                     #
                     errorMsg()
-                    #PrintMsg("\tdLegendInfo: " + str(dLegendInfo), 1)
+
                     raise MyError, ""
                     
             elif rendererType == 'classBreaks':
@@ -773,8 +1000,6 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                 else:
                     PrintMsg(" \nLegend problem. First legend color is: " + str(dBreakFirst["symbol"]["color"]) + " and last color is " + str(dBreakLast["symbol"]["color"]), 1)
 
-
-
                 # Create lists for symbology break values and label values
                 classBV = list()
                 classBL = list()
@@ -784,16 +1009,13 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                     classBL.append(cb['label'])
 
                 if arcpy.Exists(classLayerFile):
-                    
-                    #PrintMsg(" \nSetting arcpy.mapping symbology using " + str(classBV) + "; " + str(classBL))
-                    #PrintMsg(" \nUsing symbology layer file: " + classLayerFile, 1)
-                    
                     tmpLayerFile = os.path.join(env.scratchFolder, "tmpSDVLayer.lyr")
 
                     if arcpy.Exists(tmpLayerFile):
                         arcpy.Delete_management(tmpLayerFile)
 
                     tmpRasterLayer = "Raster_Layer"
+                    
                     if arcpy.Exists(tmpRasterLayer):
                         # clean up any previous runs
                         arcpy.Delete_management(tmpRasterLayer)
@@ -808,14 +1030,17 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                     time.sleep(1)
                     finalMapLayer = arcpy.mapping.Layer(tmpRasterLayer)  # create arcpy.mapping
                     finalMapLayer.name = newLayerName
+                    
+                    if outputFolder == "":
+                        newLayerFile = os.path.join(os.path.dirname(gdb), "Ras_" + newLayerName + ".lyr")
+
+                    else:
+                        newLayerFile = os.path.join(outputFolder, "Ras_" + newLayerName + ".lyr")
         
                     arcpy.mapping.UpdateLayer(df, finalMapLayer, classLayer, True)
 
                     # Set symbology properties using information from GetNumericLegend
                     finalMapLayer.symbology.valueField = "VALUE"
-                    #finalMapLayer.symbology.numClasses = len(classBV)
-
-                    # TFactor problem. Try inserting 0 into classBV
 
                     if len(classBV) == len(classBL):
                         # For numeric legends using class break values, there needs to be a starting value in addition
@@ -826,18 +1051,33 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                     finalMapLayer.symbology.classBreakValues = classBV
 
                     if len(classBL)> 0:
+
+                        # Update description
+                        for line in newDescription.splitlines():
+                            if line.startswith("Featurelayer:"):
+                                #PrintMsg(line, 1)
+                                newDescription = newDescription.replace(line, "Input Raster: " + inputRaster)
+
+                            elif line.startswith("Layer File:"):
+                                newDescription = newDescription.replace(line, "Layer File: " + newLayerFile)
+
+                            elif line.startswith("Aggregation Method:"):
+                                # Add raster aggregation and resampling methods here
+                                newLine = line.replace("Aggregation Method:", "Mapunit Aggregation:") + "\n\r" + newMethod
+                                newDescription = newDescription.replace(line, newLine)
+                                
                         finalMapLayer.symbology.classBreakLabels = classBL # Got comppct symbology without this line
-                        #arcpy.mapping.UpdateLayer(df, finalMapLayer, classLayer, True)  # doubling up
-                        
                         finalMapLayer.description = newDescription
                         finalMapLayer.credits = newCredits
                         finalMapLayer.visible = False
-                        #arcpy.mapping.AddLayer(df, finalMapLayer)
-                        arcpy.mapping.AddLayerToGroup(df, grpLayer, finalMapLayer, "TOP")
-                        newLayerFile = os.path.join(outputFolder, finalMapLayer.name + ".lyr")
+                        arcpy.mapping.AddLayerToGroup(df, grpLayer, finalMapLayer, "TOP") 
                         arcpy.SaveToLayerFile_management(finalMapLayer, newLayerFile, "RELATIVE", "10.3")
                         #PrintMsg("\tAdded new map layer '" + newLayerName + "' to ArcMap in the ClassifiedBreaks section", 1)
-
+                        # Cleanup layers
+                        #PrintMsg("\tCleaning up temporary rasters", 1)
+                        time.sleep(1)
+                        #arcpy.Delete_management(tmpLayerFile)
+                        #arcpy.Delete_management(tmpRaster)
 
                     else:
                         PrintMsg("\tSkipping addition of new map layer '" + newLayerName + "' to ArcMap in the ClassifiedBreaks section", 1)
@@ -853,24 +1093,55 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
                     # clean up any previous runs
                     arcpy.Delete_management(tmpRaster)
                         
+                if outputFolder == "":
+                    newLayerFile = os.path.join(os.path.dirname(gdb), "Ras_" + newLayerName + ".lyr")
+
+                else:
+                    newLayerFile = os.path.join(outputFolder, "Ras_" + newLayerName + ".lyr")
                 
-                newLayerFile = os.path.join(outputFolder, newLayerName + ".lyr")
                 tmpLayerFile = os.path.join(env.scratchFolder, newLayerName + ".lyr")
                 tmpRaster = arcpy.MakeRasterLayer_management(newRaster, tmpRaster)
                 arcpy.SaveToLayerFile_management(tmpRaster, tmpLayerFile, "RELATIVE", "10.3")
                 finalMapLayer = arcpy.mapping.Layer(tmpLayerFile)
+
+                # Update description
+                for line in newDescription.splitlines():
+                    if line.startswith("Featurelayer:"):
+                        #PrintMsg(line, 1)
+                        newDescription = newDescription.replace(line, "Input Raster: " + inputRaster)
+
+                    elif line.startswith("Layer File:"):
+                        newDescription = newDescription.replace(line, "Layer File: " + newLayerFile)
+
+                    elif line.startswith("Aggregation Method:"):
+                        # Add raster aggregation and resampling methods here
+
+                        newLine = line.replace("Aggregation Method:", "Mapunit Aggregation:") + "\n\r" + newMethod
+                        newDescription = newDescription.replace(line, newLine)
+                            
                 finalMapLayer.name = newLayerName
                 finalMapLayer.description = newDescription
                 finalMapLayer.credits = newCredits
                 finalMapLayer.visible = False
                 arcpy.mapping.AddLayerToGroup(df, grpLayer, finalMapLayer, "TOP")
-                #arcpy.SaveToLayerFile_management(tmpRaster, newLayerFile, "RELATIVE", "10.3")
                 arcpy.SaveToLayerFile_management(finalMapLayer, newLayerFile, "RELATIVE", "10.3")
+
+                # Cleanup layers
+                #PrintMsg("\tCleaning up temporary rasters", 1)
+                time.sleep(1)
+                #arcpy.Delete_management(tmpLayerFile)
+                #arcpy.Delete_management(tmpRaster)
 
                 
             #bMetadata = UpdateMetadata(gdb, newRaster, sdvLayer, description, iRaster)
+            #arcpy.SetProgressorPosition()
 
+            # Clean up variables for each map layer here:
+            #del sdvTblName, fName, bName, fldType, fldLen, newDescription, newLayerName, symTbl, lu, finalMapLayer, newRaster
+            
         PrintMsg(" \n", 0)
+        #del sdvLayers, sdvLayer
+        
 
 
             
@@ -900,7 +1171,7 @@ def CreateRasterLayers(sdvLayers, inputRaster, outputFolder, bPyramids, cellFact
 # ====================================================================================
 ## ====================================== Main Body ==================================
 # Import modules
-import sys, string, os, locale, traceback, arcpy, json
+import sys, string, os, locale, traceback, arcpy, json, random
 from arcpy import env
 import xml.etree.cElementTree as ET
 

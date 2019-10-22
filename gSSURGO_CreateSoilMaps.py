@@ -1,6 +1,7 @@
 # gSSURGO_CreateSoilMaps.py
 #
 # Batch-mode. Creates Soil Data Viewer-type maps using only the default settings. Designed to run in batch-mode.
+# Cannot be used to generate maps for layers that require a primary or secondary constraint (ex. Ecological Site Name)
 
 ## ===================================================================================
 class MyError(Exception):
@@ -179,6 +180,8 @@ try:
     tieBreaker = ""
     sRV = "Representative"
 
+    # Set up depth ranges using space delimited list of break values from parameter string
+    # ex. 0 10 25 ...
     depthRanges = list()
     d1 = depthList.split(" ")
     d2 = [int(x) for x in d1]
@@ -195,18 +198,58 @@ try:
         if not sdvAtt.startswith("* "):
             newAtts.append(sdvAtt.strip())
 
-    mapCnt = (len(newAtts) * len(depthRanges))    
-    PrintMsg(" \nCreating a series of " + str(mapCnt) + " soil maps (" + str(len(depthRanges)) + " depths X " + str(len(newAtts)) + " properties)", 0)
+    # Create list of soil maps that use horizon-level attributes
+    #
+    flds3 = ["attributename", "depthqualifiermode"]
+    sql2 = "attributetablename = 'chorizon'"
+    #sql2 = "attributetablename = 'chorizon' and not depthqualifiermode = 'Surface Layer'"
+    hzAtts = list()
+    surfaceAtts = list()
+    sdvTbl = os.path.join(gdb, "sdvattribute")
+
+    with arcpy.da.SearchCursor(sdvTbl, flds3, where_clause=sql2) as aCur:
+        # populate list of sdv attribute names
+
+        for rec in aCur:
+            att = rec[0]
+            dq = rec[1]
+
+            if att in newAtts and not att in hzAtts and dq != 'Surface Layer':
+                hzAtts.append(att) # accumulate sdv attribute names that use horizon data
+
+            if att in newAtts and dq == 'Surface Layer':
+                surfaceAtts.append(att)
+
+    hzAtts.sort()
+
+    # Calculate the number of new map layers that will be created:
+    hzMaps = (len(hzAtts) * len(depthRanges) )
+    individualMaps = (len(newAtts) - len(hzAtts))
+    mapCnt = hzMaps + individualMaps
+
+    if hzMaps > 0:
+        PrintMsg(" \nCreating a series of " + str(mapCnt) + " soil maps (" + str(individualMaps) + " individual maps plus a series of " + str(hzMaps) + " horizon-level property maps)", 0)
+
+    else:
+        PrintMsg(" \nCreating a series of " + str(mapCnt) + " soil maps", 0)
+
+    
     arcpy.SetProgressor("step", "Creating series of soil maps...", 0, mapCnt, 1)
     num = 0
     
     for sdvAtt in newAtts:
-        if not sdvAtt.startswith("* "):
+        
+        if sdvAtt in hzAtts:
+
+            # This will only process data when there is a set of depth ranges specified
+            #
+            # I need to handle this differently when no depths are entered
+            #
             for depths in depthRanges:
                 top, bot = depths
-                sdvAtt = sdvAtt.strip()
                 num += 1
                 msg = "Creating map number " + str(num) + ":  " + sdvAtt + " " + str(top) + " to " + str(bot) + "cm"
+                    
                 arcpy.SetProgressorLabel(msg)
                 PrintMsg(" \n" + msg, 0)
                 time.sleep(2)
@@ -225,13 +268,40 @@ try:
                 elif bSoilMap == 0:
                     #PrintMsg("\tbSoilMap returned 0", 0)
                     badList.append(sdvAtt)
+
+        else:
+            top, bot = (0, 1)  # this should cover the surface properties such as Texture
+            num += 1
+
+            if sdvAtt in surfaceAtts:
+                msg = "Creating map number " + str(num) + ":  " + sdvAtt + " (surface)"
+
+            else:     
+                msg = "Creating map number " + str(num) + ":  " + sdvAtt
+      
+            arcpy.SetProgressorLabel(msg)
+            PrintMsg(" \n" + msg, 0)
+            time.sleep(2)
+
+            # Trying here to enter default values for most parameters and to modify CreateSoilMap.CreateSoilMap to use default aggregation method (aggMethod) when it is passed an empty string
+            bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
+            arcpy.SetProgressorPosition()
             
-    del bSoilMap
+            if bSoilMap == 2:
+                if bot > 0:
+                    badList.append(sdvAtt + " " + str(top) + " to " + str(bot) + "cm'")
+
+                else:
+                    badList.append(sdvAtt)
+
+            elif bSoilMap == 0:
+                #PrintMsg("\tbSoilMap returned 0", 0)
+                badList.append(sdvAtt)
+                    
     arcpy.RefreshActiveView()
     
     if len(badList) > 0:
-
-        
+ 
         if len(badList) == 1:
             PrintMsg(" \nUnable to create the following soil map layer: '" + badList[0] + "' \n ", 1)
 
