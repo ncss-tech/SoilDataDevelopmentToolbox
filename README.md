@@ -9,7 +9,7 @@ Major changes from last year:
 4.	A Resample Mapunit Raster tool designed to convert CONUS 10m raster to 30m. Uses majority aggregation and fills NoData cells created where there is a ‘tie’.
 
 # Steve Peaslee, National Soil Survey Center, Lincoln Nebraska
-# 2019-10-21
+# 2020-05-13
 # ArcGIS Desktop 10.3 - 10.7.1
 # For more information, find the USDA-NRCS <a href="https://www.nrcs.usda.gov/wps/portal/nrcs/detail/soils/survey/geo/?cid=nrcs142p2_053628">gSSURGO</a> web page
 
