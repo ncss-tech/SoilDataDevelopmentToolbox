@@ -233,7 +233,6 @@ try:
     else:
         PrintMsg(" \nCreating a series of " + str(mapCnt) + " soil maps", 0)
 
-    
     arcpy.SetProgressor("step", "Creating series of soil maps...", 0, mapCnt, 1)
     num = 0
     
@@ -258,16 +257,24 @@ try:
                 bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
                 arcpy.SetProgressorPosition()
                 
-                if bSoilMap == 2:
+                if bSoilMap == -2:
                     if bot > 0:
                         badList.append(sdvAtt + " " + str(top) + " to " + str(bot) + "cm'")
 
                     else:
                         badList.append(sdvAtt)
-
-                elif bSoilMap == 0:
+                
+                elif bSoilMap == -1:
+                    # No data
                     #PrintMsg("\tbSoilMap returned 0", 0)
                     badList.append(sdvAtt)
+
+                elif bSoilMap == 0:
+                    raise MyError, "Map series halted"
+
+                elif bSoilMap == 1:
+                    # Success.
+                    pass
 
         else:
             top, bot = (0, 1)  # this should cover the surface properties such as Texture
@@ -286,17 +293,32 @@ try:
             # Trying here to enter default values for most parameters and to modify CreateSoilMap.CreateSoilMap to use default aggregation method (aggMethod) when it is passed an empty string
             bSoilMap = gSSURGO_CreateSoilMap.CreateSoilMap(inputLayer, sdvAtt, aggMethod, primCst, secCst, top, bot, begMo, endMo, tieBreaker, bZero, cutOff, bFuzzy, bNulls, sRV) # external script
             arcpy.SetProgressorPosition()
+
+            # Return values will control how the rest of the maps will be handled
+            #
+            #  1 Successful
+            # -1 No data
+            # -2 raised error
+            #  0 Error
             
-            if bSoilMap == 2:
+            if bSoilMap == -2:
                 if bot > 0:
                     badList.append(sdvAtt + " " + str(top) + " to " + str(bot) + "cm'")
 
                 else:
                     badList.append(sdvAtt)
-
-            elif bSoilMap == 0:
+            
+            elif bSoilMap == -1:
+                # No data
                 #PrintMsg("\tbSoilMap returned 0", 0)
                 badList.append(sdvAtt)
+
+            elif bSoilMap == 0:
+                raise MyError, "Map series halted"
+
+            elif bSoilMap == 1:
+                # Success.
+                pass
                     
     arcpy.RefreshActiveView()
     
@@ -312,7 +334,10 @@ try:
         PrintMsg(" \nCreateSoilMaps finished \n ", 0)
 
     del badList
-
+    
+except MyError, e:
+    PrintMsg(str(e), 2)
+    
 except:
     errorMsg()
 

@@ -153,8 +153,7 @@ try:
     # get parameters
     dataType = arcpy.GetParameter(0)                      # 'All MUPOLYGON layers' or 'Standard MUPOLYGON layer'. Only used in the Validation code.
     inputFolder = arcpy.GetParameterAsText(1)             # Folder containing all geodatabases to be processed
-    inputList = arcpy.GetParameter(2)                     # list of geodatabase names to be processed
-    #theSnapRaster = arcpy.GetParameterAsText(3)           # optional snap raster. If not set, uses NLCD Albers USGS NAD83 for CONUS
+    gdbList = arcpy.GetParameter(2)                     # list of geodatabase names to be processed
     iRaster = arcpy.GetParameter(3)                       # output raster resolution
     bTiled = arcpy.GetParameter(4)                        # breakup raster conversion using AREASYMBOL attribute to tile the process
 
@@ -166,16 +165,16 @@ try:
     start = time.time()
     arcpy.SetProgressor("default", "Converting soil polygon layers to raster...")
 
-    for input in inputList:
+    for gdb in gdbList:
         # gdb could be a geodatabase or an mupolygon featureclass
-        arcpy.SetProgressorLabel("Creating map unit raster for " + input)
+        arcpy.SetProgressorLabel("Creating map unit raster for " + gdb)
 
         PrintMsg(" \n" + (65 * "*"), 0)
-        PrintMsg("Processing " + input, 0)
+        PrintMsg("Processing " + gdb, 0)
         PrintMsg(" \n" + (65 * "*"), 0)
-        bRaster = SSURGO_ExportMuRaster.ConvertToRaster(input, iRaster, bTiled)
+        bRaster = SSURGO_ExportMuRaster.ConvertToRaster(gdb,"MUPOLYGON", iRaster, bTiled)
 
-    theMsg = " \nTotal processing time for " + str(len(inputList)) + " rasters: " + elapsedTime(start) + " \n "
+    theMsg = " \nTotal processing time for " + str(len(gdbList)) + " rasters: " + elapsedTime(start) + " \n "
     PrintMsg(theMsg, 0)
 
 except MyError, e:

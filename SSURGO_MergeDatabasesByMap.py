@@ -431,8 +431,8 @@ def ImportTabular(inputFolder, subFolder, newDB, areaSym, iCnt):
         "cstemp","csmorgc","csmorhpp","csmormr","csmorss","chstr","chtextur", \
         "chtexmod","sacatlog","sainterp","sdvalgorithm","sdvattribute","sdvfolder","sdvfolderattribute"]
 
-        PrintMsg(" \nProcessing only COINTERP table...", 1)
-        txtFiles = ["cinterp"]
+        #PrintMsg(" \nProcessing only COINTERP table...", 1)
+        #txtFiles = ["cinterp"]
         # Need to add featdesc import as a separate item (ie. spatial\soilsf_t_al001.txt: featdesc)
 
         # set progressor object which allows progress information to be passed for every merge complete

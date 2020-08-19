@@ -150,9 +150,10 @@ try:
     #version = "10.6"
     #dInstall = arcpy.GetInstallInfo()
     #arcgisPath = dInstall["InstallDir"]
-    #gp_history_xslt = r"C:\Program Files (x86)\ArcGIS\Desktop10.7\Metadata\Stylesheets\gpTools\remove geoprocessing history.xslt".format(version)
+    #gp_history_xslt = r"C:\Program Files (x86)\ArcGIS\Desktop10.7\Metadata\Stylesheets\gpTools\remove geoprocessing history.xslt"
+    # gp_history_xslt = r"C:\Program Files (x86)\ArcGIS\Desktop10.7\Metadata\Stylesheets\gpTools\remove pre94 metadata elements.xslt"
     gp_history_xslt = os.path.join(os.path.dirname(sys.argv[0]), "remove geoprocessing history.xslt")
-    #gp_history_xslt = os.path.join(arcgisPath, r"Metadata\Stylesheets\gpTools\remove geoprocessing history.xslt") # missing at 10.7.1
+    # remove pre94 metadata elements.xslt
 
     output_dir = env.scratchFolder
     db_type = "" #Set this to either "SQL" or "Oracle" if your db has spatial views. If not you may set it to "".

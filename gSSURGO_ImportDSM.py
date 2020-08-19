@@ -14,7 +14,10 @@
 #  5. Essex spatial data is UTM meters, NAD1983
 #  5. Areasymbol in Essex RSS is the same as the SSURGO Areasymbol
 #  6. WMS - Irrigation, Micro (subsurface drip) had two different rulekeys
-#  7.
+#  7. Modified this import process to use a single, merged RSS version of gSSURGO database for CONUS. A
+#     raster mask based upon the original MapunitRaster will be used to limit the extent to a single state.
+#     This is done to make sure only one import is required for CONUS and to make sure all data are consistent.
+#
 
 ## ===================================================================================
 class MyError(Exception):
@@ -614,7 +617,6 @@ def ImportMDTables(newDB, dsmDB):
     # mdstattabs
 
     try:
-        #PrintMsg(" \nImporting metadata tables from " + tabularFolder, 1)
 
         # Create list of tables to be imported
         tables = ['mdstatdommas', 'mdstatidxdet', 'mdstatidxmas', 'mdstatrshipdet', 'mdstatrshipmas', 'mdstattabcols', 'mdstattabs', 'mdstatdomdet']
@@ -623,7 +625,7 @@ def ImportMDTables(newDB, dsmDB):
         # 
         for table in tables:
             arcpy.SetProgressorLabel("Importing " + table + "...")
-            PrintMsg("\tImporting table " + table, 0)
+            #PrintMsg("\tImporting table " + table, 0)
             inTbl = os.path.join(dsmDB, table)
             outTbl = os.path.join(newDB, table)
 
@@ -711,7 +713,7 @@ def ImportTables(outputWS, dsmDB):
         if len(tblList) == 0:
             raise MyError, "No tables found in " +  outputWS
 
-        PrintMsg(" \nImporting tabular data from RSS database " + dsmDB + "...", 0)
+        # PrintMsg(" \nImporting tabular data from RSS database " + dsmDB + "...", 0)
 
         # Create lists of key values to use in preventing duplicate keys in some SDV* tables
         #
@@ -759,7 +761,7 @@ def ImportTables(outputWS, dsmDB):
                     # dbAreasymbol is not being used and will error in this next line
                     # arcpy.SetProgressorLabel("Importing " +  dbAreaSymbol.upper() + "  (" + Number_Format(iCntr, 0, True) + " of " + Number_Format(len(dbList), 0, True) + "): " + tblName)
                     arcpy.SetProgressorLabel("Importing RSS table: " + tblName)
-                    PrintMsg("\tImporting table from RSS: " + tblName, 0)
+                    # PrintMsg("\tImporting table from RSS: " + tblName, 0)
 
                     if tblName.lower() in ['sdvfolderattribute', 'sdvattribute', 'sdvfolder', 'sdvalgorithm']:
                         # Process the 'SDV' tables separately to prevent key errors from duplicate records
@@ -810,400 +812,6 @@ def ImportTables(outputWS, dsmDB):
         errorMsg()
         return False
 
-## ===============================================================================================================
-def MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys):
-    #
-    # Mosaic gNATSGO
-
-
-    """
-    1. Create new LookupTbl.
-    2. Add CELLVALUE (long) and MUKEY.
-    3. Open raster table and LookupTbl with Search and InsertCursor.
-    4. Calculate CELLVALUE and MUKEY for all records unless MUSYM='NOTCOM'.
-    4. Join LookupTbl to raster attribute on mukey
-    5. Select all records except NOTCOM
-    6. Use Lookup_sa on LookupTbl.CELLVALUE
-    Use JoinField to add MUSYM and MUKEY to new raster.
-
-    """
-    try:
-        PrintMsg(" \nUpdating raster layer....", 0)
-
-        # Create lookup table for mukey values to facilitate raster conversion
-        # and addition of mukey column to raster attribute table.
-        arcpy.CheckOutExtension("Spatial")
-        lu = os.path.join(env.scratchGDB, "LookupTbl")
-
-        if arcpy.Exists(lu):
-            arcpy.Delete_management(lu)
-
-        # Get projection for output raster
-        #rasDesc = arcpy.Describe(outputRaster)
-        #rasPrj = rasDesc.spatialReference
-        #iRaster = rasDesc.meanCellHeight
-
-        # The Lookup table contains both MUKEY and its integer counterpart (CELLVALUE).
-        # Using the joined lookup table creates a raster with CellValues that are the
-        # same as MUKEY (but integer). This will maintain correct MUKEY values
-        # during a moscaic or clip.
-        #
-        PrintMsg("\tCreating Lookup table (" + lu + "...", 0)
-        arcpy.CreateTable_management(os.path.dirname(lu), os.path.basename(lu))
-        arcpy.AddField_management(lu, "CELLVALUE", "LONG")
-        arcpy.AddField_management(lu, "MUKEY", "TEXT", "#", "#", "30")                                                              
-
-        with arcpy.da.InsertCursor(lu, ("CELLVALUE", "MUKEY")) as inCursor:
-            
-            for mukey in newMukeys:
-                rec = mukey, mukey
-                inCursor.insertRow(rec)
-
-        # Add MUKEY attribute index to Lookup table
-        arcpy.AddIndex_management(lu, ["mukey"], "Indx_LU")
-        #PrintMsg(" \nJoining Lookup table...", 1)
-        arcpy.AddJoin_management (dsmRasterLayer, "MUKEY", lu, "MUKEY", "KEEP_ALL")
-
-        arcpy.SetProgressorLabel("Updating input raster...")
-        #env.extent = fullExtent
-
-        # Need to make sure that the join was successful
-        time.sleep(1)
-        rasterFields = arcpy.ListFields(dsmRasterLayer)
-        rasterFieldNames = list()
-
-        for rFld in rasterFields:
-            rasterFieldNames.append(rFld.name.upper())
-
-        if not "LOOKUPTBL.CELLVALUE" in rasterFieldNames:
-            raise MyError, "Join failed for Lookup table (CELLVALUE)"
-
-        env.pyramid = "PYRAMIDS 0 NEAREST"
-
-        # The original RSS raster is crippled because it does not have a unique cell value based
-        # upon mukey. Use Lookup sa function to create a new temporary raster.
-        env.snapRaster = outputRaster
-        env.cellSize = outputRaster
-        fixedRas = os.path.join(env.scratchGDB, "xxRaster")
-        tmpRas = Lookup(dsmRasterLayer, "LookupTbl.CELLVALUE")
-        tmpRas.save(fixedRas)
-        arcpy.RemoveJoin_management(dsmRasterLayer, os.path.basename(lu))
-        
-
-        # ****************************************************
-        # Build pyramids and statistics
-        # ****************************************************
-        #
-        # DO I NEED TO HAVE STATISTICS FOR THIS INTERIM RASTER?
-        #
-        #
-        if arcpy.Exists(fixedRas):
-            time.sleep(3)
-
-            # ****************************************************
-            # Add MUKEY to final raster
-            # ****************************************************
-            # Build attribute table for final output raster. Sometimes it fails to automatically build.
-            PrintMsg("\tBuilding raster attribute table and updating MUKEY values (" + fixedRas + ")", )
-            #arcpy.SetProgressor("default", "Building raster attribute table...")
-            arcpy.BuildRasterAttributeTable_management(fixedRas)
-            arcpy.AddField_management(fixedRas, "MUKEY", "TEXT", "#", "#", "30")
-
-            with arcpy.da.UpdateCursor(fixedRas, ["VALUE", "MUKEY"]) as cur:
-                for rec in cur:
-                    rec[1] = str(rec[0])
-                    cur.updateRow(rec)
-
-        else:
-            err = "Missing output raster (" + fixedRas + ")"
-            raise MyError, err
-        
-        #
-
-        # Merge the gSSURGO raster and statsgo_ras using Mosaic
-        arcpy.ResetProgressor()
-        #newRaster = os.path.join(outputWS, "MergedRaster")
-
-        
-        ssurgoRaster = os.path.join(outputWS, outputRaster)
-
-        
-        PrintMsg("\tMerging the RSS and gNATSGO rasters...", 0)
-        arcpy.SetProgressor("default", "Merging the RSS and gNATSGO rasters...")
-        #pixType = "32_BIT_UNSIGNED"Updating 
-        #cellSize = 10
-        nBands = 1
-        mosaicMethod = "LAST"
-        # Mosaic the existing mapunit raster with the new RSS raster. The new raster has priority.
-        arcpy.Mosaic_management([fixedRas], outputRaster, "LAST", "", "", "", "NONE", 0.5, "NONE")
-        
-        PrintMsg("\tRebuilding attribute table for updated raster (" + outputRaster + ")", 0)
-        arcpy.SetProgressor("default", "Building raster attribute table...")
-        arcpy.BuildRasterAttributeTable_management(outputRaster)
-
-        PrintMsg(" \n\tIs it necessary to calculate mukey values after mosaic?", 1)
-        
-        with arcpy.da.UpdateCursor(outputRaster, ["VALUE", "MUKEY"]) as cur:
-            for rec in cur:
-                rec[1] = rec[0]
-                cur.updateRow(rec)
-
-        arcpy.SetProgressor("default", "Updating raster statistics...")
-        arcpy.CalculateStatistics_management (outputRaster, 1, 1, "", "OVERWRITE" )
-        arcpy.SetProgressor("default", "Building pyramids for new raster...")
-        PrintMsg("\tBuilding pyramids for new raster", 0)
-        arcpy.BuildPyramids_management(outputRaster, 0, "NONE", "NEAREST", "DEFAULT", "", "OVERWRITE")
-        arcpy.BuildPyramids_management(outputRaster, -1, "NONE", "NEAREST", "DEFAULT", "", "OVERWRITE")
-        arcpy.ResetProgressor()
-
-        if 1 == 1:
-            # Skipping creation of RSS mupolygon 
-            # Convert fixedRas to a temporary polygon featureclass for inclusion in the output MUPOLYGON featureclass
-            #
-            #PrintMsg(" \nCreating RSS soil polygon featureclass...", 0)
-            #newPolygons = os.path.join(env.scratchGDB, "xxMupolygons")
-            #arcpy.SetProgressor("default", "Creating RSS soil polygon featureclass...")
-            #arcpy.RasterToPolygon_conversion(fixedRas, newPolygons, "NO_SIMPLIFY", "VALUE")
-            # Use gridcode to add and calculate MUKEY.
-            # Output polygon featureclass has extra columns 'Id' and 'gridcode' that need to be dropped
-            # Add other attribute fields and calculate using mapunit table and legend table: AREASYMBOL, SPATIALVER, MUSYM, MUKEY
-            # Also need to dissolve this featureclass to create SAPOLYGON with AREASYMBOL, SPATIALVER, LKEY
-
-            # Get legend info, assuming this is a single survey area
-            arcpy.SetProgressorLabel("Updating RSS attributes for legend and mapunit tables...")
-            legendTbl = os.path.join(dsmDB, "legend")
-            dLegend = dict()
-            dAreasymbol = dict()
-
-            with arcpy.da.SearchCursor(legendTbl, ["areasymbol", "lkey"]) as cur:
-                for rec in cur:
-                    areasym, lkey = rec
-                    dLegend[lkey] = areasym
-                    dAreasymbol[areasym] = lkey
-                                       
-            if len(dLegend) == 1:
-                # As expected, the RSS database consists of a single survey area
-                pass
-
-            else:
-                raise MyError, "RSS database consists of " + str(len(dLegend)) + " survey areas"
-
-            # Get legend info, assuming this is a single survey area
-            mapunitTbl = os.path.join(dsmDB, "mapunit")
-            dMapunit = dict()
-
-            with arcpy.da.SearchCursor(mapunitTbl, ["mukey", "musym", "lkey"]) as cur:
-                for rec in cur:
-                    mukey, musym, lkey = rec
-                    areasym = dLegend[lkey]
-                    dMapunit[mukey] = (musym, areasym)
-                    saList = [areasym, lkey, "DRSS"]
-                   
-            fldName = "AREASYMBOL"
-            dataType = "TEXT"
-            precision = ""
-            scale = ""
-            length = 7
-            #arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
-
-            fldName = "SPATIALVER"
-            dataType = "DOUBLE"
-            precision = ""
-            scale = ""
-            length = ""
-            #arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length) 
-
-            fldName = "MUSYM"
-            dataType = "TEXT"
-            precision = ""
-            scale = ""
-            length = 6
-            #arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
-
-            fldName = "MUKEY"
-            dataType = "TEXT"
-            precision = ""
-            scale = ""
-            length = 30
-            #arcpy.AddField_management(newPolygons, fldName, dataType, precision, scale, length)
-
-            spatialver = 0
-            
-            # Populate RSS polygon attributes
-            #PrintMsg("\tUpdating RSS soil polygon attributes for " + newPolygons, 1)
-            #arcpy.SetProgressorLabel("Updating RSS polygon attributes..")
-            #pCnt = int(arcpy.GetCount_management(newPolygons).getOutput(0)) - 1
-            #arcpy.SetProgressor("step", "Updating RSS polygon attributes..", 0, pCnt, 1)
-            
-            #with arcpy.da.UpdateCursor(newPolygons, ["gridcode", "areasymbol", "spatialver", "musym", "mukey"]) as cur:
-            #    for rec in cur:
-            #        gridcode = rec[0]
-            #        mukey = str(gridcode)
-            #        musym, areasym = dMapunit[mukey]
-            #        newrec = [gridcode, areasym, spatialver, musym, mukey]
-            #        cur.updateRow(newrec)
-            #        arcpy.SetProgressorPosition()
-                    
-
-            #arcpy.DeleteField_management(newPolygons, "Id")
-            #arcpy.DeleteField_management(newPolygons, "gridcode")
-
-        
-        # Create SAPOLYGON equivalent for RSS survey
-        #
-        # Also very slow, but perhaps that's just the Update process that follows?
-        #
-        saPolygons = os.path.join(env.scratchGDB, "xxSapolygons")
-        PrintMsg(" \nCreating RSS survey boundary featureclass (" + saPolygons + ")", 0)
-        arcpy.SetProgressor("default", "Creating RSS survey boundary featureclass...")
-        #arcpy.Dissolve_management(newPolygons, saPolygons, "AREASYMBOL", "", "SINGLE_PART")
-
-        # Create constant raster based upon original RSS raster
-        # Problem here. NoData cells are being included. I don't want those.
-        saRas = Con(dsmRasterLayer, 1, "#", "VALUE > 0")
-        arcpy.RasterToPolygon_conversion(saRas, saPolygons, "NO_SIMPLIFY", "VALUE")
-
-        fldName = "AREASYMBOL"
-        dataType = "TEXT"
-        precision = ""
-        scale = ""
-        length = 20
-        arcpy.AddField_management(saPolygons, fldName, dataType, precision, scale, length)
-        
-        fldName = "SPATIALVER"
-        dataType = "DOUBLE"
-        precision = ""
-        scale = ""
-        length = ""
-        arcpy.AddField_management(saPolygons, fldName, dataType, precision, scale, length)
-
-        fldName = "LKEY"
-        dataType = "TEXT"
-        precision = ""
-        scale = ""
-        length = 30
-        arcpy.AddField_management(saPolygons, fldName, dataType, precision, scale, length)
-
-        fldName = "SOURCE"
-        dataType = "TEXT"
-        precision = ""
-        scale = ""
-        length = 30
-        arcpy.AddField_management(saPolygons, fldName, dataType, precision, scale, length)
-
-        with arcpy.da.UpdateCursor(saPolygons, ["areasymbol", "lkey", "source"]) as cur:
-            for rec in cur:
-                #lkey = dAreasymbol[rec[0]]
-                rec = saList  # Here I am assuming there is only one areasymbol in this RSS survey
-                cur.updateRow(rec)
-        
-
-        # Finally, update the soil polygons and survey polygons using the xx layers in scratchGDB
-        # The updates seem to be very slow. Tiling takes place.
-        # Also need to incorporate the STATSGO 'US' polygons into the SAPOLYGON featureclass. This
-        # should be done in the other script.
-        #
-        tmpSaPolygons = os.path.join(env.scratchGDB, "tmpSapolygon")
-        saPolygonFC = os.path.join(outputWS, "SAPOLYGON")
-        PrintMsg(" \nUpdating " + tmpSaPolygons, 1)
-        arcpy.SetProgressor("default", "Updating " + tmpSaPolygons + "...")
-        arcpy.Update_analysis(saPolygonFC, saPolygons, tmpSaPolygons, "BORDERS", 0)
-
-        # Make sure that tmpSaPolygons has a SOURCE column
-        saFields = arcpy.Describe(tmpSaPolygons).fields
-        saFieldNames = [f.name.lower() for f in saFields]
-
-        if not "source" in saFieldNames:
-            arcpy.AddField_management(tmpSaPolygons, "SOURCE", "TEXT", "", "", 30)
-
-        # Make sure that tmpSaPolygons has a SOURCE column
-        saFields = arcpy.Describe(saPolygons).fields
-        saFieldNames = [f.name.lower() for f in saFields]
-
-        if not "source" in saFieldNames:
-            arcpy.AddField_management(saPolygons, "SOURCE", "TEXT", "", "", 30)
-
-
-        # Make sure that tmpSaPolygons has a SOURCE column
-        saFields = arcpy.Describe(saPolygonFC).fields
-        saFieldNames = [f.name.lower() for f in saFields]
-
-        if not "source" in saFieldNames:
-            arcpy.AddField_management(saPolygonFC, "SOURCE", "TEXT", "", "", 30)
-
-        # Update SAPOLYGON featureclass. Not at all sure if this is designed properly.
-        #
-        if arcpy.Exists(tmpSaPolygons):
-            # Replace SAPOLYGON features
-            arcpy.TruncateTable_management(saPolygonFC)
-            PrintMsg(" \nTransferring data from " + tmpSaPolygons + " to " + saPolygonFC, 1)
-
-            with arcpy.da.InsertCursor(saPolygonFC, ["shape@", "areasymbol", "spatialver", "lkey", "source"]) as udCur:
-                sCur = arcpy.da.SearchCursor(tmpSaPolygons, ["shape@", "areasymbol", "spatialver", "lkey", "source"])
-                
-                for rec in sCur:
-                    newRec = list(rec)
-                    
-                    if newRec[-1] is None and rec[2] is None:
-                        # if source is None and spatialver is None then assume this is RSS data
-                        newRec[-1] = "DRSS"
-                        #PrintMsg("\tDRSS added", 1)
-
-                    elif newRec[-1] is None:
-                        # if only source is None, assume this is SSURGO
-                        newRec[-1] = "SSURGO"
-                        
-                    udCur.insertRow(newRec)
-
-                del sCur
-
-            arcpy.Delete_management(tmpSaPolygons)
-            del tmpSaPolygons
-            
-        if 1 == 2:
-            # Skipping this mupolygon section for RSS
-            # Update MUPOLYGON featureclass
-            PrintMsg(" \nSkipping MUPOLYGON update...", 1)
-            if 1 == 2:
-                tmpMuPolygons = os.path.join(outputWS, "tmpMupolygons")
-                mupolygonFC = os.path.join(outputWS, "MUPOLYGON")
-                PrintMsg(" \nUpdating " + tmpMuPolygons, 1)
-                arcpy.SetProgressor("default", "Updating " + tmpMuPolygons + "...")
-                arcpy.Update_analysis(mupolygonFC, newPolygons, tmpMuPolygons, "BORDERS", 0)  # slow!
-                muCnt = int(arcpy.GetCount_management(tmpMuPolygons).getOutput(0))
-                arcpy.SetProgressor("step", "Updating " + mupolygonFC, 1, muCnt, 1)
-                
-                if arcpy.Exists(tmpMuPolygons):
-                    PrintMsg(" \nUpdating " + mupolygonFC, 1)
-                    # Replace SAPOLYGON features
-                    arcpy.TruncateTable_management(mupolygonFC)
-
-                    with arcpy.da.InsertCursor(mupolygonFC, ["shape@", "areasymbol", "spatialver", "musym", "mukey"]) as udCur:
-                        sCur = arcpy.da.SearchCursor(tmpMuPolygons, ["shape@", "areasymbol", "spatialver", "musym", "mukey"])
-                        
-                        for rec in sCur:
-                            udCur.insertRow(rec)
-                            arcpy.SetProgressorPosition()
-
-                        del sCur
-
-                    arcpy.Delete_management(tmpMuPolygons)
-                    del tmpMuPolygons
-                        
-        
-        arcpy.CheckInExtension("Spatial")
-
-        #PrintMsg(" \nStill need to add the step to delete the original Mu and Sa polygon layer and rename", 1)
-        return True
-
-    except MyError, e:
-        # Example: raise MyError, "This is an error message"
-        PrintMsg(str(e), 2)
-        return False
-
-    except:
-        errorMsg()
-        return False
 
 ## ===================================================================================
 def GetSoilPolygons(outputWS, AOI, soilPolygons, featCnt, bValidation, bUpdateMukeys, wc):
@@ -2214,16 +1822,8 @@ def UpdateMetadata_ISO(outputWS, target, surveyInfo, description):
         fh.write(newdoc)
         fh.close()
 
-        # import updated metadata to the geodatabase table
-        #PrintMsg("\tSkipping metatdata import \n ", 1)
-        #arcpy.ImportMetadata_conversion(outputXML, "FROM_ISO_19139", outputRaster, "DISABLED")
         arcpy.MetadataImporter_conversion (outputXML, target)
 
-        # delete the temporary xml metadata files
-        #os.remove(outputXML)
-        #os.remove(inputXML)
-        #if os.path.isfile(midXML):
-        #    os.remove(midXML)
 
 
     except MyError, e:
@@ -2232,111 +1832,6 @@ def UpdateMetadata_ISO(outputWS, target, surveyInfo, description):
 
     except:
         errorMsg()
-
-## ===================================================================================
-def gSSURGO(outputWS, dsmRasterLayer, dsmDB, outputRaster):
-    # main function
-
-    try:
-        # Creating the file geodatabase uses the ImportXMLWorkspaceDocument command which requires
-        #
-        # ArcInfo: Advanced license
-        # ArcEditor: Standard license
-        # ArcView: Basic license
-        # licenseLevel = arcpy.ProductInfo().upper()
-        # if licenseLevel == "BASIC":
-        #    raise MyError, "ArcGIS License level must be Standard or Advanced to run this tool"
-        env.overwriteOutput = True
-        codePage = 'iso-8859-1'  # allow csv reader to handle non-ascii characters
-        
-
-        # According to Gary Spivak, SDM downloads are UTF-8 and NAIS downloads are iso-8859-1
-        # cp1252 also seemed to work well
-        #codePage = 'utf-16' this did not work
-        #
-        # http://stackoverflow.com/questions/6539881/python-converting-from-iso-8859-1-latin1-to-utf-8
-        # Next need to try: string.decode('iso-8859-1').encode('utf8')
-
-        dbVersion = 2  # This is the SSURGO version supported by this script and the gSSURGO schema (XML Workspace document)
-
-        # Make sure that the env.scratchGDB is NOT Default.gdb. This can cause problems for
-        # some unknown reason.
-        if SetScratch() == False:
-            raise MyError, "Invalid scratch workspace setting (" + env.scratchWorkspace + ")"
-
-        #PrintMsg(" \nAlias and description: " + aliasName + "; " +  description, 1)
-
-        # Get the XML Workspace Document appropriate for the specified AOI
-        # inputXML = GetXML(AOI)
-
-        #if inputXML == "":
-        #    raise MyError, "Unable to set input XML Workspace Document"
-
-        # if len(tabularFolders) > 0:  # This originally was the iteration through areasymbolList
-        # Create file geodatabase for output data
-        # Remove any dashes in the geodatabase name. They will cause the
-        # raster conversion to fail for some reason.
-        gdbName = os.path.basename(outputWS)
-        outFolder = os.path.dirname(outputWS)
-        gdbName = gdbName.replace("-", "_")
-        outputWS = os.path.join(outFolder, gdbName)
-        
-        bMD = ImportMDTables(outputWS, dsmDB)  # seems to cause problems with duplicate records when
-        # we import md tables from the RSS database
-
-        if bMD == False:
-            raise MyError, ""
-
-        # import attribute data from text files in tabular folder
-        bTabular = ImportTables(outputWS, dsmDB)
-
-
-        if bTabular == True:
-            # Successfully imported all tabular data (textfiles or Access database tables)
-            PrintMsg(" \nAll tabular data imported", 0)
-
-        else:
-            PrintMsg("Failed to export all tabular data", 2)
-            return False
-
-        # Query the output SACATALOG table to get list of surveys that were exported to the gSSURGO
-        #
-        saTbl = os.path.join(outputWS, "sacatalog")
-        expList = list()
-        areasymList = list()
-
-        with arcpy.da.SearchCursor(saTbl, ["AREASYMBOL", "SAVEREST"]) as srcCursor:
-            for rec in srcCursor:
-                expList.append(rec[0] + " (" + str(rec[1]).split()[0] + ")")
-                areasymList.append(rec[0].encode('ascii'))
-            
-        expInfo = ", ".join(expList) # This is a list of areasymbol with saverest for metadata
-
-
-        # Get a list of RSS mukeys
-        #
-        muTbl = os.path.join(dsmDB, "mapunit")
-        newMukeys = list()
-        wc = "musym <> 'NOTCOM'"
-        
-        with arcpy.da.SearchCursor(muTbl, ["MUKEY"], where_clause=wc) as muCursor:
-            for rec in muCursor:
-                newMukeys.append(rec[0].encode('ascii'))
-
-        inputRaster = os.path.join(outputWS, "MuRaster")
-
-        bMerged = MergeData(outputWS, dsmRasterLayer, outputRaster, newMukeys)
-
-
-        return True
-
-    except MyError, e:
-        PrintMsg(str(e), 2)
-        return False
-
-    except:
-        errorMsg()
-        return True
 
 ## ===================================================================================
 def SortSurveyAreaLayer(ssaLayer, surveyList):
@@ -2611,6 +2106,368 @@ def GetFCType(fc):
     except:
         errorMsg()
         return ""
+
+
+## ===================================================================================
+def gSSURGO(outputWS, dsmRasterLayer, dsmDB, outputRaster):
+    # main function
+
+    try:
+        # Creating the file geodatabase uses the ImportXMLWorkspaceDocument command which requires
+        #
+        # ArcInfo: Advanced license
+        # ArcEditor: Standard license
+        # ArcView: Basic license
+        # licenseLevel = arcpy.ProductInfo().upper()
+        # if licenseLevel == "BASIC":
+        #    raise MyError, "ArcGIS License level must be Standard or Advanced to run this tool"
+        env.overwriteOutput = True
+        codePage = 'iso-8859-1'  # allow csv reader to handle non-ascii characters
+        
+
+        # According to Gary Spivak, SDM downloads are UTF-8 and NAIS downloads are iso-8859-1
+        # cp1252 also seemed to work well
+        #codePage = 'utf-16' this did not work
+        #
+        # http://stackoverflow.com/questions/6539881/python-converting-from-iso-8859-1-latin1-to-utf-8
+        # Next need to try: string.decode('iso-8859-1').encode('utf8')
+
+        dbVersion = 2  # This is the SSURGO version supported by this script and the gSSURGO schema (XML Workspace document)
+
+        # Make sure that the env.scratchGDB is NOT Default.gdb. This can cause problems for
+        # some unknown reason.
+        if SetScratch() == False:
+            raise MyError, "Invalid scratch workspace setting (" + env.scratchWorkspace + ")"
+
+        gdbName = os.path.basename(outputWS)
+        outFolder = os.path.dirname(outputWS)
+        gdbName = gdbName.replace("-", "_")
+        outputWS = os.path.join(outFolder, gdbName)
+        
+        bMD = ImportMDTables(outputWS, dsmDB)  # seems to cause problems with duplicate records when
+        # we import md tables from the RSS database
+
+        if bMD == False:
+            raise MyError, ""
+
+        # import attribute data from text files in tabular folder
+        bTabular = ImportTables(outputWS, dsmDB)
+
+
+        if bTabular == True:
+            # Successfully imported all tabular data (textfiles or Access database tables)
+            PrintMsg(" \nAll tabular data imported", 0)
+
+        else:
+            PrintMsg("Failed to export all tabular data", 2)
+            return False
+
+        # Get a list of RSS legend keys and areasymbols.
+        #
+        legendTbl = os.path.join(dsmDB, "legend")
+        dAreasymbols = dict()
+        
+        with arcpy.da.SearchCursor(legendTbl, ["LKEY", "AREASYMBOL"]) as cur:
+            for rec in cur:
+                lkey, areasymbol = rec
+                lkey = lkey.encode('ascii')
+                areasymbol = areasymbol.encode('ascii')
+                
+                #if not lkey in dAreasymbols:
+                dAreasymbols[areasymbol] = lkey
+                dAreasymbols[lkey] = areasymbol
+
+        # Get a list of RSS mukeys. Exclude NOTCOM mapunits.
+        #
+        muTbl = os.path.join(dsmDB, "mapunit")
+        notcomMukeys = list()
+        wc = "musym = 'NOTCOM'"
+        dLegend = dict()
+        
+        with arcpy.da.SearchCursor(muTbl, ["MUKEY", "LKEY", "MUSYM"]) as muCursor:
+            for rec in muCursor:
+                mukey, lkey, musym = rec
+                mukey = mukey.encode('ascii')
+                lkey = lkey.encode('ascii')
+
+                if musym == "NOTCOM":
+                    notcomMukeys.append(mukey)
+
+                dLegend[mukey] = lkey
+
+        bMerged = MergeData(outputWS, dsmRasterLayer, outputRaster, notcomMukeys, dLegend, dAreasymbols)
+
+
+        return True
+
+    except MyError, e:
+        PrintMsg(str(e), 2)
+        return False
+
+    except:
+        errorMsg()
+        return True
+    
+## ===============================================================================================================
+def MergeData(outputWS, dsmRasterLayer, outputRaster, notcomMukeys, dLegend, dAreasymbols):
+    #
+    # Mosaic gNATSGO
+
+
+    """
+    1. Create new LookupTbl. This one is different from gSSURGO.
+    2. Add CELLVALUE (long), MUKEY AND MUKI.
+    3. Open raster table and LookupTbl with Search and InsertCursor.
+    4. Calculate CELLVALUE and MUKEY for all records unless MUSYM='NOTCOM'.
+    4. Join LookupTbl to raster attribute on mukey
+    5. Select all records except NOTCOM
+    6. Use Lookup_sa on LookupTbl.CELLVALUE
+    Use JoinField to add MUSYM and MUKEY to new raster.
+
+    """
+    try:
+        PrintMsg(" \nUpdating raster layer....", 0)
+
+        # Create lookup table for mukey values to facilitate raster conversion
+        # and addition of mukey column to raster attribute table.
+        arcpy.CheckOutExtension("Spatial")
+
+        # Get raster dataset and projection for output raster
+        rasDesc = arcpy.Describe(outputRaster)
+        rasPrj = rasDesc.spatialReference
+        iRaster = rasDesc.meanCellHeight
+        outputRasterDS = rasDesc.catalogPath
+
+        rDesc = arcpy.Describe(dsmRasterLayer)
+        rFlds = [fld.name.upper() for fld in rDesc.fields]
+        rName = rDesc.name
+        arcpy.SetProgressorLabel("Preparing RSS raster for processing...")
+
+        if not "CELLVALUE" in rFlds:
+            arcpy.AddField_management(dsmRasterLayer, "CELLVALUE", "LONG")
+
+        if not "LKEY" in rFlds:
+            arcpy.AddField_management(dsmRasterLayer, "AREASYMBOL", "TEXT", "#", "#", 20)            
+            
+        with arcpy.da.UpdateCursor(rDesc.catalogPath, ["MUKEY", "CELLVALUE", "AREASYMBOL"]) as cur:
+
+            for rec in cur:
+                mukey = rec[0].encode('ascii')
+                
+                if not mukey in notcomMukeys:
+                    areasymbol = dAreasymbols[dLegend[mukey]]
+                    newrec = [mukey, mukey, areasymbol]
+                    cur.updateRow(newrec)
+                
+        wc = "CELLVALUE IS NOT NULL"
+
+        #PrintMsg(" \nSelectLayerByAttribute query: " + wc, 1)
+        arcpy.SelectLayerByAttribute_management(dsmRasterLayer, "NEW_SELECTION", wc)
+
+        ratSel = int(arcpy.GetCount_management(dsmRasterLayer).getOutput(0))
+        #PrintMsg(" \nRunning Lookup on mapunit raster having " + str(ratSel) + " selected records...", 1)
+
+        arcpy.SetProgressorLabel("Running CELLVALUE Lookup for " + str(ratSel) + " selected records...")
+        env.pyramid = "PYRAMIDS 0 NEAREST"
+
+
+        # Create new mapunit raster and areasymbol raster
+        env.mask = outputRaster
+        env.extent = outputRaster
+        env.snapRaster = outputRaster
+        env.cellSize = iRaster
+        fixedRas = os.path.join(env.scratchGDB, "xxMRaster")
+
+        if ratSel == 0:
+            raise MyError, "Input raster has no selected records"
+
+        time.sleep(1)
+        tmpRas = Lookup(dsmRasterLayer, "CELLVALUE")
+
+        fixedCnt = int(arcpy.GetCount_management(tmpRas).getOutput(0))
+
+        if fixedCnt == 0:
+            raise MyError, "Temporary RSS raster has no data"
+
+        arcpy.SetProgressorLabel("Building attribute table for new mapunit raster")
+        tmpRas.save(fixedRas)
+        arcpy.BuildRasterAttributeTable_management(fixedRas)
+        #PrintMsg(" \nBuilding RAT for " + fixedRas, 1)
+        #PrintMsg(" \nSaved temporary raster to " + fixedRas, 1)
+        fixedCnt = int(arcpy.GetCount_management(fixedRas).getOutput(0))
+
+        if fixedCnt == 0:
+            raise MyError, "Failed to create valid mapunit raster"
+        
+        #PrintMsg(" \nSaved temporary raster to " + fixedRas + " with " + str(fixedCnt) + " mapunits", 1)
+
+        # Create RSS-SAPOLYGON featureclass from mapunit raster
+        arcpy.SetProgressorLabel("Running AREASYMBOL Lookup...")
+                                 
+        tmp2Ras = Lookup(dsmRasterLayer, "AREASYMBOL")
+        areaRas = os.path.join(env.scratchGDB, "xxARaster")
+        muPolygons = os.path.join(env.scratchGDB, "xxMuPolygons")
+        saPolygons = os.path.join(env.scratchGDB, "xxSapolygons")
+        
+        tmp2Ras.save(areaRas)
+        arcpy.SetProgressorLabel("Converting AREASYMBOL raster to polygon...")
+        arcpy.RasterToPolygon_conversion(areaRas, muPolygons, "NO_SIMPLIFY", "AREASYMBOL","SINGLE_OUTER_PART")
+        arcpy.Dissolve_management(muPolygons, saPolygons, "AREASYMBOL", "", "SINGLE_PART")
+        # Delete original gSSURGO/gSTATSGO MUPOLYGON featureclass. Only the MapunitRaster remains...
+        arcpy.Delete_management(muPolygons)
+        arcpy.Delete_management(areaRas)
+
+        # Add SOURCE attribute to saPolygons featureclass
+        arcpy.AddField_management(saPolygons, "SOURCE", "TEXT", "", "", 30)
+
+        with arcpy.da.UpdateCursor(saPolygons, ["SOURCE"]) as cur:
+            for rec in cur:
+                cur.updateRow(["DRSS"])
+        
+        # ****************************************************
+        # Build pyramids and statistics
+        # ****************************************************
+        #
+        # DO I NEED TO HAVE STATISTICS FOR THIS INTERIM RASTER?
+        #
+        #
+        if arcpy.Exists(fixedRas):
+            time.sleep(3)
+
+            #if arcpy.Exists(dsmRasterLayer):
+            #    arcpy.Delete_management(dsmRasterLayer)
+
+            # ****************************************************
+            # Add MUKEY to final raster
+            # ****************************************************
+            # Build attribute table for final output raster. Sometimes it fails to automatically build.
+            arcpy.SetProgressorLabel("Building raster attribute table and updating MUKEY values for temporary raster")
+            
+            #arcpy.BuildRasterAttributeTable_management(fixedRas)
+            arcpy.AddField_management(fixedRas, "MUKEY", "TEXT", "#", "#", "30")
+
+            with arcpy.da.UpdateCursor(fixedRas, ["VALUE", "MUKEY"]) as cur:
+                for rec in cur:
+                    rec[1] = str(rec[0])
+                    cur.updateRow(rec)
+
+        else:
+            err = "Missing output raster (" + fixedRas + ")"
+            raise MyError, err
+        
+        #
+
+        # Merge the gSSURGO raster and statsgo_ras using Mosaic
+        arcpy.ResetProgressor()
+
+        PrintMsg("\tMerging the RSS and gNATSGO rasters...", 0)
+        arcpy.SetProgressor("default", "Merging the RSS and gNATSGO rasters...")
+        nBands = 1
+        mosaicMethod = "LAST"
+        # Mosaic the existing mapunit raster with the new RSS raster. The new raster has priority.
+
+        # For testing purposes, create a mosaiced raster in scratchGDB
+        testMosaic = "xxMosaic"
+        env.workspace = env.scratchGDB
+        inputRasters = [outputRasterDS, fixedRas]
+        arcpy.Mosaic_management([fixedRas], outputRasterDS, "LAST", "", "", "", "NONE", 0.5, "NONE")
+            
+        PrintMsg("\tRebuilding attribute table for updated raster...", 0)
+        arcpy.SetProgressor("default", "Building raster attribute table...")
+        arcpy.BuildRasterAttributeTable_management(outputRasterDS)
+
+        # Calculate mukey values for the new values from the RSS raster
+        
+        with arcpy.da.UpdateCursor(outputRasterDS, ["VALUE", "MUKEY"]) as cur:
+            for rec in cur:
+                #PrintMsg("\t" + str(rec), 1)
+                rec[1] = rec[0]
+                cur.updateRow(rec)
+
+        arcpy.SetProgressor("default", "Updating raster statistics...")
+        arcpy.CalculateStatistics_management (outputRasterDS, 1, 1, "", "OVERWRITE" )
+        arcpy.SetProgressor("default", "Building pyramids for new raster...")
+        PrintMsg("\tRebuilding pyramids for new raster", 0)
+        arcpy.BuildPyramids_management(outputRasterDS, 0, "NONE", "NEAREST", "DEFAULT", "", "OVERWRITE")
+        arcpy.BuildPyramids_management(outputRasterDS, -1, "NONE", "NEAREST", "DEFAULT", "", "OVERWRITE")
+        arcpy.ResetProgressor()
+
+        if arcpy.Exists(outputRasterDS):
+            arcpy.Delete_management(fixedRas)
+
+        # Finally, update the soil polygons and survey polygons using the xx layers in scratchGDB
+        # The updates seem to be very slow. Tiling takes place.
+        # Also need to incorporate the STATSGO 'US' polygons into the SAPOLYGON featureclass. This
+        # should be done in the other script.
+        #
+        # saPolygons was created by converting areaRas to polygon
+        tmpSaPolygons = os.path.join(env.scratchGDB, "tmpSapolygon")
+        saPolygonFC = os.path.join(outputWS, "SAPOLYGON")
+        # PrintMsg(" \nUpdating " + tmpSaPolygons, 1)
+        arcpy.SetProgressor("default", "Updating " + tmpSaPolygons + "...")
+
+        saFields = arcpy.Describe(saPolygonFC).fields
+        saFieldNames = [f.name.lower() for f in saFields]
+        
+        if not "source" in saFieldNames:
+            arcpy.AddField_management(saPolygonFC, "SOURCE", "TEXT", "", "", 30)
+            
+        # input features, update features, output features
+        arcpy.Update_analysis(saPolygonFC, saPolygons, tmpSaPolygons, "BORDERS", 0)
+
+        # Update SAPOLYGON featureclass. Not at all sure if this is designed properly.
+        #
+        # PrintMsg(" \ndLegend: " + str(dLegend), 1)
+        # PrintMsg(" \ndAreasymbols: " + str(dAreasymbols), 1)
+        
+        if arcpy.Exists(tmpSaPolygons):
+            arcpy.Delete_management(saPolygons)
+            
+            # Replace SAPOLYGON features
+            arcpy.TruncateTable_management(saPolygonFC)
+            arcpy.SetProgressorLabel("Updating SAPOLYGON featureclass...")
+
+            with arcpy.da.InsertCursor(saPolygonFC, ["shape@", "areasymbol", "spatialver", "lkey", "source"]) as udCur:
+                sCur = arcpy.da.SearchCursor(tmpSaPolygons, ["shape@", "areasymbol", "spatialver", "lkey", "source"])
+                
+                for rec in sCur:
+                    shape, areasym, spatialver, lkey, source = rec
+                    #PrintMsg("\tSAPOLYGON record: " + str([areasym, lkey, source]), 1)
+                    
+                    if lkey is None or lkey == "":
+                        # if source is None and spatialver is None then assume this is RSS data
+                        #source = "DRSS"
+                        lkey = dAreasymbols[areasym]
+                        # dAreasymbols[areasymbol] = lkey
+                        #PrintMsg("\tDRSS added with an LKEY of " + str(lkey), 1)
+
+                    elif source is None:
+                        # if only source is None, assume this is SSURGO
+                        source = "SSURGO"
+                        
+
+                    newRec = [shape, areasym, spatialver, lkey, source]
+                    udCur.insertRow(newRec)
+
+                del sCur
+
+            arcpy.Delete_management(tmpSaPolygons)
+            del tmpSaPolygons
+                        
+        
+        arcpy.CheckInExtension("Spatial")
+
+        #PrintMsg(" \nStill need to add the step to delete the original Mu and Sa polygon layer and rename", 1)
+        return True
+
+    except MyError, e:
+        # Example: raise MyError, "This is an error message"
+        PrintMsg(str(e), 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
     
 ## ===================================================================================
 
@@ -2645,30 +2502,29 @@ try:
         dsmPath = dsmDesc.catalogPath
         dsmDataType = dsmDesc.dataType.upper()
         dsmDB = os.path.dirname(dsmPath)                  # assume that dsmRaster is in a geodatabase
+        dsmFields = [fld.name.upper() for fld in dsmDesc.fields]
+
+        # What happens when dsmRaster is a dataset and not a layer?
+        # PrintMsg(" \n" + dsmRaster + " is a " + dsmDataType + " and source is " + dsmPath, 1)
 
         if not dsmDB.endswith(".gdb"):
             raise MyError, "Input RSS raster must belong to a file geodatabase"
 
-        if dsmDataType == "RASTERDATASET":
-            wc = "musym <> 'NOTCOM'"
-            dsmRasterLayer = "Raster Layer"
-            arcpy.MakeRasterLayer_management(dsmPath, dsmRasterLayer, wc)
+        #else:
+        #    PrintMsg(" \nUsing as dsmRasterLayer: " + dsmPath, 1)
 
-        else:
-            dsmRasterLayer = dsmRaster
-            wc = "musym <> 'NOTCOM'"
-            arcpy.SelectLayerByAttribute_management(dsmRasterLayer, "NEW_SELECTION", wc)
-
+            
         outputDesc = arcpy.Describe(outputRaster)
         outputPath = outputDesc.catalogPath
         outputDataType = outputDesc.dataType.upper()
 
-        if outputDataType != "RASTERDATASET":
-            outputRaster = outputPath
-                                         
-        # Original gSSURGO function bGood = gSSURGO(inputFolder, surveyList, outputWS, AOI, aliasName, useTextFiles, False, areasymbolList)
-        # Assuming soil polygon featureclass is "MUPOLYGON" in outputWS
-        bGood = gSSURGO(outputWS, dsmRasterLayer, dsmDB, outputRaster)
+        bGood = gSSURGO(outputWS, dsmRaster, dsmDB, outputRaster)
+
+        if bGood:
+            #PrintMsg(" \nNeed to delete MUPOLYGON featureclass...", 1)
+            arcpy.Delete_management(os.path.join(outputWS, "MUPOLYGON"))
+            arcpy.Compact_management(outputWS)
+            PrintMsg(" \nFinished creating gNATSGO database: " + outputWS + " \n", 0)
 
 except MyError, e:
     PrintMsg(str(e), 2)

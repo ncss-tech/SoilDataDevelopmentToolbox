@@ -70,6 +70,8 @@
 # interphh
 # interphhc
 
+# 2020-03-30. Removed the above columns from the ImportTables function as well.
+
 
 ## ===================================================================================
 class MyError(Exception):
@@ -306,20 +308,31 @@ def SetScratch():
     #        APPDATA C:\Users\adolfo.diaz\AppData\Roaming
     #        USERPROFILE C:\Users\adolfo.diaz
     try:
-        #envVariables = os.environ
+        envVariables = os.environ
 
-        #for var, val in envVariables.items():
-        #    PrintMsg("\t" + str(var) + ": " + str(val), 1)
+        for var, val in envVariables.items():
+            PrintMsg("\tSystem: " + str(var) + ": " + str(val), 1)
+
+        environments = arcpy.ListEnvironments()
+
+        # Sort the environment names
+        environments.sort()
+
+        for ev in environments:
+            # Format and print each environment and its current setting.
+            # (The environments are accessed by key from arcpy.env.)
+            #PrintMsg("{0:<30}: {1}".format(environment, arcpy.env[environment]), 1)
+            PrintMsg("\tGP: " + ev + "\t" + str(env[ev]), 1)
 
         if env.scratchWorkspace is None:
             #PrintMsg("\tWarning. Scratchworkspace has not been set for the geoprocessing environment", 1)
             env.scratchWorkspace = env.scratchFolder
-            #PrintMsg("\nThe scratch geodatabase has been set to: " + str(env.scratchGDB), 1)
+            PrintMsg("\nThe scratch geodatabase has been set to: " + str(env.scratchGDB), 1)
 
         elif str(env.scratchWorkspace).lower().endswith("default.gdb"):
-            #PrintMsg("\tChanging scratch geodatabase from Default.gdb", 1)
+            PrintMsg("\tChanging scratch geodatabase from Default.gdb", 1)
             env.scratchWorkspace = env.scratchFolder
-            #PrintMsg("\tTo: " + str(env.scratchGDB), 1)
+            PrintMsg("\tTo: " + str(env.scratchGDB), 1)
 
         #else:
         #    PrintMsg(" \nOriginal Scratch Geodatabase is OK: " + env.scratchGDB, 1)
@@ -943,6 +956,7 @@ def ImportTables(outputWS, dbList, dbVersion):
     # the Access database must be populated and it must reside in the tabular folder and
     # it must be named 'soil_d_<AREASYMBOL>.mdb'
     # Origin: SSURGO_Convert_to_Geodatabase.py
+    # Change: 4 columns exist in the .mdb cointerp table but have been removed from the gSSURGO template databases.
 
     try:
         tblList = GetTableList(outputWS)
@@ -1039,13 +1053,19 @@ def ImportTables(outputWS, dbList, dbVersion):
                 if arcpy.Exists(inputTbl):
                     if tblName != "month" or (tblName == "month" and int(arcpy.GetCount_management(outputTbl).getOutput(0)) < 12):
                         arcpy.SetProgressorLabel("Importing " +  dbAreaSymbol + " tabular data (" + Number_Format(iCntr, 0, True) + " of " + Number_Format(len(dbList), 0, True) + ") : " + tblName)
-                        mdbFields = arcpy.Describe(inputTbl).fields
-                        mdbFieldNames = list()
 
-                        for inFld in mdbFields:
-                            if not inFld.type == "OID":
-                                mdbFieldNames.append(inFld.name.upper())
+                        if tblName == 'cointerp':
+                            # skipping 4 of the cointerp fields not being used by SDV
+                            mdbFieldNames = ['cokey', 'mrulekey', 'mrulename', 'seqnum', 'rulekey', 'rulename', 'ruledepth', 'interphr', 'interphrc', 'nullpropdatabool', 'defpropdatabool', 'incpropdatabool', 'cointerpkey']
 
+                        else:                
+                            mdbFields = arcpy.Describe(inputTbl).fields
+                            mdbFieldNames = list()
+
+                            for inFld in mdbFields:
+                                if not inFld.type == "OID":
+                                    mdbFieldNames.append(inFld.name.upper())
+           
                         if not tblName in sdvTables:
                             # Import all tables except SDV*
 
@@ -2131,6 +2151,8 @@ def UpdateMetadata(outputWS, target, surveyInfo, description, remove_gp_history_
         if arcpy.Exists(out_xml):
             arcpy.Delete_management(out_xml)
 
+        del target
+
         return True
 
     except:
@@ -2167,21 +2189,6 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
         #if (os.path.basename(env.scratchGDB).lower() == "default.gdb") or \
         #(os.path.basename(env.scratchWorkspace).lower() == "default.gdb") or \
         #(os.path.basename(env.scratchGDB).lower() == outputWS):
-                    
-        #if SetScratch() == False:
-        #    raise MyError, "Invalid scratch workspace setting (" + env.scratchWorkspace + ")"
-
-
-        # Problem when scratchGDB or scratchFolder no longer exist
-        scratchFolder = env.scratchFolder
-        # PrintMsg(" \nScratchFolder = " + scratchFolder, 1)
-        
-        if not arcpy.Exists(env.scratchFolder):
-            # try to create it
-            arcpy.CreateFolder(env.scratchFolder)
-
-        if not arcpy.Exists(env.scratchGDB):
-            arcpy.CreateFileGDB(os.path.dirname(env.scratchGDB), os.path.basename(env.scratchGDB), "10.0")
 
         # Import script to generate relationshipclasses and associated attribute indexes
         import Create_SSURGO_RelationshipClasses
@@ -2496,6 +2503,8 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
                 # Successfully created a new geodatabase
                 # Merge all existing shapefiles to file geodatabase featureclasses
                 #
+                env.workspace = outputWS  # attempted metadata-workspace conflict fix
+                
                 bSpatial = AppendFeatures(outputWS, AOI, mupolyList, mulineList, mupointList, sflineList, sfpointList, sapolyList, featCnt)
 
                 # Append tabular data to the file geodatabase
@@ -2572,6 +2581,16 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
             for target in mdList:
                 bMetadata = UpdateMetadata(outputWS, target, surveyInfo, description, remove_gp_history_xslt)
 
+            del target
+            del mdList
+
+            PrintMsg(" \nCompacting new database", 0)
+            arcpy.SetProgressorLabel("Compacting new database...")
+            arcpy.Compact_management(outputWS)
+
+            wsDesc = arcpy.Describe(outputWS)
+            arcpy.RefreshCatalog(outputWS)
+            
             # Check scratchfolder for xxImport*.log files
             # For some reason they are being put in the folder above env.scratchFolder (or is it one above scratchworkspace?)
             
@@ -2586,9 +2605,13 @@ def gSSURGO(inputFolder, surveyList, outputWS, AOI, tileInfo, useTextFiles, bCli
                     #PrintMsg("\t\tDeleting " + logFile, 1)
                     arcpy.Delete_management(logFile)
 
+      
             PrintMsg(" \nSuccessfully created a geodatabase containing the following surveys: " + queryInfo, 0)
+            arcpy.SetProgressorLabel("Successfully created new gSSURGO database...")
 
         PrintMsg(" \nOutput file geodatabase:  " + outputWS + "  \n ", 0)
+
+        del  outputWS, gdbName, outFolder
 
         return True
 
@@ -2884,7 +2907,6 @@ def GetFCType(fc):
 import arcpy, sys, string, os, traceback, locale, time, datetime, csv
 from operator import itemgetter, attrgetter
 import xml.etree.cElementTree as ET
-#from xml.dom import minidom
 from arcpy import env
 
 try:
