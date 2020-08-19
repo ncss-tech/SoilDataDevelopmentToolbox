@@ -119,10 +119,6 @@ from arcpy import env
 try:
     mxd = arcpy.mapping.MapDocument("CURRENT")
 
-except:
-    PrintMsg(" \nUnable to get handle on current map", 2)
-
-try:
     df = mxd.activeDataFrame
     dfSR = df.spatialReference
     rotation = df.rotation

@@ -477,61 +477,6 @@ def CreateQueryTables(inputDB, outputDB, maxD):
         arcpy.ResetProgressor()
         arcpy.SetProgressorLabel("Looking for inconsistencies in horizon depths...")
 
-        if 1==2: # Skip check for CONUS because of Memory errors...
-            # Memory Error below
-            #
-            curFields = ['mukey', 'cokey','hzdept_r','hzdepb_r', 'hzname', 'compname', 'localphase', 'majcompflag']
-
-            with arcpy.da.SearchCursor(outputTable, curFields, where_clause=wc) as cur:
-                for rec in cur:
-                    mukey, cokey, top, bot, hzname, compname, localphase, majcomp = rec
-
-                    if cokey in dHZ:
-                        vals = dHZ[cokey]
-                        vals.append([top, bot, hzname, mukey, compname, localphase, majcomp])
-                        dHZ[cokey] = vals
-
-                    else:
-                        dHZ[cokey] = [[top, bot, hzname, mukey, compname, localphase, majcomp]]
-
-            # Number of items in each component value = len(rec)
-            # top of first horizon = rec[0][0]
-            # bottom of last horizon = rec[len(rec) - 1][1]
-            # component thickness #1 = rec[len(rec) - 1][1] - rec[0][0]
-            # Read each entry in the dictionary and check for gaps and overlaps in the horizons
-            #
-            badCoHz = list()
-            badHorizons = list()
-
-            for cokey, vals in dHZ.items():
-                # Process each component
-                #
-                hzSum = 0                     # itialize sum of horizon thicknesses
-                lb = vals[0][0]               # initialize last bottom to the top of the first horizon
-                localphase = vals[0][5]
-
-                if localphase is None:
-                    localphase = ""
-
-                else:
-                    localphase = " " + localphase
-
-                for v in vals:
-                    # Process each horizon in the component record
-                    #
-                    # sum of bottom - top for each horizon
-                    hzSum += (v[1] - v[0])
-
-                            # Check for consistency between tops and bottoms for each consecutive horizon
-                    if v[0] != lb:
-                        diff = v[0] - lb
-                        badCoHz.append(str(cokey))
-                        badHorizons.append(v[3] + ", " + str(cokey) + ", " + v[4] + localphase + ", " + majcomp + ", " + str(v[2]) + ", " + str(v[0]) + ", " + str(diff) )
-
-                    lb = v[1] # update last bottom depth
-
-            del dHZ
-
         #PrintMsg(" \nWriting component restrictions to " + outputCR, 0)
         arcpy.SetProgressor ("step", "Writing component restriction data to " + outputCR + "...", 0, len(dCr), 1)
 
@@ -554,7 +499,7 @@ def CreateQueryTables(inputDB, outputDB, maxD):
 
 ## ===================================================================================
 def CreateOutputTableMu(theMuTable, depthList, dPct):
-    # Create the mapunit level table
+    # Create the Valu1 table (theMuTable). Probably should rename this variable.
     #
     try:
         # Create the output tables and add required fields
@@ -685,7 +630,7 @@ def CreateOutputTableMu(theMuTable, depthList, dPct):
 
 ## ===================================================================================
 def CreateOutputTableCo(theCompTable, depthList):
-    # Create the component level table
+    # Create the Co_Valu component level table (theCompTable). Probably should rename that variable.
     # The new input field is created using adaptive code from another script.
     #
     try:
@@ -3044,6 +2989,22 @@ def UpdateMetadata(outputWS, target, surveyInfo):
 def CreateValuTable(inputDB):
     # Run all processes from here
 
+## SSURGO_ValuTable.py
+## -------------------------------------------------
+##
+## List of query tables used in calculating Valu1
+## -----------------------------------------------
+## 1. Valu1 = theMuTable (inputDB)
+##
+## 2. Co_VALU = theCompTable
+##
+## 3. CreateQueryTables: HzTexture, QueryTable_CR, QueryTable_HZ, 
+##
+## 4. NCCPI_Table
+##
+## 5. mapunit, component, chorizon, chtexturegrp, chtexture, corestrictions
+##
+
     try:
         arcpy.overwriteOutput = True
 
@@ -3065,8 +3026,9 @@ def CreateValuTable(inputDB):
 
             with arcpy.da.SearchCursor(sdvTbl, ["nasisrulename"], where_clause=wc) as cur:
                 for rec in cur:
-                    #mainRuleName = rec[0].encode('ascii')
+
                     rule = rec[0].encode('ascii')
+                    
                     if not rule in ruleNames:
                         ruleNames.append(rule)
 

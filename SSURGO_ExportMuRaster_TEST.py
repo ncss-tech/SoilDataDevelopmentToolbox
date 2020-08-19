@@ -855,7 +855,7 @@ def CheckStatistics(outputRaster):
         return False
 
 ## ===================================================================================
-def UpdateMetadata(gdb, target, surveyInfo, iRaster):
+def UpdateMetadata(theGDB, target, surveyInfo, iRaster):
     #
     # Used for non-ISO metadata
     #
@@ -896,7 +896,7 @@ def UpdateMetadata(gdb, target, surveyInfo, iRaster):
         # Get replacement value for the search words
         #
         stDict = StateNames()
-        st = os.path.basename(gdb)[8:-4]
+        st = os.path.basename(theGDB)[8:-4]
 
         if st in stDict:
             # Get state name from the geodatabase
@@ -1091,10 +1091,10 @@ def CheckSpatialReference(inputFC):
                 return True
 
             else:
-                raise MyError, os.path.basename(gdb) + ": Input soil polygon layer does not have a valid coordinate system for gSSURGO"
+                raise MyError, os.path.basename(theGDB) + ": Input soil polygon layer does not have a valid coordinate system for gSSURGO"
 
         else:
-            raise MyError, os.path.basename(gdb) + ": Input soil polygon layer must have a projected coordinate system"
+            raise MyError, os.path.basename(theGDB) + ": Input soil polygon layer must have a projected coordinate system"
 
     except MyError, e:
         # Example: raise MyError, "This is an error message"
@@ -1106,7 +1106,7 @@ def CheckSpatialReference(inputFC):
         return False
 
 ## ===================================================================================
-def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
+def ConvertToRaster(target, mupolygonFC, iRaster, bTiled):
     # main function used for raster conversion
     try:
         #
@@ -1118,8 +1118,15 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
         env.overwriteOutput = True
         arcpy.env.compression = "LZ77"
         env.tileSize = "128 128"
-        desc = arcpy.Describe(gdb)
-        inputFC = os.path.join(gdb, mupolygonFC)
+        desc = arcpy.Describe(target)
+
+        if desc.dataType.lower() == "workspace":
+            theGDB = target
+            inputFC = os.path.join(theGDB, mupolygonFC)
+
+        elif desc.dataType.lower() == "featureclass":
+            inputFC = target
+            theGDB = os.path.dirname(target)
 
         # Make sure that the env.scratchGDB set, and not to Default.gdb. This causes problems for
         # some unknown reason.
@@ -1127,9 +1134,6 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
         if not SetScratch():
             raise MyError, "Unable to set scratch workspace"
 
-        # Create an ArcInfo workspace under the scratchFolder. Trying to prevent
-        # 99999 errors for PolygonToRaster on very large databases
-        #
         # turn off automatic Pyramid creation and Statistics calculation
         env.rasterStatistics = "NONE"
         env.pyramid = "PYRAMIDS 0"
@@ -1137,18 +1141,25 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
         # Need to check for dashes or spaces in folder names or leading numbers in database or raster names
 
         # create final raster in same workspace as input polygon featureclass
+        rasterExt = ""
 
-        if mupolygonFC.upper() == "MUPOLYGON":
-            outputRaster = os.path.join(gdb, "MapunitRaster_" + str(iRaster) + "m")
+        if desc.dataType.lower() == "workspace":
+            # input is a geodatabase, skip the extra bit in the tilename. Just convert the standard MUPOLYGON.
+            outputRaster = os.path.join(theGDB, "MapunitRaster_" + str(iRaster) + "m")
 
         else:
-            tileName = mupolygonFC.split("_")[1]
-            #PrintMsg(" \nRaster tileName: " + tileName, 1)
-            outputRaster = os.path.join(gdb, "MapunitRaster_" + tileName.lower() + "_" + str(iRaster) + "m")
+            # Input is a featureclass
+            if os.path.basename(inputFC).upper() == "MUPOLYGON":
+                outputRaster = os.path.join(theGDB, "MapunitRaster_" + str(iRaster) + "m")
 
-        PrintMsg(" \nBeginning raster conversion process for " + outputRaster, 0)
-        inputSA = os.path.join(gdb, "SAPOLYGON")
+            else:
+                tileName = inputFC[(inputFC.rfind("_") + 1):]
+                outputRaster = os.path.join(theGDB, "MapunitRaster_" + tileName.lower() + "_" + str(iRaster) + "m")
 
+        inputSA = os.path.join(theGDB, "SAPOLYGON")
+
+        if not arcpy.Exists(inputFC):
+            raise MyError, "Could not find input featureclass: " + inputFC
 
         # Check input layer's coordinate system to make sure horizontal units are meters
         # set the output coordinate system for the raster (neccessary for PolygonToRaster)
@@ -1169,13 +1180,14 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
 
         start = time.time()   # start clock to measure total processing time
         #begin = time.time()   # start clock to measure set up time
-        time.sleep(1)
+        time.sleep(2)
 
+        PrintMsg(" \nBeginning raster conversion process", 0)
 
         # Create Lookup table for storing MUKEY values and their integer counterparts
         #
         if bTiled in ["Large", "Small"]:
-            lu = os.path.join(gdb, "Lookup")
+            lu = os.path.join(theGDB, "Lookup")
 
         else:
             # bTiled = None
@@ -1281,8 +1293,6 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
         #
         # End of Lookup table code
 
-        # Match NLCD raster (snapraster)
-
         # Set output extent
         fullExtent = SnapToNLCD(inputFC, iRaster)
 
@@ -1349,20 +1359,7 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
                     priorityFld = os.path.basename(inputFC) + ".SPATIALVER"
 
                 # Use a priority field for tiled rasters to try and prevent NoData around edge
-
-                #ListEnv()
-                
-
-##                tmpFields = [fld.name.upper() for fld in arcpy.Describe(tmpPolys).fields]
-
-##                PrintMsg(" \ntmpPoly fields: " + ", ".join(tmpFields), 1)
-##                PrintMsg(" \nLookup Table: " + lu, 1)
-##                PrintMsg(" \nCurrent workspace: " + env.workspace, 1)
-##                PrintMsg(" \nScratchWorkspace: " + env.scratchWorkspace, 1)
-##                PrintMsg(" \nScratchFolder: " + env.scratchFolder, 1)
-##                PrintMsg(" \nScratchGDB: " + env.scratchGDB, 1)
-##                PrintMsg(" \nPolygonToRaster conversion inputs: \ntmpPolys: " + str(tmpPolys) + " \ntileRaster: " + str(tileRaster) + " \npriorityFld: " + str(priorityFld) + " \niRaster: " + str(iRaster) + " \nEnd of inputs", 1)
-                
+             
                 arcpy.PolygonToRaster_conversion(tmpPolys, "Lookup.CELLVALUE", tileRaster, "MAXIMUM_COMBINED_AREA", priorityFld, iRaster)  # Getting some NoData pixels
 
             del tileRaster
@@ -1401,16 +1398,7 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
             else:
                 priorityFld = os.path.basename(inputFC) + ".SPATIALVER"
 
-
-            #ListEnv()
-##            tmpFields = [fld.name.upper() for fld in arcpy.Describe(tmpPolys).fields]
-##            PrintMsg(" \ntmpPoly fields: " + ", ".join(tmpFields), 1)
-##            PrintMsg(" \nLookup Table: " + lu, 1)
-##            PrintMsg(" \nCurrent workspace: " + env.workspace, 1)
-##            PrintMsg(" \nScratchWorkspace: " + env.scratchWorkspace, 1)
-##            PrintMsg(" \nScratchFolder: " + env.scratchFolder, 1)
-##            PrintMsg(" \nScratchGDB: " + env.scratchGDB, 1)                
-##            PrintMsg(" \nPolygonToRaster conversion inputs: \ntmpPolys: " + str(tmpPolys) + " \noutputRaster: " + str(outputRaster) + " \npriorityFld: " + str(priorityFld) + " \niRaster: " + str(iRaster) + " \nEnd of inputs", 1)
+               
             arcpy.PolygonToRaster_conversion(tmpPolys, "Lookup.CELLVALUE", outputRaster, "MAXIMUM_COMBINED_AREA", priorityFld, iRaster) # No priority field for single raster
 
             # immediately delete temporary polygon layer to free up memory for the rest of the process
@@ -1448,7 +1436,7 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
                 PrintMsg("\tInitial attempt to create statistics failed, trying another method...", 0)
                 time.sleep(3)
 
-                if arcpy.Exists(os.path.join(gdb, "SAPOLYGON")):
+                if arcpy.Exists(os.path.join(theGDB, "SAPOLYGON")):
                     # Try running CalculateStatistics with an AOI to limit the area that is processed
                     # if we have to use SAPOLYGON as an AOI, this will be REALLY slow
                     #arcpy.CalculateStatistics_management (outputRaster, 1, 1, "", "OVERWRITE", os.path.join(outputWS, "SAPOLYGON") )
@@ -1480,7 +1468,8 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
                     cur.updateRow(rec)
 
             # Add attribute index (MUKEY) for raster
-            arcpy.AddIndex_management(outputRaster, ["mukey"], "Indx_RasterMukey")
+            if rasterExt == '':
+                arcpy.AddIndex_management(outputRaster, ["mukey"], "Indx_RasterMukey")
 
         else:
             err = "Missing output raster (" + outputRaster + ")"
@@ -1521,7 +1510,7 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
         #
         # Query the output SACATALOG table to get list of surveys that were exported to the gSSURGO
         #
-        saTbl = os.path.join(gdb, "sacatalog")
+        saTbl = os.path.join(theGDB, "sacatalog")
         expList = list()
 
         with arcpy.da.SearchCursor(saTbl, ("AREASYMBOL", "SAVEREST")) as srcCursor:
@@ -1533,11 +1522,11 @@ def ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled):
         arcpy.SetProgressorLabel("Updating metadata...")
 
         arcpy.SetProgressorLabel("Compacting database...")
-        bMetaData = UpdateMetadata(gdb, outputRaster, surveyInfo, iRaster)
+        bMetaData = UpdateMetadata(theGDB, outputRaster, surveyInfo, iRaster)
 
         arcpy.SetProgressorLabel("Compacting database...")
         PrintMsg("\tCompacting geodatabase...", 0)
-        arcpy.Compact_management(gdb)
+        arcpy.Compact_management(theGDB)
         arcpy.RefreshCatalog(os.path.dirname(outputRaster))
 
         if bTiled in ["Small", "Large"]:
@@ -1591,10 +1580,10 @@ from arcpy import env
 try:
     if __name__ == "__main__":
         # get parameters
-        gdb = arcpy.GetParameterAsText(0)            # required geodatabase containing MUPOLYGON featureclass
-        mupolyList = arcpy.GetParameterAsText(1)        # mupolygon featureclass
-        iRaster = arcpy.GetParameter(2)                 # output raster resolution
-        bTiled = arcpy.GetParameter(3)                  # boolean - split raster into survey-tiles and then mosaic
+        theGDB = arcpy.GetParameterAsText(0)                # required geodatabase containing MUPOLYGON featureclass
+        mupolygonFC = arcpy.GetParameterAsText(1)           # give user choice of mupolygon featureclass to convert
+        iRaster = arcpy.GetParameter(2)                     # output raster resolution
+        bTiled = arcpy.GetParameter(3)                      # boolean - split raster into survey-tiles and then mosaic
         
         env.overwriteOutput= True
 
@@ -1609,11 +1598,7 @@ try:
             raise MyError, "Required Spatial Analyst extension is not available"
 
         # Call function that does all of the work
-
-        for mupolygonFC in mupolyList.split(";"):
-            #PrintMsg(" \nProcessing " + mupolygonFC, 0)
-            bRaster = ConvertToRaster(gdb, mupolygonFC, iRaster, bTiled)
-            
+        bRaster = ConvertToRaster(theGDB, mupolygonFC, iRaster, bTiled)
         arcpy.CheckInExtension("Spatial")
 
 except MyError, e:

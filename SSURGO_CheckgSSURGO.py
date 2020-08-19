@@ -835,9 +835,10 @@ def GetSDMCount(theInputDB):
             arcpy.SetProgressorPosition()
 
             # COINTERP
+            # Beginning with FY2020, only some records are imported into gSSURGO
             tb1 = "cointerp"
             tb2 = "component"
-            sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cointerp.cokey )"
+            sQuery = Q + tb1.upper() + ", " + tb2.upper() + " WHERE component.mukey IN (" + subQuery + ") AND ( component.cokey = cointerp.cokey ) AND (cointerp.ruledepth = 0 OR cointerp.mrulekey = 54955)"
             arcpy.SetProgressorLabel("SDM pass number " + str(test) + " of " + str(iterNum) + ": " + tb1)
             cnt = QuerySDA(sQuery, tb1)
 

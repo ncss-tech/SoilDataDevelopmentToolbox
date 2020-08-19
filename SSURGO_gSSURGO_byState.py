@@ -489,6 +489,13 @@ def ClipMuPolygons(targetLayer, aoiLayer, outputClip, theTile):
             targetLayer = inputDesc.aliasName
             arcpy.MakeFeatureLayer_management(fcPath, targetLayer)
 
+        elif inputDesc.dataType.upper() == "FEATURELAYER":
+            # OK
+            pass
+
+        else:
+            raise MyError, "Clipping layer is a '" + inputDesc.dataType.upper() + "' which is not a member of [FEATURELAYER, FEATURECLASS]"
+
         arcpy.SelectLayerByLocation_management(targetLayer, "INTERSECT", extentLayer, "", "NEW_SELECTION")
 
         # Create temporary featureclass using selected target polygons
@@ -525,6 +532,7 @@ def ClipMuPolygons(targetLayer, aoiLayer, outputClip, theTile):
             time.sleep(1)
             arcpy.Rename_management(outputClip, fcPath)  # error here 'table already exists
             #outputClip = oldFC
+            arcpy.AlterAliasName(fcPath, "MUPOLYGON - " + theTile)
 
 
         if arcpy.Exists(fcPath) and outputGDB == inputGDB and arcpy.Exists(os.path.join(outputGDB, "mapunit")):
@@ -674,6 +682,15 @@ try:
                 if aoiLayer != "" and aoiField != "" and not theTile in ['Pacific Basin', 'Puerto Rico and U.S. Virgin Islands', 'Northern Mariana Islands', 'Federated States of Micronesia', 'Guam','Hawaii']:
                     # Apply selection to AOI layer
                     sql = "UPPER(" + aoiField + ") = '" + theTile.upper() + "'"
+                    aoiDesc = arcpy.Describe(aoiLayer)
+                    
+                    if aoiDesc.dataType.upper() != "FEATURELAYER":
+                        #aoiLayer = aoiDesc.baseName
+                        aoiLayer = arcpy.MakeFeatureLayer_management(aoiDesc.catalogPath, aoiDesc.baseName)
+
+                    #else:
+                    #    PrintMsg(" \n\taoiLayer is a " + aoiDesc.dataType, 1)
+
                     arcpy.SelectLayerByAttribute_management(aoiLayer, "NEW_SELECTION", sql)
                     bClipped = ClipMuPolygons(os.path.join(outputWS, "MUPOLYGON"), aoiLayer, os.path.join(outputWS, "MUPOLYGON_" + stAbbrev), theTile)
 

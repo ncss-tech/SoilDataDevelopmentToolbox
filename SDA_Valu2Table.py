@@ -1,6 +1,6 @@
-# SDA_Valu1Table.py
+# SDA_Valu2Table.py
 #
-# Steve Peaslee, National Soil Survey Center, August 2016
+# Steve Peaslee, National Soil Survey Center, November 2019
 #
 # Purpose:  Queries Soil Data Access Tabular service for National Valu1 table data and aggregate to the map unit level
 
@@ -166,12 +166,14 @@ def AttributeRequest(sdaURL, outputTable, sQuery):
         columnNames = dataList.pop(0)
         columnInfo = dataList.pop(0)
 
-        #PrintMsg(" \n\tImporting attribute data to " + os.path.basename(outputTable) + "...", 0)
-        #PrintMsg(" \nColumn Names: " + str(columnNames), 1)
+        PrintMsg(" \n\tImporting attribute data to " + os.path.basename(outputTable) + "...", 0)
+        PrintMsg(" \nColumn names in SDA data: \n" + str(columnNames), 1)
 
         # Create new table to hold data
-        if not arcpy.Exists(outputTable):
-            outputTable = CreateNewTable(outputTable, columnNames, columnInfo)
+        if arcpy.Exists(outputTable):
+            arcpy.Delete_management(outputTable)
+            
+        outputTable = CreateNewTable(outputTable, columnNames, columnInfo)
 
         if "mukey" in columnNames:
             keyIndx = columnNames.index("mukey")
@@ -182,7 +184,10 @@ def AttributeRequest(sdaURL, outputTable, sQuery):
         else:
             keyIndx = 0
 
-        #PrintMsg(" \n" + outputTable + " uses key field: " + columnNames[keyIndx], 1)
+        # Look at fields in new table
+        newFields = [fld.name for fld in arcpy.Describe(outputTable).fields]
+        
+        PrintMsg(" \n" + outputTable + " fields: " + ",".join(newFields), 1)
 
         with arcpy.da.InsertCursor(outputTable, columnNames) as cur:
             for rec in dataList:
@@ -415,8 +420,8 @@ def CreateOutputTableMu(valuTable, depthList, dPct, mukeyList):
 
             # Add fields for root zone depth and root zone available water supply
             arcpy.AddField_management(valuTable, "pctearthmc", "SHORT", "", "", "")
-            arcpy.AddField_management(valuTable, "rootznemc", "SHORT", "", "", "")
-            arcpy.AddField_management(valuTable, "rootznaws", "SHORT", "", "", "")
+            arcpy.AddField_management(valuTable, "rootznemc", "LONG", "", "", "")
+            arcpy.AddField_management(valuTable, "rootznaws", "LONG", "", "", "")
 
             # Add field for droughty soils
             arcpy.AddField_management(valuTable, "droughty", "SHORT", "", "", "")
@@ -434,13 +439,16 @@ def CreateOutputTableMu(valuTable, depthList, dPct, mukeyList):
         # Populate mukey and mapunit-sum-of-comppct_r values for each survey area
         outcur = arcpy.da.InsertCursor(valuTable, ["mukey", "musumcpct"])
 
+        PrintMsg(" \nPopulating mutable with mukey and sum of comppct_r", 1)
+
         for mukey in mukeyList:
+            #PrintMsg("\t" + str(mukey), 1)
             try:
-                comppct = dPct[mukey][0]
+                comppct = dPct[str(mukey)][0]
             except:
                 comppct = 0
 
-            outcur.insertRow([mukey, comppct])
+            outcur.insertRow([str(mukey), comppct])
 
         return True
 
@@ -454,26 +462,26 @@ def CreateOutputTableMu(valuTable, depthList, dPct, mukeyList):
         return False
 
 ## ===================================================================================
-def CreateOutputTableCo(theCompTable, depthList):
-    # Create the component level table
+def CreateOutputTableCo(coValu, depthList):
+    # Create the CoValu table as coValu. Probably should rename this component level ratings table
     # The new input field is created using adaptive code from another script.
     #
     try:
-        #PrintMsg(" \nCreating new output table (" + os.path.basename(theCompTable) + ") for component level data", 0)
+        #PrintMsg(" \nCreating new output table (" + os.path.basename(coValu) + ") for component level data", 0)
 
-        outputDB = os.path.dirname(theCompTable)
+        outputDB = os.path.dirname(coValu)
 
-        if not arcpy.Exists(theCompTable):
+        if not arcpy.Exists(coValu):
 
-            arcpy.CreateTable_management(os.path.dirname(theCompTable), os.path.basename(theCompTable))
+            arcpy.CreateTable_management(os.path.dirname(coValu), os.path.basename(coValu))
 
             # Add fields appropriate for the component level restrictions
             # mukey,cokey, compName, localphase, compPct, comppct, resdept, restriction
 
-            arcpy.AddField_management(theCompTable, "COKEY", "TEXT", "", "", "30", "COKEY")
-            arcpy.AddField_management(theCompTable, "COMPNAME", "TEXT", "", "", "60", "COMPNAME")
-            arcpy.AddField_management(theCompTable, "LOCALPHASE", "TEXT", "", "", "40", "LOCALPHASE")
-            arcpy.AddField_management(theCompTable, "COMPPCT_R", "SHORT", "", "", "", "COMPPCT_R")
+            arcpy.AddField_management(coValu, "COKEY", "TEXT", "", "", "30", "COKEY")
+            arcpy.AddField_management(coValu, "COMPNAME", "TEXT", "", "", "60", "COMPNAME")
+            arcpy.AddField_management(coValu, "LOCALPHASE", "TEXT", "", "", "40", "LOCALPHASE")
+            arcpy.AddField_management(coValu, "COMPPCT_R", "SHORT", "", "", "", "COMPPCT_R")
 
             for rng in depthList:
                 # Create the AWS fields in a loop
@@ -481,7 +489,7 @@ def CreateOutputTableCo(theCompTable, depthList):
                 td = rng[0]
                 bd = rng[1]
                 awsField = "AWS" + str(td) + "_" + str(bd)
-                arcpy.AddField_management(theCompTable, awsField, "FLOAT", "", "", "", awsField)
+                arcpy.AddField_management(coValu, awsField, "FLOAT", "", "", "", awsField)
 
 
             for rng in depthList:
@@ -490,9 +498,9 @@ def CreateOutputTableCo(theCompTable, depthList):
                 td = rng[0]
                 bd = rng[1]
                 awsField = "TK" + str(td) + "_" + str(bd) + "A"
-                arcpy.AddField_management(theCompTable, awsField, "FLOAT", "", "", "", awsField)
+                arcpy.AddField_management(coValu, awsField, "FLOAT", "", "", "", awsField)
 
-            arcpy.AddField_management(theCompTable, "MUSUMCPCTA", "SHORT", "", "", "")
+            arcpy.AddField_management(coValu, "MUSUMCPCTA", "SHORT", "", "", "")
 
             for rng in depthList:
                 # Create the SOC fields in a loop
@@ -500,7 +508,7 @@ def CreateOutputTableCo(theCompTable, depthList):
                 td = rng[0]
                 bd = rng[1]
                 awsField = "SOC" + str(td) + "_" + str(bd)
-                arcpy.AddField_management(theCompTable, awsField, "FLOAT", "", "", "")
+                arcpy.AddField_management(coValu, awsField, "FLOAT", "", "", "")
 
             for rng in depthList:
                 # Create the rest of the SOC thickness fields in a loop
@@ -508,27 +516,27 @@ def CreateOutputTableCo(theCompTable, depthList):
                 td = rng[0]
                 bd = rng[1]
                 awsField = "TK" + str(td) + "_" + str(bd) + "S"
-                arcpy.AddField_management(theCompTable, awsField, "FLOAT", "", "", "")
-                arcpy.AddField_management(theCompTable, "MUSUMCPCTS", "SHORT", "", "", "")
+                arcpy.AddField_management(coValu, awsField, "FLOAT", "", "", "")
+                arcpy.AddField_management(coValu, "MUSUMCPCTS", "SHORT", "", "", "")
 
             # Root Zone and root zone available water supply
-            arcpy.AddField_management(theCompTable, "PCTEARTHMC", "SHORT", "", "", "")
-            arcpy.AddField_management(theCompTable, "ROOTZNEMC", "SHORT", "", "", "")
-            arcpy.AddField_management(theCompTable, "ROOTZNAWS", "SHORT", "", "", "")
-            arcpy.AddField_management(theCompTable, "RESTRICTION", "TEXT", "", "", "254", "RESTRICTION")
+            arcpy.AddField_management(coValu, "PCTEARTHMC", "SHORT", "", "", "")
+            arcpy.AddField_management(coValu, "ROOTZNEMC", "LONG", "", "", "")
+            arcpy.AddField_management(coValu, "ROOTZNAWS", "LONG", "", "", "")
+            arcpy.AddField_management(coValu, "RESTRICTION", "TEXT", "", "", "254", "RESTRICTION")
 
             # Droughty soils
-            arcpy.AddField_management(theCompTable, "DROUGHTY", "SHORT", "", "", "")
+            arcpy.AddField_management(coValu, "DROUGHTY", "SHORT", "", "", "")
 
             # Add field for potential wetland soils
-            arcpy.AddField_management(theCompTable, "PWSL1POMU", "SHORT", "", "", "")
+            arcpy.AddField_management(coValu, "PWSL1POMU", "SHORT", "", "", "")
 
             # Add primary key field
-            arcpy.AddField_management(theCompTable, "MUKEY", "TEXT", "", "", "30", "MUKEY")
+            arcpy.AddField_management(coValu, "MUKEY", "TEXT", "", "", "30", "MUKEY")
 
             # add attribute indexes for key fields
-            arcpy.AddIndex_management(theCompTable, "MUKEY", "Indx_Res2Mukey", "NON_UNIQUE", "NON_ASCENDING")
-            arcpy.AddIndex_management(theCompTable, "COKEY", "Indx_ResCokey", "UNIQUE", "NON_ASCENDING")
+            arcpy.AddIndex_management(coValu, "MUKEY", "Indx_Res2Mukey", "NON_UNIQUE", "NON_ASCENDING")
+            arcpy.AddIndex_management(coValu, "COKEY", "Indx_ResCokey", "UNIQUE", "NON_ASCENDING")
 
         # populate component level table with mukey and component data
         sqlClause = ("DISTINCT", "ORDER BY cokey")
@@ -542,7 +550,7 @@ def CreateOutputTableCo(theCompTable, depthList):
         with arcpy.da.SearchCursor(hzTable, ["mukey", "cokey", "compname", "localphase", "comppct_r"], sql_clause=sqlClause) as incur:
             #incur.reset()
             # Populate component-level table from the horizon query table
-            outcur = arcpy.da.InsertCursor(theCompTable, ["mukey", "cokey", "compname", "localphase", "comppct_r"])
+            outcur = arcpy.da.InsertCursor(coValu, ["mukey", "cokey", "compname", "localphase", "comppct_r"])
 
             for inrec in incur:
                 coCnt += 1
@@ -714,7 +722,7 @@ def CheckBulkDensity(sand, silt, clay, bd, mukey, cokey):
         return False
 
 ## ===================================================================================
-def CalcRZDepth(db, theCompTable, maxD, dPct, dCR):
+def CalcRZDepth(db, coTable, hzTable, maxD, dPct, dCR):
     #
     # Look at soil horizon properties to adjust the root zone depth.
     # This is in addition to the standard component restrictions
@@ -775,13 +783,20 @@ def CalcRZDepth(db, theCompTable, maxD, dPct, dCR):
         whereClause = "compkind <> 'Miscellaneous area' and compkind is not Null and majcompflag = 'Yes'"
 
         sqlClause = (None, "ORDER BY mukey, comppct_r DESC, cokey, hzdept_r ASC")
+
+
+        # CURRENT PROBLEM: missing texture and lieutex 
         curFlds = ["mukey", "cokey", "compname", "compkind", "localphase", "comppct_r", "taxorder", "taxsubgrp", "hzname", "desgnmaster", "hzdept_r", "hzdepb_r", "sandtotal_r", "silttotal_r", "claytotal_r", "om_r", "dbthirdbar_r", "ph1to1h2o_r", "ec_r", "awc_r", "texture", "lieutex"]
+        # mukey, musymbol, muname, cokey, compname, comppct_r, majcompflag, compkind, localphase, otherph, taxorder, taxsubgrp, hydricrating,
+        # drainagecl, hzname, desgnmaster, chkey, hzdept_r, hzdepb_r, awc_r, ksat_r, sandtotal_r, silttotal_r, claytotal_r, vfsand, om_r,
+        # dbthirdbar_r, ph1to1h2o_r, ec_r, fragvol
         resList = ['Lithic bedrock','Paralithic bedrock','Densic bedrock', 'Fragipan', 'Duripan', 'Sulfuric']
 
         lastCokey = "xxxx"
         lastMukey = 'xxxx'
 
         # Display status of processing input table containing horizon data and component restrictions
+        PrintMsg(" \nReading table (" + os.path.basename(hzTable) + " using fields: " + ",".join(curFlds), 1)
 
         with arcpy.da.SearchCursor(hzTable, curFlds, where_clause=whereClause, sql_clause=sqlClause) as cur:
             # Reading horizon-level data
@@ -944,8 +959,318 @@ def GetCoRestrictions(crTable, maxD, resList):
         errorMsg()
         return dict()
 
+
 ## ===================================================================================
-def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, valuTable, dRestrictions, maxD, dPct):
+#def CalcRZAWS(inputDB, outputDB, td, bd, coValu, theMuTable, dRestrictions, maxD, dPct):
+def CalcRZAWS(db, outputDB, td, bd, coValu, muTable, hzTable, valuTable, dRestrictions, maxD, dPct):
+    #         inputDB, outputDB, td, bd, coValu, hzTable, valuTable, dRestrictions, maxD, dPct
+    # Create a component-level summary table
+    # Calculate mapunit-weighted average for each mapunit and write to a mapunit-level table
+    # Need to filter out compkind = 'Miscellaneous area' for RZAWS
+    # dRestrictions[cokey] = [mukey, compName, localPhase, compPct, resDept, restriction]
+
+    try:
+        import decimal
+
+        env.workspace = outputDB
+
+        # Using the same component horizon table that has been
+        #queryTbl = os.path.join(outputDB, "QueryTable_Hz")
+
+        numRows = int(arcpy.GetCount_management(hzTable).getOutput(0))
+
+        PrintMsg(" \n\tCalculating Root Zone AWS for " + str(td) + " to " + str(bd) + "cm...", 0)
+
+        # hzTable fields
+        qFieldNames = ["mukey", "cokey", "comppct_r",  "compname", "localphase", "majcompflag", "compkind", "taxorder", "taxsubgrp", "desgnmaster", "om_r", "awc_r", "hzdept_r", "hzdepb_r", "texture", "lieutex"]
+
+        # Open edit session on geodatabase to allow multiple update cursors
+        with arcpy.da.Editor(db) as edit:
+
+            # Output fields for root zone and droughty
+            # Was writing to muTable, but these fields don't exist there. Switching to Valu1 table..
+            muFieldNames = ["mukey", "pctearthmc", "rootznemc", "rootznaws", "droughty"]
+            #muCursor = arcpy.da.UpdateCursor(muTable, muFieldNames)
+            muCursor = arcpy.da.UpdateCursor(valuTable, muFieldNames)
+
+            # Open component-level output table for updates
+            #coCursor = arcpy.da.InsertCursor(coValu, coFieldNames)
+            coFieldNames = ["mukey", "cokey", "compname", "localphase", "comppct_r", "pctearthmc", "rootznemc", "rootznaws", "restriction"]
+            #coCursor = arcpy.da.UpdateCursor(coTable, coFieldNames)
+            coCursor = arcpy.da.UpdateCursor(coValu, coFieldNames)
+
+            # Process query table using cursor, write out horizon data for each major component
+            sqlClause = [None, "order by mukey, comppct_r DESC, cokey, hzdept_r ASC"]
+
+            inCur = arcpy.da.SearchCursor(hzTable, qFieldNames, sql_clause=sqlClause)
+
+            arcpy.SetProgressor("step", "Reading hzTable...",  0, numRows, 1)
+
+            # Create dictionaries to handle the mapunit and component summaries
+            dMu = dict()
+            dComp = dict()
+
+            # I may have to pull the sum of component percentages out of this function?
+            # It seems to work OK for the earthy-major components, but will not work for
+            # the standard AWS calculations. Those 'Miscellaneous area' components with no horizon data
+            # are excluded from the Query table because it does not support Outer Joins.
+            #
+            mCnt = 0
+            #PrintMsg("\tmukey, cokey, comppct, top, bottom, resdepth, thickness, aws", 0)
+
+            # TEST: keep list of cokeys as a way to track the top organic horizons
+            skipList = list()
+
+            for rec in inCur:
+                # read each horizon-level input record from QueryTable_HZ ...
+                #
+                mukey, cokey, compPct, compName, localPhase, mjrFlag, cKind, taxorder, taxsubgrp, desgnmaster, om, awc, top, bot, texture, lieutex = rec
+
+                if mjrFlag == "Yes" and cKind != "Miscellaneous area" and cKind is not None:
+
+                    # For major-earthy components
+                    # Get restriction information from dictionary
+
+                    # For non-Miscellaneous areas with no horizon data, set hzdepth values to zero so that
+                    # PWSL and Droughty will get populated with zeros instead of NULL.
+                    if top is None and bot is None:
+
+                        if not cokey in dComp:
+                            dComp[cokey] = mukey, compName, localPhase, compPct, 0, 0, ""
+
+                    try:
+                        # mukey, compName, localPhase, compPct, resDept, restriction
+                        # rDepth is the component restriction depth or calculated horizon restriction from CalcRZDepth1 function
+
+                        # mukey, compName, localPhase, compPct, resDept, restriction] = dRestrictions
+                        d1, d2, d3, d4, rDepth, restriction = dRestrictions[cokey]
+                        cBot = min(rDepth, bot, maxD)  # 01-05-2015 Added maxD because I found 46 CONUS mapunits with a ROOTZNEMC > 150
+
+                        #if mukey == tmukey and rDepth != 150:
+                        #    PrintMsg("\tRestriction, " + str(mukey) + ", " + str(cokey) + ", " + str(rDepth) + ", " + str(restriction), 1)
+
+                    except:
+                        #errorMsg()
+                        cBot = min(maxD, bot)
+                        restriction = []
+                        rDepth = maxD
+
+                        #if mukey == tmukey:
+                        #    PrintMsg("RestrictionError, " + str(mukey) + ", " + str(cokey) + ", " + str(rDepth) + ", " + str(restriction), 1)
+
+                    bOrganic = CheckTexture(mukey, cokey, desgnmaster, om, texture, lieutex, taxorder, taxsubgrp)
+
+                    #if mukey == tmukey and bOrganic:
+                    #    PrintMsg("Organic: " + str(mukey) + ", " + str(cokey) )
+
+
+                    # fix awc_r to 2 decimal places
+                    if awc is None:
+                        awc = 0.0
+
+                    else:
+                        awc = round(awc, 2)
+
+                    # Reasons for skipping RZ calculations on a horizon:
+                    #   1. Desgnmaster = O, L and Taxorder != Histosol and is at the surface
+                    #   2. Do I need to convert null awc values to zero?
+                    #   3. Below component restriction or horizon restriction level
+
+                    if bOrganic and not cokey in skipList:
+                        # Organic surface horizon - Not using this horizon in the calculations
+                        useHz = False
+
+                        #if mukey == tmukey:
+                        #    PrintMsg("Organic, " + str(mukey) + ", " + str(cokey) + ", " + str(compPct) + ", " + str(desgnmaster) + ", " + taxorder  + ", " + str(top) + ", " + str(bot) + ", " + str(cBot)  + ", " + str(awc) + ", " + str(useHz), 1)
+
+                    else:
+                        # Mineral, Histosol, buried Organic, Bedrock or there is a horizon restriction (EC, pH - Using this horizon in the calculations
+                        useHz = True
+                        skipList.append(cokey)
+
+                        # Looking for problems
+                        #if mukey == tmukey:
+                        #    PrintMsg("Mineral, " + str(mukey) + ", " + str(cokey)  + ", " + str(compPct) + ", " + str(desgnmaster) + ", " + str(taxorder) + ", " + str(top) + ", " + str(bot) + ", " + str(cBot) + ", " + str(awc)  + ", " + str(useHz), 1)
+
+                        # Attempt to fix component with a surface-level restriction that might be in an urban soil
+                        if not cokey in dComp and cBot == 0:
+                            dComp[cokey] = mukey, compName, localPhase, compPct, 0, 0, restriction
+
+                            # Looking for problems
+                            #if mukey == tmukey:
+                            #    PrintMsg("MUKEY2: " + str(mukey) + ", " + str(top) + ", " + str(bot) + ", " + str(cBot) + ", " + str(useHz), 1)
+
+                    if top < cBot and useHz == True:
+                        # If the top depth is less than the bottom depth, proceed with the calculation
+                        # Calculate sum of horizon thickness and sum of component ratings for all horizons above bottom
+                        hzT = cBot - top
+                        aws = float(hzT) * float(awc) * 10.0
+
+                        # Looking for problems
+                        #if mukey == tmukey:
+                        #    PrintMsg("MUKEY3: " + str(mukey) + ", " + str(top) + ", " + str(bot) + ", " + str(cBot) + ", " + str(useHz), 1)
+
+
+                        if cokey in dComp:
+                            # accumulate total thickness and total rating value by adding to existing component values
+                            mukey, compName, localPhase, compPct, dHzT, dAWS, restriction = dComp[cokey]
+                            dAWS = dAWS + aws
+                            dHzT += hzT
+
+                            dComp[cokey] = mukey, compName, localPhase, compPct, dHzT, dAWS, restriction
+
+                        else:
+                            # Create initial entry for this component using the first horizon
+                            dComp[cokey] = mukey, compName, localPhase, compPct, hzT, aws, restriction
+
+                    else:
+                        # Do not include this horizon in the rootzone calculations
+                        pass
+
+                else:
+                    # Not a major-earthy component, so write out everything BUT rzaws-related data (last values)
+                    dComp[cokey] = mukey, compName, localPhase, compPct, None, None, None, None
+
+                arcpy.SetProgressorPosition()
+
+                # end of processing major-earthy components
+
+            arcpy.ResetProgressor()
+
+            # get the total number of major-earthy components from the dictionary count
+            iComp = len(dComp)
+
+            # Read through the component-level data and summarize to the mapunit level
+
+            if iComp > 0:
+                #PrintMsg(" \nSaving component average RZAWS to table... (" + str(iComp) + ")", 0 )
+                arcpy.SetProgressor("step", "Saving component data...",  0, iComp, 1)
+                iCo = 0 # count component records written to theCompTbl
+
+                for corec in coCursor:
+                    mukey, cokey, compName, localPhase, compPct, pctearthmc, rDepth, aws, restrictions = corec
+
+                    try:
+                        # get sum of component percent for the mapunit
+                        pctearthmc = float(dPct[mukey][1])   # sum of comppct_r for all major components Test 2014-10-07
+
+                        # get rootzone data from dComp
+                        mukey1, compName1, localPhase1, compPct1, hzT, awc, restriction = dComp[cokey]
+
+                    except:
+                        pctearthmc = 0
+                        hzT = None
+                        rDepth = None
+                        awc = None
+                        restriction = []
+
+                    # calculate component percentage adjustment
+                    if pctearthmc > 0 and not awc is None:
+                        # If there is no data for any of the component horizons, could end up with 0 for
+                        # sum of comppct_r
+
+                        adjCompPct = float(compPct) / float(pctearthmc)
+
+                        # adjust the rating value down by the component percentage and by the sum of the usable horizon thickness for this component
+                        aws = adjCompPct * float(awc) # component rating
+
+                        if restriction is None:
+                            restrictions = ''
+
+                        elif len(restriction) > 0:
+                            restrictions = ",".join(restriction)
+
+                        else:
+                            restrictions = ''
+
+                        corec = mukey, cokey, compName, localPhase, compPct, pctearthmc, hzT, aws, restrictions
+
+                        coCursor.updateRow(corec)
+                        iCo += 1
+
+                        # Weight hzT for ROOTZNEMC by component percent
+                        hzT = (float(hzT) * float(compPct) / pctearthmc)
+
+                        if mukey in dMu:
+                            val1, val2, val3 = dMu[mukey]
+                            dMu[mukey] = pctearthmc, (hzT + val2), (aws + val3)
+
+                        else:
+                            # first entry for map unit ratings
+                            dMu[mukey] = pctearthmc, hzT, aws
+
+                        # PrintMsg("Mapunit " + mukey + ":" + cokey + "  " + str(dMu[mukey]), 1)
+
+                    else:
+                        # Populate component level record for a component with no AWC
+                        corec = mukey, cokey, compName, localPhase, compPct, None, None, None, ""
+                        coCursor.updateRow(corec)
+                        iCo += 1
+
+                    arcpy.SetProgressorPosition()
+
+                arcpy.ResetProgressor()
+
+            else:
+                raise MyError, "No component data in dictionary dComp"
+
+            if len(dMu) > 0:
+                PrintMsg(" \n\tSaving map unit average RZAWS to table...(" + str(len(dMu)) + ")", 0 )
+
+            else:
+                raise MyError, "No map unit information in dictionary dMu"
+
+            # Save root zone available water supply and droughty soils to output map unit table
+            #
+            PrintMsg(" \nUpdating muTable: " + muTable, 1)
+            
+            for murec in muCursor:
+                mukey, pctearthmc, rootznemc, rootznaws, droughty = murec
+
+                try:
+                    rec = dMu[mukey]
+                    pct, rootznemc, rootznaws = rec
+                    pctearthmc = dPct[mukey][1]
+
+                    if rootznemc > 150.0:
+                        # This is a bandaid for components that have horizon problems such
+                        # overlapping that causes the calculated total to exceed 150cm.
+                        rootznemc = 150.0
+
+                    rootznaws = round(rootznaws, 0)
+                    rootznemc = round(rootznemc, 0)
+
+                    if rootznaws > 152:
+                        droughty = 0
+
+                    else:
+                        droughty = 1
+
+                except:
+                    pctearthmc = 0
+                    rootznemc = None
+                    rootznaws = None
+
+                murec = mukey, pctearthmc, rootznemc, rootznaws, droughty
+                muCursor.updateRow(murec)
+
+
+            PrintMsg("", 0)
+
+            return True
+
+    except MyError, e:
+        # Example: raise MyError("this is an error message")
+        PrintMsg(str(e) + " \n", 2)
+        return False
+
+    except:
+        errorMsg()
+        return False
+
+
+## ===================================================================================
+def CalcRZAWS_NeedsFix(inputDB, outputDB, td, bd, coValu, hzTable, valuTable, dRestrictions, maxD, dPct):
     # Create a component-level summary table
     # Calculate mapunit-weighted average for each mapunit and write to a mapunit-level table
     # Need to filter out compkind = 'Miscellaneous area' for RZAWS
@@ -981,9 +1306,9 @@ def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, valuTable, dRestrictions,
             muCursor = arcpy.da.UpdateCursor(valuTable, muFieldNames)
 
             # Open component-level output table for updates
-            #coCursor = arcpy.da.InsertCursor(theCompTable, coFieldNames)
+            #coCursor = arcpy.da.InsertCursor(coValu, coFieldNames)
             coFieldNames = ["mukey", "cokey", "compname", "localphase", "comppct_r", "pctearthmc", "rootznemc", "rootznaws", "restriction"]
-            coCursor = arcpy.da.UpdateCursor(theCompTable, coFieldNames)
+            coCursor = arcpy.da.UpdateCursor(coValu, coFieldNames)
 
             # Process query table using cursor, write out horizon data for each major component
             sqlClause = [None, "order by mukey, comppct_r DESC, cokey, hzdept_r ASC"]
@@ -1155,10 +1480,13 @@ def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, valuTable, dRestrictions,
                         # sum of comppct_r
 
                         adjCompPct = float(compPct) / float(pctearthmc)
+                        
+                        
 
                         # adjust the rating value down by the component percentage and by the sum of the usable horizon thickness for this component
                         #aws = round(adjCompPct * float(awc), 2) # component volume
                         aws = float(adjCompPct) * float(awc) # component volume
+                        PrintMsg(str(mukey) + ":" + str(cokey) + "\t" + str(compPct1) + ", " + str(round(adjCompPct, 2)), 1)
 
                         if restriction is None:
                             restrictions = ''
@@ -1234,7 +1562,14 @@ def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, valuTable, dRestrictions,
                     rootznaws = None
 
                 murec = mukey, pctearthmc, rootznemc, rootznaws, droughty
-                muCursor.updateRow(murec)
+                try:
+                    muCursor.updateRow(murec)
+
+                except:
+                    PrintMsg("RootzoneAWS for mukey " + str(mukey) + ": " + str(rootznaws), 1)
+                    errorMsg()
+                    raise MyError, ""
+                    #
 
             PrintMsg("", 0)
 
@@ -1250,7 +1585,8 @@ def CalcRZAWS(inputDB, outputDB, td, bd, theCompTable, valuTable, dRestrictions,
         return False
 
 ## ===================================================================================
-def CalcAWS(db, theCompTable, valuTable, dPct, depthList):
+def CalcAWS(db, coValu, valuTable, hzTable, dPct, depthList):
+    # 
     # Create a component-level summary table
     # Calculate the standard mapunit-weighted available water supply for each mapunit and
     # add it to the map unit-level table.
@@ -1281,8 +1617,6 @@ def CalcAWS(db, theCompTable, valuTable, dPct, depthList):
 
             # Open output table Mu...All in write mode
             muFieldNames = ["MUKEY", "MUSUMCPCTA", "AWS" + str(td) + "_" + str(bd), "TK" + str(td) + "_" + str(bd) + "A"]
-            #muFieldNames = ["MUKEY", "AWS" + str(td) + "_" + str(bd)]
-            #coFieldNames = ["COKEY", "AWS" + str(td) + "_" + str(bd)]
             coFieldNames = ["COKEY", "AWS" + str(td) + "_" + str(bd), "TK" + str(td) + "_" + str(bd) + "A"]
 
             # Create dictionaries to handle the mapunit and component summaries
@@ -1303,7 +1637,7 @@ def CalcAWS(db, theCompTable, valuTable, dPct, depthList):
 
                 # Open output component-level table in write mode
                 # MUKEY, AWS
-                coCursor = arcpy.da.UpdateCursor(theCompTable, coFieldNames)
+                coCursor = arcpy.da.UpdateCursor(coValu, coFieldNames)
 
                 # Process query table using a searchcursor, write out horizon data for each component
                 # At this time, almost all components are being used! There is no filter.
@@ -1331,8 +1665,17 @@ def CalcAWS(db, theCompTable, valuTable, dPct, depthList):
                                 # Create initial entry for this component using the first horizon CHK
                                 dComp[str(cokey)] = (mukey, compPct, hzT, aws)
 
+                                # Update sum of comppct for dMu. Not sure why I need to do this.
+                                if not mukey in dMu:
+                                    dMu[mukey] = (compPct, 0, 0)
+
+                                else:
+                                    val0 = dMu[mukey][0]
+                                    dMu[mukey] = (val0 + compPct, 0, 0)
+
                             else:
                                 # accumulate total thickness and total rating value by adding to existing component values  CHK
+                                # comppct does not change
                                 mukey, compName, dHzT, dAWS = dComp[str(cokey)]
                                 dAWS = dAWS + aws
                                 dHzT = dHzT + hzT
@@ -1351,6 +1694,7 @@ def CalcAWS(db, theCompTable, valuTable, dPct, depthList):
                         cokey = str(corec[0])
 
                         if cokey in dComp:
+                            # get component-level values...
                             dRec = dComp[cokey]
                             mukey, compPct, hzT, awc = dRec
                             mukey = str(mukey)  # not sure if I need this
@@ -1393,12 +1737,15 @@ def CalcAWS(db, theCompTable, valuTable, dPct, depthList):
 
                                 # Summarize component values to the mapunit
                                 if mukey in dMu:
-                                    val1, val2, val3 = dMu[mukey]
-                                    compPct = compPct + val1  # problem g
+                                    #val1, val2, val3 = dMu[mukey]
+                                    compPct, val2, val3 = dMu[mukey]
+                                    #compPct = compPct + val1  # problem here. This appears to be tripling the comppct
+                                    #compPct = adjCompPct + val1 #???
                                     hzT = hzT + val2
                                     aws = aws + val3
 
                                 dMu[mukey] = (compPct, hzT, aws)
+                                #dMu[mukey] = (sumCompPct, hzT, aws)  # get comppct from dPct
 
                 else:
                     PrintMsg("\t" + Number_Format(iComp, 0, True) + " components for "  + str(td) + " - " + str(bd) + "cm", 1)
@@ -1412,10 +1759,10 @@ def CalcAWS(db, theCompTable, valuTable, dPct, depthList):
                         compPct, hzT, aws = dMu[mukey]
                         murec[1] = compPct
                         #murec[2] = round(aws, 2)
-                        murec[2] = aws
+                        murec[2] = round(aws, 2)
                         murec[3] = round(hzT, 2)
                         muCursor.updateRow(murec)
-                        #PrintMsg("\tAWS for " + str(td) + " to " + str(bd) + "cm " + mukey + ": " + str(murec), 1)
+                        PrintMsg("\tAWS for " + str(td) + " to " + str(bd) + "cm " + mukey + ": " + str(murec), 1)
 
 
         if len(missingList) > 0:
@@ -1434,7 +1781,7 @@ def CalcAWS(db, theCompTable, valuTable, dPct, depthList):
         return False
 
 ## ===================================================================================
-def CalcSOC(db, theCompTable, valuTable, dPct, dFrags, depthList, dRestrictions, maxD):
+def CalcSOC(db, coValu, valuTable, hzTable, dPct, dFrags, depthList, dRestrictions, maxD):
     # Create a component-level summary table
     # Calculate the standard mapunit-weighted available SOC for each mapunit and
     # add it to the map unit-level table
@@ -1490,7 +1837,7 @@ def CalcSOC(db, theCompTable, valuTable, dPct, dFrags, depthList, dRestrictions,
 
                 coFieldNames = ["COKEY", "SOC" + str(td) + "_" + str(bd), "TK" + str(td) + "_" + str(bd) + "S"]
                 #coFieldNames = ["COKEY", "SOC" + str(td) + "_" + str(bd)]
-                coCursor = arcpy.da.UpdateCursor(theCompTable, coFieldNames)
+                coCursor = arcpy.da.UpdateCursor(coValu, coFieldNames)
 
                 # Process query table using a searchcursor, write out horizon data for each component
                 # At this time, almost all components are being used! There is no filter.
@@ -1559,6 +1906,15 @@ def CalcSOC(db, theCompTable, valuTable, dPct, dFrags, depthList, dRestrictions,
                                 # Create initial entry for this component using the first horizon CHK
                                 dComp[cokey] = (mukey, compPct, hzT, soc)
 
+
+                                # Update sum of comppct for dMu. Not sure why I need to do this.
+                                if not mukey in dMu:
+                                    dMu[mukey] = (compPct, 0, 0)
+
+                                else:
+                                    val0 = dMu[mukey][0]
+                                    dMu[mukey] = (val0 + compPct, 0, 0)
+                                
                             else:
                                 # accumulate total thickness and total rating value by adding to existing component values  CHK
                                 mukey, compName, dHzT, dSOC = dComp[cokey]
@@ -1595,7 +1951,8 @@ def CalcSOC(db, theCompTable, valuTable, dPct, dFrags, depthList, dRestrictions,
                             # Value[2] is all major components
                             # Value[3] is earthy components
                             try:
-                                sumCompPct = float(dPct[mukey][0]) # Sum comppct for ALl components
+                                sumCompPct = float(dPct[mukey][0]) # Sum comppct for ALL components
+                                #PrintMsg("Comppct for all components " + str(mukey) + ": " + str(sumCompPct), 1)
 
                             except:
                                 # set the component percent to zero if it is not found in the
@@ -1620,13 +1977,13 @@ def CalcSOC(db, theCompTable, valuTable, dPct, dFrags, depthList, dRestrictions,
                                 dComp[cokey] = mukey, compPct, hzT, soc
 
                                 if mukey in dMu:
-                                    val1, val2, val3 = dMu[mukey]
-                                    compPct = compPct + val1
+                                    compPct, val2, val3 = dMu[mukey]
+                                    #compPct = compPct + val1
                                     hzT = hzT + val2
                                     soc = soc + val3
 
                                 dMu[mukey] = (compPct, hzT, soc)
-                                #PrintMsg(str((compPct, hzT, soc)), 1)
+                                #PrintMsg("\t" + mukey + ": " + str((compPct, hzT, soc)), 1)
 
                 else:
                     PrintMsg("\t" + Number_Format(iComp, 0, True) + " components for "  + str(td) + " - " + str(bd) + "cm", 1)
@@ -1638,9 +1995,11 @@ def CalcSOC(db, theCompTable, valuTable, dPct, dFrags, depthList, dRestrictions,
 
                     if mukey in dMu:
                         compPct, hzT, soc = dMu[mukey]
-                        murec[1] = compPct
-                        murec[2] = round(soc, 0)
-                        murec[3] = round(hzT, 0)  # this value appears to be low sometimes
+                        #murec[1] = compPct
+                        #murec[2] = round(soc, 0)
+                        #murec[3] = round(hzT, 0)  # this value appears to be low sometimes
+                        murec =  [mukey, compPct, round(soc, 0), round(hzT, 0)]
+                        PrintMsg("\tSOC for " + str(td) + " to " + str(bd) + "cm " + mukey + ": " + str(murec), 1)
                         muCursor.updateRow(murec)
 
         return True
@@ -1719,6 +2078,8 @@ def GetSumPct(hzTable):
         fldNames = [fld.name for fld in flds]
         #PrintMsg(" \nField names for hzTable: " + ", ".join(fldNames), 1)
 
+        cnt = 0
+
         with arcpy.da.SearchCursor(hzTable, pctFlds, pctSQL) as pctCur:
             for rec in pctCur:
                 mukey, cokey, compkind, flag, comppct = rec
@@ -1729,6 +2090,7 @@ def GetSumPct(hzTable):
                 if not cokey in cokeyList:
                     # These are horizon data, so we only want to use the data once per component
                     cokeyList.append(cokey)
+                    cnt += 1
 
                     if flag == 'Yes':
                         # major component percent
@@ -1750,12 +2112,15 @@ def GetSumPct(hzTable):
                         # Get the existing values from the dictionary
                         #pctAll, pctMjr = dPct[mukey] # all components, major-earthy
                         pctAll, pctME, pctMjr, pctE = dPct[mukey]
-                        dPct[str(mukey)] = (pctAll + comppct, pctME + me, pctMjr + m, pctE + e)
+                        dPct[mukey] = (pctAll + comppct, pctME + me, pctMjr + m, pctE + e)
 
                     else:
                         # this is the first component for this map unit
-                        dPct[str(mukey)] = (comppct, me, m, e)
+                        dPct[mukey] = (comppct, me, m, e)
 
+        #PrintMsg(" \ndPct: " + str(dPct), 1)                        
+        #PrintMsg(" \nProcessed " + str(cnt) + " components in GetSumPct", 1)
+        
         return dPct
 
     except MyError, e:
@@ -2816,17 +3181,19 @@ def UpdateMetadata(outputWS, target, surveyInfo):
         False
 
 ## ===================================================================================
-def CreateValuTable(valuTable, hzTable, txTable, crTable, interpTable, mukeyList, areasymbols):
+def CreateValuTable(db, valuTable, coValu, muTable, coTable, hzTable, crTable, txTable, interpTable, mukeyList):
+    #        
     # Run all processes from here
 
     try:
+        PrintMsg(" \nCreating " + muTable + " table...", 0)
         arcpy.OverwriteOutput = True
         #dValue = dict() # return dictionary by mukey
 
         # Set location for temporary tables
 
         # Name of component level output table (global variable)
-        theCompTable = os.path.join(db, "Co_VALU")
+        coValu = os.path.join(db, "Co_VALU")
 
         # Save record of any issues to a text file
         logFile = os.path.basename(db)[:-4] + "_Problems.txt"
@@ -2835,12 +3202,6 @@ def CreateValuTable(valuTable, hzTable, txTable, crTable, interpTable, mukeyList
         # Let's get the mainrulename from the SDVAttribute table
         # This may break again in the future. October 2017
         global mainRuleName
-
-        if len(areasymbols) == 1:
-            areaSym = "('" + areasymbols[0] + "')"
-
-        else:
-            areaSym = str(tuple(areasymbols))
 
 
         # Override the previous value
@@ -2857,25 +3218,28 @@ def CreateValuTable(valuTable, hzTable, txTable, crTable, interpTable, mukeyList
         depthList = [(0,5), (5, 20), (20, 50), (50, 100), (100, 150), (150, 999), (0, 20), (0, 30), (0, 100), (0, 150), (0, 999)]
 
         if CreateOutputTableMu(valuTable, depthList, dPct, mukeyList) == False:
-            raise MyError, "Problem creating Valu1 table"
+            raise MyError, "Problem creating " + valuTable + " table"
 
-        if CreateOutputTableCo(theCompTable, depthList) == False:
+        if CreateOutputTableCo(coValu, depthList) == False:
             raise MyError, ""
 
         # Store component restrictions for root growth in a dictionary
         resListAWS = "('Lithic bedrock','Paralithic bedrock','Densic bedrock', 'Densic material', 'Fragipan', 'Duripan', 'Sulfuric')"
-        dRZRestrictions = GetCoRestrictions(crTable, 150.0, resListAWS)
+        dRestrictions = GetCoRestrictions(crTable, 150.0, resListAWS)
 
         # Find the top restriction for each component, both from the corestrictions table and the horizon properties
-        dComp2 = CalcRZDepth(db, theCompTable, 150.0, dPct, dRZRestrictions)
+        #dComp2 = CalcRZDepth(db, coValu, 150.0, dPct, dRestrictions)
+        dComp2 = CalcRZDepth(db, coTable, hzTable, 150.0, dPct, dRestrictions)
 
         # Calculate root zone available water capacity using a floor of 150cm or a root restriction depth
-        #
-        if CalcRZAWS(db, db, 0.0, 150.0, theCompTable, valuTable, dComp2, 150.0, dPct) == False:
+        #            inputDB, outputDB, td, bd, coValu, hzTable, valuTable, dRestrictions, maxD, dPct
+        #            inputDB, outputDB, td, bd, coValu, theMuTable, dRestrictions, maxD, dPct
+        #if CalcRZAWS(db, db,          0.0, 150.0, coValu, hzTable, valuTable, dComp2, 150.0, dPct) == False:
+        if CalcRZAWS(db, db, 0.0, 150.0, coValu, muTable, hzTable, valuTable, dRestrictions, 150.0, dPct) == False:
             raise MyError, ""
 
         # Calculate standard available water supply
-        if CalcAWS(db, theCompTable, valuTable, dPct, depthList) == False:
+        if CalcAWS(db, coValu, valuTable, hzTable, dPct, depthList) == False:
             raise MyError, ""
 
         # Run SOC calculations
@@ -2890,8 +3254,8 @@ def CreateValuTable(valuTable, hzTable, txTable, crTable, interpTable, mukeyList
 
         # Calculate soil organic carbon for all the different depth ranges
         depthList = [(0,5), (5, 20), (20, 50), (50, 100), (100, 150), (150, 999), (0, 20), (0, 30), (0, 100), (0, 150), (0, 999)]
-
-        if CalcSOC(db, theCompTable, valuTable, dPct, dFrags, depthList, dSOCRestrictions, maxD) == False:
+        #          db, coValu, valuTable, hzTable, dPct, dFrags, depthList, dRestrictions, maxD
+        if CalcSOC(db, coValu, valuTable, hzTable, dPct, dFrags, depthList, dSOCRestrictions, maxD) == False:
             raise MyError, ""
 
         # Calculate NCCPI
@@ -2919,16 +3283,19 @@ def CreateValuTable(valuTable, hzTable, txTable, crTable, interpTable, mukeyList
             # Query the output SACATALOG table to get list of surveys that were exported to the gSSURGO
             #
             # Update metadata for the geodatabase and all featureclasses
-            PrintMsg(" \nUpdating " + os.path.basename(valuTable) + " metadata...", 0)
-            arcpy.SetProgressorLabel("Updating Valu1 table metadata")
+            PrintMsg(" \nSkipping " + os.path.basename(valuTable) + " metadata...", 0)
+            arcpy.SetProgressorLabel("Skipping " + valuTable + " table metadata")
+
+            
+            surveyList = ["Survey1", "Survey2"]
            
-            bMetadata = UpdateMetadata(db, valuTable, surveyList)
+            #bMetadata = UpdateMetadata(db, valuTable, surveyList)
 
-            #if arcpy.Exists(theCompTable):
-            #    arcpy.Delete_management(theCompTable)
+            #if arcpy.Exists(coValu):
+            #    arcpy.Delete_management(coValu)
 
-            if bMetadata:
-                PrintMsg("\tMetadata complete", 0)
+            #if bMetadata:
+            #    PrintMsg("\tMetadata complete", 0)
 
             PrintMsg(" \n" + os.path.basename(valuTable) + " table complete for " + os.path.basename(db) + " \n ", 0)
 
@@ -2944,7 +3311,7 @@ def CreateValuTable(valuTable, hzTable, txTable, crTable, interpTable, mukeyList
         return False
 
 ## ===================================================================================
-def GetAttributeData(valuTable, sdaURL, areasymbol):
+def RunQueries(db, valuTable, sdaURL, mukeyQuery, muTable, coTable, hzTable, crTable, txTable, interpTable ):
     # Get associated soil attribute data by creating queries and calling a
     # series of functions to run those queries against Soil Data Access.
     #
@@ -2954,83 +3321,71 @@ def GetAttributeData(valuTable, sdaURL, areasymbol):
     # will have to iterate through each areasymbol and append the results to each table
     #
     try:
+        #PrintMsg(" \nFrom SDA_Valu2Table.RunQueries, using AttributeRequest function to populate some tables: hzTable, crTable, interpTable", 1)
+
+
+            
         sQuery = """SELECT L.areasymbol, M.mukey, M.musym, M.muname, MAG.wtdepaprjunmin, MAG.flodfreqdcd, MAG.pondfreqprs, MAG.drclassdcd, MAG.drclasswettest, MAG.hydgrpdcd, MAG.hydclprs
-        FROM mapunit M WITH (nolock)
-        LEFT OUTER JOIN muaggatt MAG ON M.mukey = MAG.mukey
-        INNER JOIN legend L ON L.lkey = M.lkey AND L.areasymbol = '""" + areasymbol + """'
-        ORDER BY mukey"""
+FROM mapunit M
+LEFT OUTER JOIN muaggatt MAG ON M.mukey = MAG.mukey
+INNER JOIN legend L ON L.lkey = M.lkey
+WHERE M.mukey IN """ + mukeyQuery + """
+ORDER BY mukey;"""
 
-        mukeyList = AttributeRequest(sdaURL, muTable, sQuery)  # This mukeyList will be used to populate the Valu1 table
+        mukeyList = AttributeRequest(sdaURL, muTable, sQuery)
 
-        if len(mukeyList) == 0:
-            raise MyError, ""
+        # Here I'm try to remove the chtexture data (texcl, lieutex) and place it into a separate query.
+        #I was having problems with duplicate horizon data with the previous version
+        sQuery = """SELECT M.mukey, M.musym AS musymbol, M.muname, C.cokey,  C.compname,
+C.comppct_r, C.majcompflag, C.compkind, C.localphase, C.otherph, C.taxorder,
+C.taxsubgrp, C.hydricrating, C.drainagecl, H.hzname, H.desgnmaster, H.chkey,
+H.hzdept_r, H.hzdepb_r, H.awc_r, H.ksat_r, H.sandtotal_r, H.silttotal_r, H.claytotal_r,
+H.sandfine_r AS vfsand, H.om_r, H.dbthirdbar_r, H.ph1to1h2o_r, H.ec_r,
+(SELECT SUM(CF.fragvol_r) FROM chfrags CF WHERE H.chkey = CF.chkey GROUP BY CF.chkey) AS fragvol
+FROM mapunit M
+INNER JOIN legend L ON L.lkey = M.lkey
+LEFT OUTER JOIN component C ON M.mukey = C.mukey AND C.comppct_r IS NOT NULL
+LEFT OUTER JOIN chorizon H ON C.cokey = H.cokey AND H.hzdept_r IS NOT NULL AND H.hzdepb_r IS NOT NULL
+WHERE M.mukey IN """ + mukeyQuery + """
+ORDER BY M.mukey, C.comppct_r DESC, C.cokey, H.hzdept_r ASC;"""
 
-        # Create master horizon-level attribute table. This table will be used by other functions to create
-        # summary tables for SoilProfile attributes and Surface attributes.
-        #sQuery = """SELECT M.mukey, M.musym AS musymbol, M.muname, C.cokey,  C.compname, C.comppct_r, C.majcompflag, C.compkind, C.localphase, C.otherph, C.taxorder, C.taxsubgrp, C.hydricrating, C.drainagecl, H.hzname, H.desgnmaster, H.chkey, H.hzdept_r, H.hzdepb_r, H.awc_r, H.ksat_r, H.sandtotal_r, H.silttotal_r, H.claytotal_r, H.sandfine_r AS vfsand, H.om_r, H.dbthirdbar_r, H.ph1to1h2o_r, H.ec_r, CHTG.texture, CT.texcl as textcls, CT.lieutex, (SELECT SUM(CF.fragvol_r) FROM chfrags CF WHERE H.chkey = CF.chkey GROUP BY CF.chkey) AS fragvol
-        #sQuery = """SELECT M.mukey, M.musym AS musymbol, M.muname, C.cokey,  C.compname, C.comppct_r, C.majcompflag, C.compkind, C.localphase, C.otherph, C.taxorder, C.taxsubgrp, C.hydricrating, C.drainagecl, H.hzname, H.desgnmaster, H.chkey, H.hzdept_r, H.hzdepb_r, H.awc_r, H.ksat_r, H.sandtotal_r, H.silttotal_r, H.claytotal_r, H.sandfine_r AS vfsand, H.om_r, H.dbthirdbar_r, H.ph1to1h2o_r, H.ec_r, CHTG.texture, (SELECT SUM(CF.fragvol_r) FROM chfrags CF WHERE H.chkey = CF.chkey GROUP BY CF.chkey) AS fragvol
-        #    FROM mapunit M WITH (nolock)
-        #    INNER JOIN legend L ON L.lkey = M.lkey AND L.areasymbol = '""" + areasymbol + """' 
-        #    LEFT OUTER JOIN component C ON M.mukey = C.mukey AND C.comppct_r IS NOT NULL
-        #    LEFT OUTER JOIN chorizon H ON C.cokey = H.cokey AND H.hzdept_r IS NOT NULL AND H.hzdepb_r IS NOT NULL
-        #    LEFT OUTER JOIN chtexturegrp CHTG ON H.chkey = CHTG.chkey AND CHTG.rvindicator = 'Yes'
-        #    LEFT OUTER JOIN chtexture CT ON CHTG.chtgkey = CT.chtgkey
-        #    ORDER BY M.mukey, C.comppct_r DESC, C.cokey, H.hzdept_r ASC"""
-
-        # Here I'm try to remove the chtexture data (texcl, lieutex) and place it into a separate query. I was having problems with duplicate horizon data with the previous version
-        sQuery = """SELECT M.mukey, M.musym AS musymbol, M.muname, C.cokey,  C.compname, C.comppct_r, C.majcompflag, C.compkind, C.localphase, C.otherph, C.taxorder, C.taxsubgrp, C.hydricrating, C.drainagecl, H.hzname, H.desgnmaster, H.chkey, H.hzdept_r, H.hzdepb_r, H.awc_r, H.ksat_r, H.sandtotal_r, H.silttotal_r, H.claytotal_r, H.sandfine_r AS vfsand, H.om_r, H.dbthirdbar_r, H.ph1to1h2o_r, H.ec_r, (SELECT SUM(CF.fragvol_r) FROM chfrags CF WHERE H.chkey = CF.chkey GROUP BY CF.chkey) AS fragvol
-            FROM mapunit M WITH (nolock)
-            INNER JOIN legend L ON L.lkey = M.lkey AND L.areasymbol = '""" + areasymbol + """' 
-            LEFT OUTER JOIN component C ON M.mukey = C.mukey AND C.comppct_r IS NOT NULL
-            LEFT OUTER JOIN chorizon H ON C.cokey = H.cokey AND H.hzdept_r IS NOT NULL AND H.hzdepb_r IS NOT NULL
-            ORDER BY M.mukey, C.comppct_r DESC, C.cokey, H.hzdept_r ASC"""
-
+        #junk =  AttributeRequest(sdaURL, hzTable, sQuery)
+        # 
         sQuery = """SELECT M.mukey, M.musym AS musymbol, M.muname, C.cokey,  C.compname, C.comppct_r, C.majcompflag,
-            C.compkind, C.localphase, C.otherph, C.taxorder, C.taxsubgrp, C.hydricrating, C.drainagecl, H.hzname,
-            H.desgnmaster, H.chkey, H.hzdept_r, H.hzdepb_r, H.awc_r, H.ksat_r, H.sandtotal_r, H.silttotal_r,
-            H.claytotal_r, H.sandfine_r AS vfsand, H.om_r, H.dbthirdbar_r, H.ph1to1h2o_r, H.ec_r, ctg.texture,
-            CT2.texcl as textcls, CT2.lieutex, (SELECT SUM(CF.fragvol_r) FROM chfrags CF
-            WHERE H.chkey = CF.chkey GROUP BY CF.chkey) AS fragvol
-            FROM mapunit M WITH (nolock)
-            INNER JOIN legend L ON L.lkey = M.lkey AND L.areasymbol = '""" + areasymbol + """'
-            LEFT OUTER JOIN component C ON M.mukey = C.mukey AND C.comppct_r IS NOT NULL
-            LEFT OUTER JOIN chorizon H ON C.cokey = H.cokey AND H.hzdept_r IS NOT NULL AND H.hzdepb_r IS NOT NULL
-                    LEFT OUTER JOIN (SELECT chkey,  MAX(chtgkey) chtgkey FROM chtexturegrp WHERE rvindicator = 'yes' GROUP BY chkey) CHTG
-                    ON H.chkey = CHTG.chkey
-                    LEFT OUTER JOIN dbo.chtexturegrp ctg ON ctg.chtgkey = chtg.chtgkey
-                    LEFT OUTER JOIN (SELECT chtgkey, MAX(chtkey) chtkey FROM chtexture GROUP BY chtgkey) ct 
-             ON CT.chtgkey = ctg.chtgkey
-                    LEFT OUTER JOIN chtexture ct2 ON ct2.chtkey = ct.chtkey
-            ORDER BY M.mukey, C.comppct_r DESC, C.cokey, H.hzdept_r ASC"""
+C.compkind, C.localphase, C.otherph, C.taxorder, C.taxsubgrp, C.hydricrating, C.drainagecl, H.hzname,
+H.desgnmaster, H.chkey, H.hzdept_r, H.hzdepb_r, H.awc_r, H.ksat_r, H.sandtotal_r, H.silttotal_r,
+H.claytotal_r, H.sandfine_r AS vfsand, H.om_r, H.dbthirdbar_r, H.ph1to1h2o_r, H.ec_r, ctg.texture,
+CT2.texcl as textcls, CT2.lieutex, (SELECT SUM(CF.fragvol_r) FROM chfrags CF
+WHERE H.chkey = CF.chkey GROUP BY CF.chkey) AS fragvol
+FROM mapunit M
+INNER JOIN legend L ON L.lkey = M.lkey
+LEFT OUTER JOIN component C ON M.mukey = C.mukey AND C.comppct_r IS NOT NULL
+LEFT OUTER JOIN chorizon H ON C.cokey = H.cokey AND H.hzdept_r IS NOT NULL AND H.hzdepb_r IS NOT NULL
+LEFT OUTER JOIN (SELECT chkey,  MAX(chtgkey) chtgkey FROM chtexturegrp WHERE rvindicator = 'yes' GROUP BY chkey) CHTG
+ON H.chkey = CHTG.chkey
+LEFT OUTER JOIN dbo.chtexturegrp ctg ON ctg.chtgkey = chtg.chtgkey
+LEFT OUTER JOIN (SELECT chtgkey, MAX(chtkey) chtkey FROM chtexture GROUP BY chtgkey) ct 
+ON CT.chtgkey = ctg.chtgkey
+LEFT OUTER JOIN chtexture ct2 ON ct2.chtkey = ct.chtkey
+WHERE M.mukey IN """ + mukeyQuery + """
+ORDER BY M.mukey, C.comppct_r DESC, C.cokey, H.hzdept_r ASC;"""
 
         #areasymbolList, dataList = AttributeRequest(sdaURL, mukeyList, hzTable, sQuery, "areasymbol")
+        #cokeyList = AttributeRequest(sdaURL, txTable, sQuery)
         cokeyList = AttributeRequest(sdaURL, hzTable, sQuery)
 
         if len(cokeyList) == 0:
             raise MyError, ""
 
-        # Create chorizon texture table
-        #sQuery = """SELECT CH.chkey, CHTG.texture, CT.texcl, CT.lieutex
-        #FROM legend L with (NOLOCK)
-        #INNER JOIN mapunit M ON L.lkey = M.lkey
-        #INNER JOIN component C ON M.mukey = C.mukey AND C.comppct_r IS NOT NULL
-        #INNER JOIN chorizon CH ON C.cokey = CH.cokey
-        #INNER JOIN chtexturegrp CHTG ON CH.chkey = CHTG.chkey AND CHTG.rvindicator = 'Yes' AND CHTG.chtgkey = (SELECT TOP 1 X.chtgkey FROM chtexturegrp X WHERE CHTG.chkey = X.chkey)
-        #INNER JOIN chtexture CT ON CHTG.chtgkey = CT.chtgkey AND CT.chtkey = (SELECT TOP 1 Y.chtkey FROM chtexture Y WHERE CT.chtgkey = Y.chtgkey)
-	#    WHERE L.areasymbol = '""" + areasymbol + """'
-        #ORDER BY CH.chkey, CT.chtgkey"""
-
-        #junk = AttributeRequest(sdaURL, txTable, sQuery)
-
-
 
         # Create component restrictions table
         sQuery = """SELECT C.cokey, CR.reskind, CR.reshard, CR.resdept_r
-        FROM component C with (nolock)
-        LEFT OUTER JOIN mapunit M on C.mukey = M.mukey
-        INNER JOIN legend L ON L.lkey = M.lkey AND L.areasymbol = '""" + areasymbol + """'
-        LEFT OUTER JOIN corestrictions CR ON C.cokey = CR.cokey
-        ORDER BY C.cokey, CR.resdept_r ASC"""
+FROM mapunit M
+LEFT OUTER JOIN component C on M.mukey = C.mukey
+INNER JOIN legend L ON L.lkey = M.lkey
+LEFT OUTER JOIN corestrictions CR ON C.cokey = CR.cokey
+WHERE M.mukey IN """ + mukeyQuery + """
+ORDER BY C.cokey, CR.resdept_r ASC;"""
 
         cokeyList = AttributeRequest(sdaURL, crTable, sQuery)
 
@@ -3041,11 +3396,13 @@ def GetAttributeData(valuTable, sdaURL, areasymbol):
         # This will grab both NCCPI 2 and 3 if present
         # ["COMPONENT_MUKEY", "COMPONENT_COKEY", "COMPONENT_COMPPCT_R", "COINTERP_RULEDEPTH", "COINTERP_RULENAME", "COINTERP_INTERPHR"]
         sQuery = """SELECT C.mukey, C.cokey, C.comppct_r, CI.ruledepth, CI.rulename, CI.interphr
-        FROM component C WITH (nolock)
-        LEFT OUTER JOIN mapunit M ON C.mukey = M.mukey
-        INNER JOIN legend L ON L.lkey = M.lkey AND L.areasymbol = '""" + areasymbol + """'
-        LEFT OUTER JOIN cointerp CI ON C.cokey = CI.cokey AND C.majcompflag = 'Yes' AND CI.mrulename = 'NCCPI - National Commodity Crop Productivity Index (Ver 3.0)'
-        ORDER BY C.cokey, C.comppct_r ASC"""
+FROM legend L
+INNER JOIN mapunit M ON L.lkey = M.lkey
+LEFT OUTER JOIN component C on C.mukey = M.mukey
+LEFT OUTER JOIN cointerp CI ON C.cokey = CI.cokey AND C.majcompflag = 'Yes' AND CI.mrulekey = 54955 AND NOT CI.ruledepth IS NULL
+WHERE M.mukey IN """ + mukeyQuery + """
+ORDER BY M.mukey, C.cokey, C.comppct_r ASC"""
+
 
         #cokeyList, dataList = AttributeRequest(sdaURL, areasymbols, interpTable, sQuery, "cokey")
         cokeyList = AttributeRequest(sdaURL, interpTable, sQuery)
@@ -3057,19 +3414,19 @@ def GetAttributeData(valuTable, sdaURL, areasymbol):
         #bValue = CreateValuTable(valuTable, hzTable, crTable, interpTable, mukeyList)
         #PrintMsg("\tPopulating database with " + Number_Format(len(mukeyList), 0, True) + " mapunit records", 1)
 
-        return mukeyList
+        return True
 
     except MyError, e:
         # Example: raise MyError("this is an error message")
         PrintMsg(str(e) + " \n", 2)
-        return []
+        return False
 
     except:
         errorMsg()
-        return []
+        return False
 
 ## ===================================================================================
-def CreateSoilsData(surveyList, db, sdaURL):
+def CreateSoilsData(db, sdaURL):
     # driving function that calls all other functions in this module
     # acpfDB is the target ACPF geodatabase which must already contain the
     # 'buf' featureclass and the 'wsCDL' rasters.
@@ -3077,93 +3434,75 @@ def CreateSoilsData(surveyList, db, sdaURL):
     try:
 
         from arcpy import env
+        import time
         env.overWriteOutput = True
-
-        #if arcpy.Exists(db):
-        #    arcpy.Delete_management(db)
-
-        if not arcpy.Exists(db):
-            arcpy.CreateFileGDB_management(os.path.dirname(db), os.path.basename(db), "10.0")
-
-        # Clean up survey areas parameter to leave just areasymbol
-        areasymbols = list()
-
-        # Create ordered list by Areasymbol
-        asDict = dict()
-
-        for survey in surveyList:
-            #env.workspace = outputFolder
-            surveyInfo = survey.split(",")
-            areaSym = surveyInfo[0].strip().upper().encode('ascii')
-            areasymbols.append(areaSym)
-            asDict[areaSym] = survey
-
-        areasymbols.sort()
-
-        #if env.scratchWorkspace == None:
-        #    raise MyError, "Scratch workspace in geoprocessing environment must be set"
 
         # Global variables.
         # It would be better if these were defined as function parameters instead of global variables.
         global muTable, hzTable, crTable, interpTable, txTable
-        iCnt = len(areasymbols)
 
-        arcpy.SetProgressor("step", "Creating Valu1 table for " + Number_Format(iCnt, 0, True) + " survey areas...", 0, iCnt, 1)
+        # Begin by getting a list of mukeys in the mupolygon featureclass
 
-        # Query for one survey area at a time
+        muPoly = os.path.join(db, "mupolygon")
+
+        if not arcpy.Exists(muPoly):
+            raise MyError, "Missing mupolygon featureclass"
+
         mukeyList = list()
-        PrintMsg(" \nRetrieving data for " + Number_Format(iCnt, 0, True) + " surveys using Soil Data Access...", 0)
-        time.sleep(2)
+        
+        with arcpy.da.SearchCursor(muPoly, ["mukey"], sql_clause=("DISTINCT mukey", "ORDER BY mukey ASC")) as cur:
+            for rec in cur:
+                mukeyList.append(int(rec[0]))
+            
+        #PrintMsg(" \nmukeyList: " + str(mukeyList) + " \n ", 1)
+
+        iCnt = len(mukeyList)
+
+        #arcpy.SetProgressor("step", "Creating Valu1 table for " + Number_Format(iCnt, 0, True) + " survey areas...", 0, iCnt, 1)
+
+
+        if len(mukeyList) > 0:
+            mukeyQuery = str(tuple(mukeyList))
+            
+        PrintMsg(" \nRetrieving data for " + Number_Format(iCnt, 0, True) + " mapunits using Soil Data Access...", 0)
+        #time.sleep(2)
         statusCnt = 0
 
-        for areasymbol in areasymbols:
-            time.sleep(1)
-            statusCnt += 1
+        #for areasymbol in areasymbols:
+        time.sleep(1)
+        statusCnt += 1
 
-            hzTable = os.path.join(db, "HzData")
-            muTable = os.path.join(db, "MuData")
-            crTable = os.path.join(db, "CrData")
-            txTable = os.path.join(db, "TxData")
-            interpTable = os.path.join(db, "InterpData")
-            valuTable = os.path.join(db, "Valu1")
+        hzTable = os.path.join(db, "HzData")
+        muTable = os.path.join(db, "MuData")
+        coTable = os.path.join(db, "CoData")  # Is this one being used?
+        crTable = os.path.join(db, "CrData")
+        txTable = os.path.join(db, "TxData")
+        interpTable = os.path.join(db, "InterpData")
+        valuTable = os.path.join(db, "Valu_ACPF")
+        coValu = os.path.join(db, "Co_Valu")
 
-            # Get the associated soil attribute data
-            #
+        # Get the associated soil attribute data
+        #
+                        # valuTable, sdaURL, mukeyQuery, db, muTable, coTable, hzTable, crTable, txTable, interpTable 
+        if RunQueries(db, valuTable, sdaURL, mukeyQuery, muTable, coTable, hzTable, crTable, txTable, interpTable) == False:
+            raise MyError, "Problem getting raw data from SDA"
 
-            mukeys = GetAttributeData(valuTable, sdaURL, areasymbol)
 
-            if len(mukeys) ==0:
-                raise MyError, ""
+        # Next step is to see which of the above tables are being populated, and which ones are being used in CreateValuTable
+        #raise MyError, "EARLY OUT AFTER RunQueries FUNCTION"
 
-            mukeyList.extend(mukeys)
-            PrintMsg("\t" + str(statusCnt) + ". \t" + areasymbol + "   (" +  Number_Format(len(mukeys), 0, True) + " mapunits)", 0)
-            arcpy.SetProgressorLabel("Getting attribute data for: " + areasymbol)
-
-            # Finish up...
-            if len(mukeyList) > 0:
-                arcpy.SetProgressorPosition()
-
-            else:
-                raise MyError, "Failed to get " + areasymbol + " attribute data from SDA"
+        
 
         PrintMsg(" \nAll required data has been retrieved from Soil Data Access", 0)
         
-        # Create subset of Valu table from gSSURGO) if I have to query for texture separately
-        #if arcpy.Exists(txTable):
-        #    arcpy.SetProgressorLabel("Adding soil texture information to horizon table...")
-            #raise MyError, ""
-        #    arcpy.JoinField_management(hzTable, "chkey", txTable, "chkey", ["texture", "texcl", "lieutex"])
-
-        #else:
-            # This will might occur if the first survey area is a NOTOM. Need to improve the logic a little more?
-        #    raise MyError, "Missing table " + txTable
         
-        arcpy.SetProgressorLabel("Creating Valu1 table from query tables...")
-        bValue = CreateValuTable(valuTable, hzTable, txTable, crTable, interpTable, mukeyList, areasymbols)
+        arcpy.SetProgressorLabel("Creating " + valuTable + " table from query tables...")
+        #                        valuTable, db, muTable, coTable, hzTable, crTable, txTable, interpTable, mukeyList
+        bValu = CreateValuTable( db, valuTable, coValu, muTable, coTable, hzTable, crTable, txTable, interpTable, mukeyList)
 
         # Add attribute indexes for key fields. Moved this to the end to see if there is an improvement in performance
-        arcpy.SetProgressorLabel("Indexing Valu1 table")
-        arcpy.AddIndex_management(valuTable, "MUKEY", "Indx_ValuMukey", "NON_UNIQUE", "NON_ASCENDING")
+        #arcpy.SetProgressorLabel("Indexing Valu1 table")
+        #arcpy.AddIndex_management(valuTable, "MUKEY", "Indx_Valu2Mukey", "NON_UNIQUE", "NON_ASCENDING")
 
         
         # Cleanup table variables
@@ -3200,13 +3539,13 @@ try:
     if __name__ == "__main__":
         # get parameters
         db = arcpy.GetParameterAsText(0)              # Output file geodatabase that will contain all output including Valu1 table
-        surveyList = arcpy.GetParameter(2)            # list of soil survey areas to be processed
+        #surveyList = arcpy.GetParameter(2)            # list of soil survey areas to be processed
 
         #baseURL = "https://sdmdataaccess.nrcs.usda.gov"
         sdaURL = "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest"
 
         # Call function that does all of the work
-        bSoils = CreateSoilsData(surveyList, db, sdaURL)
+        bSoils = CreateSoilsData(db, sdaURL)
 
 
 except MyError, e:

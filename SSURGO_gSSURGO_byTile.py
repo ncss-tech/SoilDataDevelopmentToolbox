@@ -161,7 +161,7 @@ def CheckWSS(missingList):
         return False
 
 ## ===================================================================================
-def ClipMupolygon(gdb, aoiLayer, aoiField, aoiValue):
+def ClipMupolygon(gdb, aoiLayer, aoiField, aoiValue, aliasName):
 
     try:
         env.overwriteOutput = True
@@ -298,7 +298,8 @@ def ClipMupolygon(gdb, aoiLayer, aoiField, aoiValue):
                 arcpy.CreateRelationshipClass_management(os.path.join(outputGDB, "mapunit"), outputClip, os.path.join(outputGDB, relName), "SIMPLE", "> Mapunit Polygon Layer", "< Mapunit Table", "NONE", "ONE_TO_MANY", "NONE", "mukey", "MUKEY", "","")
 
             # Add alias to featureclass
-            arcpy.AlterAliasName(outputClip, "Map Unit Polygons - " + aoiField + ":" + str(aoiValue))
+            # arcpy.AlterAliasName(outputClip, "Map Unit Polygons - " + aoiField + ":" + str(aoiValue))
+            arcpy.AlterAliasName(outputClip, "Map Unit Polygons - " + aliasName)
 
         # Clean up temporary layers and featureclasses
         #
@@ -340,21 +341,18 @@ try:
     tileField = arcpy.GetParameter(2)              # featureclass column that contains the tiling attribute (MO, MLRASYM, AREASYMBOL, etc)
     tileList = arcpy.GetParameterAsText(3)         # list of tile values to process (string or long, derived from tileField)
     tileName = arcpy.GetParameterAsText(4)         # string used to identify type of tile (MO, MLRA, SSA, etc) used in geodatabase name
-    inputFolder = arcpy.GetParameterAsText(5)            # input folder containing SSURGO downloads
+    inputFolder = arcpy.GetParameterAsText(5)      # input folder containing SSURGO downloads
     outputFolder = arcpy.GetParameterAsText(6)     # output folder to contain new geodatabases (system folder)
-    #bExportLayers = arcpy.GetParameter(7)         # export SSURGO featureclasses (boolean)
     theAOI = arcpy.GetParameter(7)                 # geographic region for output GDB. Used to determine coordinate system.
     useTextFiles = arcpy.GetParameter(8)           # Unchecked: import tabular data from Access database. Checked: import text files
     bClipSoils = arcpy.GetParameter(9)             # Create an additional clipped soil polygon featureclass
 
     # import python script that actually exports the SSURGO
-    #import SDM_Export_GDB10
     import SSURGO_Convert_to_Geodatabase
     import gSSURGO_Clip2
 
     # Set workspace environment to the folder containing the SSURGO downloads
     # Escape back-slashes in path
-    #inputFolder = str(inputFolder).encode('string-escape')
 
     # Make sure SSA layer exists. If connection is lost, it may still show up in ArcMap TOC
     if not arcpy.Exists(ssaFC):
@@ -397,7 +395,7 @@ try:
 
         PrintMsg(" \n" + (50 * "*"), 0)
         PrintMsg(Number_Format(num, 0, True) + ". Processing " + tileName + ": " + str(theTile), 0)
-        PrintMsg(" \n" + (50 * "*"), 0)
+        PrintMsg((50 * "*"), 0)
         #PrintMsg(" \nDataType for input field (" + fldName +  "): " + fldType, 0)
 
         if fldType != "STRING":
@@ -474,10 +472,9 @@ try:
         if arcpy.Exists(outputWS):
             arcpy.Delete_management(outputWS)
 
-        # Call SDM Export script
+        # Call SDM Export script. Not sure what is happening with aliasName. Doesn't seem like it is being used.
         aliasName = tileName + " " + str(theTile)
         #PrintMsg("\nSurvey list: " + str(surveyList), 1)
-        #bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, (aliasName, aliasName), useTextFiles, bClipSoils, surveyList)
         bExported = SSURGO_Convert_to_Geodatabase.gSSURGO(inputFolder, surveyList, outputWS, theAOI, (aliasName, aliasName), useTextFiles, bClipSoils, [])
         
 
@@ -487,7 +484,7 @@ try:
             # Test to see if I can add the MUPOLYGON clip to this process
             #PrintMsg(" \nClip using tile value: " + str(theTile), 1)
             if bClipSoils:
-                bClipped = ClipMupolygon(outputWS, tileLayer, fldName, theTile)
+                bClipped = ClipMupolygon(outputWS, tileLayer, fldName, theTile, aliasName)
 
                 if bClipped == False:
                     raise MyError, ""
